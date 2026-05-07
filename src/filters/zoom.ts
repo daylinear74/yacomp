@@ -66,13 +66,17 @@ export function calcAnchoredRowScroll(
 ): { scrollLeft: number; scrollTop: number } {
   const maxLeft = Math.max(0, geometry.rowWidth - geometry.viewportWidth);
   const scrollLeft = geometry.rowLeft + geometry.rowWidth * anchor.rowXRatio - anchor.viewportX;
-  const minTop = anchor.scrollTopBounds === "row" ? geometry.rowTop : 0;
-  const maxTop = anchor.scrollTopBounds === "row"
+  const contentMinTop = 0;
+  const contentMaxTop = Math.max(0, geometry.contentHeight - geometry.viewportHeight);
+  const shouldBoundToRow = anchor.scrollTopBounds === "row"
+    && geometry.rowHeight > geometry.viewportHeight;
+  const minTop = shouldBoundToRow ? geometry.rowTop : contentMinTop;
+  const maxTop = shouldBoundToRow
     ? Math.max(
       minTop,
       geometry.rowTop + geometry.rowHeight - geometry.viewportHeight,
     )
-    : Math.max(0, geometry.contentHeight - geometry.viewportHeight);
+    : contentMaxTop;
   return {
     scrollLeft: clamp(
       scrollLeft,
@@ -129,17 +133,20 @@ export function captureZoomAnchor(
   const rowWidth = row.offsetWidth || 1;
   const rowHeight = row.offsetHeight || 1;
 
+  const rowXRatio = point
+    ? clamp((comp.compDiv.scrollLeft + viewportX - rowLeft) / rowWidth, 0, 1)
+    : 0.5;
+  const rowYRatio = point
+    ? clamp((comp.compDiv.scrollTop + viewportY - row.offsetTop) / rowHeight, 0, 1)
+    : 0.5;
+
   return {
     comp,
     rowIdx,
     currentRowIdx: point ? rowIdx : comp.currentRow,
     scrollTopBounds: point ? "content" : "row",
-    rowXRatio: clamp((comp.compDiv.scrollLeft + viewportX - rowLeft) / rowWidth, 0, 1),
-    rowYRatio: clamp(
-      (comp.compDiv.scrollTop + viewportY - row.offsetTop) / rowHeight,
-      0,
-      1,
-    ),
+    rowXRatio,
+    rowYRatio,
     viewportX,
     viewportY,
   };
