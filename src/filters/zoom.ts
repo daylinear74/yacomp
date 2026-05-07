@@ -46,10 +46,23 @@ export function calcZoom(base: number, direction: number): number {
 }
 
 export function doZoomStep(dir: number): void {
-  const base = zoomMode === "fit" ? window.innerWidth : zoomWidth;
-  zoomWidth = calcZoom(base, dir);
-  zoomMode = "custom";
-  applyZoom();
+  const comp = activeComps[activeComps.length - 1];
+  if (comp) {
+    const oldW = zoomMode === "fit" ? window.innerWidth : zoomWidth;
+    const cx = comp.compDiv.scrollLeft + comp.compDiv.clientWidth / 2;
+    const cy = comp.compDiv.scrollTop + comp.compDiv.clientHeight / 2;
+    zoomWidth = calcZoom(oldW, dir);
+    zoomMode = "custom";
+    const scale = zoomWidth / oldW;
+    applyZoom();
+    comp.compDiv.scrollLeft = cx * scale - comp.compDiv.clientWidth / 2;
+    comp.compDiv.scrollTop = cy * scale - comp.compDiv.clientHeight / 2;
+  } else {
+    const base = zoomMode === "fit" ? window.innerWidth : zoomWidth;
+    zoomWidth = calcZoom(base, dir);
+    zoomMode = "custom";
+    applyZoom();
+  }
   showToast(zoomToast());
 }
 
