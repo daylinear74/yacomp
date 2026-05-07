@@ -10,6 +10,7 @@ Hover to switch sources, scroll through rows, zoom and pan, and apply visual ana
 |------|-------------|
 | **HDBits** | Detects image grids in forum posts, adds "Show comparison" links |
 | **PassThePopcorn** | Hijacks PTP's built-in comparison viewer with a better one |
+| **UNIT3D** | Hijacks UNIT3D's built-in comparison viewer on Blutopia and Aither |
 | **slow.pics** | Adds a viewer button to comparison pages |
 
 ## Features

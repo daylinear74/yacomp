@@ -8,6 +8,7 @@ import { setupKeyboard } from "./keyboard";
 import { setupHDBits } from "./sites/hdbits";
 import { setupPTP } from "./sites/ptp";
 import { setupSlowPics } from "./sites/slowpics";
+import { setupUnit3D } from "./sites/unit3d";
 
 (function () {
   "use strict";
@@ -42,6 +43,7 @@ import { setupSlowPics } from "./sites/slowpics";
     setupHDBits();
     setupPTP();
     setupSlowPics();
+    setupUnit3D();
   }
 
   if (document.body) init();

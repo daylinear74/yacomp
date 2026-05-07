@@ -2,11 +2,13 @@
 // @name         Yet Another Comparison Viewer
 // @namespace    https://github.com/daylinear74/yacomp
 // @version      __VERSION__
-// @description  Screenshot comparison viewer for HDBits, PTP, and slow.pics — hover to switch sources, visual filters (solar/luma/chroma), auto BT.709/2020, zoom/pan, brightness/contrast
+// @description  Screenshot comparison viewer for HDBits, PTP, UNIT3D, and slow.pics — hover to switch sources, visual filters (solar/luma/chroma), auto BT.709/2020, zoom/pan, brightness/contrast
 // @match        *://*.slow.pics/*
 // @match        *://*.comp.pics/*
 // @match        *://*.passthepopcorn.me/*
 // @match        *://*.hdbits.org/*
+// @match        *://*.blutopia.cc/*
+// @match        *://*.aither.cc/*
 // @updateURL    https://github.com/daylinear74/yacomp/releases/latest/download/yacomp.user.js
 // @downloadURL  https://github.com/daylinear74/yacomp/releases/latest/download/yacomp.user.js
 // @grant        none
