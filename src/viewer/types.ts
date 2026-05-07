@@ -18,6 +18,8 @@ export interface Comp {
   numRows: number;
   currentRow: number;
   currentCol: number;
+  suppressRowSync?: boolean;
+  rowSyncSuppressToken?: number;
   allRowData: RowData[];
   navMapEl: HTMLDivElement;
   colBrightness: number[];
@@ -27,6 +29,8 @@ export interface Comp {
   triggerBgLoad: () => void;
   setColumn: (col: number) => void;
   setRow: (rowIdx: number) => void;
+  updateRowNav?: (idx: number) => void;
+  updateScrollSpacers?: () => void;
   updateNavMap: () => void;
   close: () => void;
 }

@@ -57,6 +57,12 @@ export function injectCSS(): void {
     ._scf_comp._scf_zoomed ._scf_comp_row {
       cursor: crosshair;
     }
+    ._scf_scroll_spacer {
+      width: 100%;
+      height: 0;
+      pointer-events: none;
+      line-height: 0;
+    }
     ._scf_comp._scf_dragging,
     ._scf_comp._scf_dragging ._scf_comp_row {
       cursor: grabbing !important;

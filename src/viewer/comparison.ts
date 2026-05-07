@@ -9,8 +9,9 @@ import { showToast } from "../ui/toast";
 import { updateHUD } from "../ui/hud";
 import {
   zoomMode, zoomWidth, setZoomMode, setZoomWidth,
-  applyZoom, calcZoom, zoomToast, navMapEnabled,
+  applyZoom, calcZoom, captureZoomAnchor, zoomToast, navMapEnabled,
   activeComps, addComp, removeComp,
+  type CapturedZoomAnchor,
 } from "../filters/zoom";
 import { setupDragHandlers, pointerColumn } from "./drag";
 import { buildRow, loadRow } from "./row";
@@ -18,6 +19,69 @@ import { createNavMap } from "./nav-map";
 import { createRowNav } from "./row-nav";
 import type { Grid } from "../grid/types";
 import type { RowData, Comp } from "./types";
+
+const WHEEL_ZOOM_GESTURE_MS = 200;
+
+export interface WheelZoomGestureState {
+  anchor: CapturedZoomAnchor | null;
+  resetTimer: ReturnType<typeof setTimeout> | null;
+}
+
+export function resetWheelZoomGesture(state: WheelZoomGestureState): void {
+  if (state.resetTimer) clearTimeout(state.resetTimer);
+  state.anchor = null;
+  state.resetTimer = null;
+}
+
+export function getWheelZoomGestureAnchor(
+  state: WheelZoomGestureState,
+  comp: Comp,
+  point: { clientX: number; clientY: number },
+): CapturedZoomAnchor | null {
+  if (!state.anchor) state.anchor = captureZoomAnchor(comp, point);
+  if (state.resetTimer) clearTimeout(state.resetTimer);
+  state.resetTimer = setTimeout(() => {
+    state.anchor = null;
+    state.resetTimer = null;
+  }, WHEEL_ZOOM_GESTURE_MS);
+  return state.anchor;
+}
+
+export function syncCurrentRowFromScroll(
+  comp: Comp,
+  updateRowNav: (idx: number) => void,
+): void {
+  if (comp.suppressRowSync) return;
+
+  const mid = comp.compDiv.scrollTop + comp.compDiv.clientHeight / 2;
+  let closest = 0;
+  let closestDist = Infinity;
+  for (let i = 0; i < comp.allRowData.length; i++) {
+    const row = comp.allRowData[i].rowDiv;
+    const rowMid = row.offsetTop + row.offsetHeight / 2;
+    const dist = Math.abs(rowMid - mid);
+    if (dist < closestDist) {
+      closestDist = dist;
+      closest = i;
+    }
+  }
+  if (closest !== comp.currentRow) {
+    comp.currentRow = closest;
+    updateRowNav(closest);
+  }
+}
+
+export function calcScrollSpacerHeights(
+  viewportHeight: number,
+  firstRowHeight: number,
+  lastRowHeight: number,
+): { top: number; bottom: number } {
+  const halfViewport = viewportHeight / 2;
+  return {
+    top: Math.max(0, halfViewport - firstRowHeight / 2),
+    bottom: Math.max(0, halfViewport - lastRowHeight / 2),
+  };
+}
 
 export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLElement): void {
   injectCSS();
@@ -38,6 +102,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
 
   const compDiv = document.createElement("div") as HTMLDivElement;
   compDiv.className = "_scf_comp";
+  const wheelZoomGesture: WheelZoomGestureState = { anchor: null, resetTimer: null };
 
   const { drag, onDragMove, onDragEnd } = setupDragHandlers(compDiv);
 
@@ -46,15 +111,10 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     if (!e.ctrlKey) return;
     e.preventDefault();
     const oldW = zoomMode === "fit" ? window.innerWidth : zoomWidth;
-    const rect = compDiv.getBoundingClientRect();
-    const cx = compDiv.scrollLeft + (e.clientX - rect.left);
-    const cy = compDiv.scrollTop + (e.clientY - rect.top);
+    const anchor = getWheelZoomGestureAnchor(wheelZoomGesture, comp, e);
     setZoomWidth(calcZoom(oldW, e.deltaY < 0 ? 1 : -1));
     setZoomMode("custom");
-    const scale = zoomWidth / oldW;
-    applyZoom();
-    compDiv.scrollLeft = cx * scale - (e.clientX - rect.left);
-    compDiv.scrollTop = cy * scale - (e.clientY - rect.top);
+    applyZoom(anchor ? [anchor] : []);
     showToast(zoomToast());
   }, { passive: false });
 
@@ -64,6 +124,11 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
 
   // Forward-declare comp so loadRow/switchColumn can reference it
   const comp = {} as Comp;
+  const topSpacer = document.createElement("div");
+  topSpacer.className = "_scf_scroll_spacer";
+  const bottomSpacer = document.createElement("div");
+  bottomSpacer.className = "_scf_scroll_spacer";
+  compDiv.appendChild(topSpacer);
 
   function switchColumn(col: number) {
     comp.currentCol = col;
@@ -117,6 +182,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     compDiv.appendChild(rowData.rowDiv);
     allRowData.push(rowData);
   }
+  compDiv.appendChild(bottomSpacer);
 
   // IntersectionObserver: load deferred rows as they enter the viewport
   const rowObserver = new IntersectionObserver((entries) => {
@@ -174,6 +240,18 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   comp.bgLoadAll = () => bgLoadAll;
   comp.setBgLoadAll = (v: boolean) => { bgLoadAll = v; };
   comp.triggerBgLoad = triggerBgLoad;
+  comp.updateScrollSpacers = () => {
+    const first = allRowData[0]?.rowDiv;
+    const last = allRowData[allRowData.length - 1]?.rowDiv;
+    if (!first || !last) return;
+    const spacers = calcScrollSpacerHeights(
+      compDiv.clientHeight,
+      first.offsetHeight,
+      last.offsetHeight,
+    );
+    topSpacer.style.height = spacers.top + "px";
+    bottomSpacer.style.height = spacers.bottom + "px";
+  };
 
   compDiv.addEventListener("mousemove", (e) => {
     if (drag.active) return;
@@ -189,6 +267,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
 
   // Row navigation sidebar
   const rowNav = createRowNav(allRowData, comp);
+  comp.updateRowNav = rowNav.updateRowNav;
 
   // Thumbnail navigation minimap
   const navMap = createNavMap(compDiv, allRowData, comp);
@@ -206,30 +285,31 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   // Sync row indicator + nav map on manual scroll
   compDiv.addEventListener("scroll", () => {
     if (rowNav.rowNavEl) {
-      const mid = compDiv.scrollTop + compDiv.clientHeight / 2;
-      let closest = 0;
-      let closestDist = Infinity;
-      for (let i = 0; i < allRowData.length; i++) {
-        const rowMid = allRowData[i].rowDiv.offsetTop + allRowData[i].rowDiv.offsetHeight / 2;
-        const dist = Math.abs(rowMid - mid);
-        if (dist < closestDist) {
-          closestDist = dist;
-          closest = i;
-        }
-      }
-      if (closest !== comp.currentRow) {
-        comp.currentRow = closest;
-        rowNav.updateRowNav(closest);
-      }
+      syncCurrentRowFromScroll(comp, rowNav.updateRowNav);
     }
     navMap.updateNavMap();
   });
 
+  const onResize = () => comp.updateScrollSpacers?.();
+  let spacerResizeObserver: ResizeObserver | null = null;
+  if (typeof ResizeObserver !== "undefined") {
+    spacerResizeObserver = new ResizeObserver(onResize);
+    spacerResizeObserver.observe(compDiv);
+    if (allRowData[0]) spacerResizeObserver.observe(allRowData[0].rowDiv);
+    if (allRowData[allRowData.length - 1]) {
+      spacerResizeObserver.observe(allRowData[allRowData.length - 1].rowDiv);
+    }
+  }
+  window.addEventListener("resize", onResize);
+
   function closeThis() {
     window.removeEventListener("mousemove", onDragMove);
     window.removeEventListener("mouseup", onDragEnd);
+    window.removeEventListener("resize", onResize);
+    if (spacerResizeObserver) spacerResizeObserver.disconnect();
 
     rowObserver.disconnect();
+    resetWheelZoomGesture(wheelZoomGesture);
     compDiv.remove();
     rowNav.cleanup();
     navMap.cleanup();
@@ -252,6 +332,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   btn.style.display = "none";
   document.body.style.overflow = "hidden";
   document.body.appendChild(compDiv);
+  comp.updateScrollSpacers();
 
   addComp(comp);
 }
