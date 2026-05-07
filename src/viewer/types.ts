@@ -20,6 +20,8 @@ export interface Comp {
   currentCol: number;
   allRowData: RowData[];
   navMapEl: HTMLDivElement;
+  colBrightness: number[];
+  colContrast: number[];
   bgLoadAll: () => boolean;
   setBgLoadAll: (v: boolean) => void;
   triggerBgLoad: () => void;

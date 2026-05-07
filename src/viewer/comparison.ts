@@ -6,6 +6,7 @@ import { injectCSS } from "../ui/css";
 import { injectFilters } from "../filters/svg";
 import { resolveFilter, buildFilter } from "../filters/imaging";
 import { showToast } from "../ui/toast";
+import { updateHUD } from "../ui/hud";
 import {
   zoomMode, zoomWidth, setZoomMode, setZoomWidth,
   applyZoom, calcZoom, zoomToast, navMapEnabled,
@@ -107,6 +108,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
         if (src && navMap.navMapImg && navMap.navMapImg.src !== src) navMap.navMapImg.src = src;
       }
     }
+    updateHUD();
   }
 
   for (let ri = 0; ri < grid.rows.length; ri++) {
@@ -166,6 +168,8 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   comp.numRows = allRowData.length;
   comp.currentRow = 0;
   comp.currentCol = 0;
+  comp.colBrightness = new Array(grid.numCols).fill(1.0);
+  comp.colContrast = new Array(grid.numCols).fill(1.0);
   comp.allRowData = allRowData;
   comp.bgLoadAll = () => bgLoadAll;
   comp.setBgLoadAll = (v: boolean) => { bgLoadAll = v; };

@@ -22,7 +22,7 @@ Hover to switch sources, scroll through rows, zoom and pan, and apply visual ana
   - Residual — high-pass filter showing fine detail differences
   - Luma — grayscale view using correct BT.709/BT.2020 coefficients
   - Chroma — isolated color channel view
-- **Brightness / Contrast** — `[` / `]` to adjust brightness, `{` / `}` for contrast, `\` to reset
+- **Brightness / Contrast** — per-source adjustment: `[` / `]` to adjust brightness, `{` / `}` for contrast on the current source only; `\` to reset current source, `Shift+\` to reset all
 - **Auto colorspace detection** — reads ICC profiles from PNG/JPEG headers to apply correct BT.709 or BT.2020 luma/chroma matrices
 - **Lazy loading** — rows load as you scroll; press `B` to background-load everything
 - **Navigation minimap** — appears when zoomed in, drag to jump around; toggle with `M`
@@ -33,9 +33,10 @@ Hover to switch sources, scroll through rows, zoom and pan, and apply visual ana
 | Key | Action |
 |-----|--------|
 | `F` / `Shift+F` | Cycle filter forward / backward |
-| `[` / `]` | Brightness down / up |
-| `{` / `}` | Contrast down / up |
-| `\` | Reset brightness & contrast |
+| `[` / `]` | Brightness down / up (current source) |
+| `{` / `}` | Contrast down / up (current source) |
+| `\` | Reset current source B/C |
+| `Shift+\` | Reset all sources B/C |
 | `+` / `-` | Zoom in / out |
 | `0` | Fit to window |
 | `O` | 1:1 zoom |

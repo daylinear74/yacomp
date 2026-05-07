@@ -6,8 +6,9 @@ import { detectCS } from "./colorspace";
 import { cur } from "./modes";
 import { bcString } from "./brightness";
 import { injectFilters } from "./svg";
-import { hasAdjustments } from "./brightness";
+import { active } from "./modes";
 import { updateHUD } from "../ui/hud";
+import { activeComps } from "./zoom";
 
 export function getImages(): HTMLImageElement[] {
   return [...document.querySelectorAll("img")].filter((img) => {
@@ -33,10 +34,10 @@ export async function resolveFilter(src: string): Promise<string> {
   return mode.filter || "";
 }
 
-export function buildFilter(svgFilter: string): string {
+export function buildFilter(svgFilter: string, b = 1.0, c = 1.0): string {
   const parts: string[] = [];
   if (svgFilter) parts.push(svgFilter);
-  const bc = bcString();
+  const bc = bcString(b, c);
   if (bc) parts.push(bc);
   return parts.join(" ");
 }
@@ -47,12 +48,24 @@ export async function applyToImg(img: HTMLImageElement): Promise<void> {
 
 export function syncAll(): void {
   injectFilters();
-  getImages().forEach(applyToImg);
-  for (const img of document.querySelectorAll("._scf_comp_img") as NodeListOf<HTMLImageElement>) {
-    if (!img.src) continue;
-    resolveFilter(img.src).then((f) => {
-      img.style.filter = buildFilter(f);
-    });
+  if (active()) {
+    getImages().forEach(applyToImg);
+  } else {
+    for (const img of getImages()) {
+      img.style.filter = "";
+    }
+  }
+  for (const comp of activeComps) {
+    const colB = comp.colBrightness;
+    const colC = comp.colContrast;
+    for (const rd of comp.allRowData) {
+      rd.imgs.forEach((img, i) => {
+        if (!img.src) return;
+        resolveFilter(img.src).then((f) => {
+          img.style.filter = buildFilter(f, colB[i], colC[i]);
+        });
+      });
+    }
   }
   updateHUD();
 }

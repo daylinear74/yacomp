@@ -3,7 +3,8 @@
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
 import { cur } from "../filters/modes";
-import { brightness, contrast, isDefault } from "../filters/brightness";
+import { isDefault } from "../filters/brightness";
+import { activeComps } from "../filters/zoom";
 
 export function updateHUD(): void {
   let el = document.getElementById("_scf_hud_");
@@ -32,11 +33,17 @@ export function updateHUD(): void {
   }
 
   let text = cur().label || "";
-  if (!isDefault(brightness))
-    text +=
-      (text ? "  " : "") + "☀" + Math.round(brightness * 100) + "%";
-  if (!isDefault(contrast))
-    text += (text ? "  " : "") + "◐" + Math.round(contrast * 100) + "%";
+
+  const comp = activeComps[activeComps.length - 1];
+  if (comp) {
+    const col = comp.currentCol;
+    const b = comp.colBrightness[col];
+    const c = comp.colContrast[col];
+    if (!isDefault(b))
+      text += (text ? "  " : "") + "☀" + Math.round(b * 100) + "%";
+    if (!isDefault(c))
+      text += (text ? "  " : "") + "◐" + Math.round(c * 100) + "%";
+  }
 
   el.style.opacity = text ? "1" : "0";
   if (text) el.textContent = text;

@@ -4,8 +4,7 @@
 
 import { MODES, modeIndex, setModeIndex, cur } from "./filters/modes";
 import {
-  brightness, contrast, setBrightness, setContrast,
-  BC_STEP, BC_MIN, BC_MAX,
+  BC_STEP, BC_MIN, BC_MAX, isDefault,
   hasAdjustments, resetAdjustments,
 } from "./filters/brightness";
 import { syncAll } from "./filters/imaging";
@@ -25,6 +24,15 @@ function isEditing(): boolean {
   );
 }
 
+function hasCompAdjustments(): boolean {
+  if (hasAdjustments()) return true;
+  for (const comp of activeComps) {
+    if (comp.colBrightness.some((v) => !isDefault(v))) return true;
+    if (comp.colContrast.some((v) => !isDefault(v))) return true;
+  }
+  return false;
+}
+
 export function setupKeyboard(): void {
   window.addEventListener(
     "keydown",
@@ -36,8 +44,13 @@ export function setupKeyboard(): void {
       switch (e.code) {
         case "Escape":
           e.preventDefault();
-          if (hasAdjustments()) {
+          if (hasCompAdjustments()) {
             resetAdjustments();
+            const comp = activeComps[activeComps.length - 1];
+            if (comp) {
+              comp.colBrightness.fill(1.0);
+              comp.colContrast.fill(1.0);
+            }
             syncAll();
             showToast(cur().toast);
           } else {
@@ -179,25 +192,40 @@ export function setupKeyboard(): void {
 
       // [ / ] : brightness down / up;  { / } (Shift+[ / Shift+]) : contrast down / up
       if (e.code === "BracketLeft" || e.code === "BracketRight") {
+        const comp = activeComps[activeComps.length - 1];
+        if (!comp) return;
+        const col = comp.currentCol;
         const delta = e.code === "BracketRight" ? BC_STEP : -BC_STEP;
+        const names = comp.allRowData[0]?.rowDiv.parentElement?.querySelector("._scf_comp_label");
+        const srcName = "Source " + (col + 1);
         if (e.shiftKey) {
-          setContrast(Math.max(BC_MIN, Math.min(BC_MAX, +(contrast + delta).toFixed(2))));
+          comp.colContrast[col] = Math.max(BC_MIN, Math.min(BC_MAX, +(comp.colContrast[col] + delta).toFixed(2)));
           syncAll();
-          showToast("◐ Contrast " + Math.round(contrast * 100) + "%");
+          showToast("◐ " + srcName + " Contrast " + Math.round(comp.colContrast[col] * 100) + "%");
         } else {
-          setBrightness(Math.max(BC_MIN, Math.min(BC_MAX, +(brightness + delta).toFixed(2))));
+          comp.colBrightness[col] = Math.max(BC_MIN, Math.min(BC_MAX, +(comp.colBrightness[col] + delta).toFixed(2)));
           syncAll();
-          showToast("☀ Brightness " + Math.round(brightness * 100) + "%");
+          showToast("☀ " + srcName + " Brightness " + Math.round(comp.colBrightness[col] * 100) + "%");
         }
         return;
       }
 
-      // \ : reset brightness & contrast
+      // \ : reset current source B/C; Shift+\ : reset all sources
       if (e.code === "Backslash") {
-        setBrightness(1.0);
-        setContrast(1.0);
-        syncAll();
-        showToast("↺ Reset B/C");
+        const comp = activeComps[activeComps.length - 1];
+        if (!comp) return;
+        if (e.shiftKey) {
+          comp.colBrightness.fill(1.0);
+          comp.colContrast.fill(1.0);
+          syncAll();
+          showToast("↺ Reset all B/C");
+        } else {
+          const col = comp.currentCol;
+          comp.colBrightness[col] = 1.0;
+          comp.colContrast[col] = 1.0;
+          syncAll();
+          showToast("↺ Reset Source " + (col + 1) + " B/C");
+        }
         return;
       }
     },
