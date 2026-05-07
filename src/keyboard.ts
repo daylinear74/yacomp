@@ -4,9 +4,15 @@
 
 import { MODES, modeIndex, setModeIndex, cur } from "./filters/modes";
 import {
-  BC_STEP, BC_MIN, BC_MAX, isDefault,
+  BC_STEP, BC_MIN, BC_MAX, isDefault, adjustBrightness, brightnessAdjustmentLabel,
   hasAdjustments, resetAdjustments,
 } from "./filters/brightness";
+import {
+  cycleGammaMismatchCheck,
+  gammaMismatchCheckName,
+  gammaMismatchCheckPowLabel,
+  gammaMismatchCheckValueLabel,
+} from "./filters/gamma-check";
 import { syncAll } from "./filters/imaging";
 import { showToast } from "./ui/toast";
 import {
@@ -28,6 +34,7 @@ function hasCompAdjustments(): boolean {
   if (hasAdjustments()) return true;
   for (const comp of activeComps) {
     if (comp.colBrightness.some((v) => !isDefault(v))) return true;
+    if (comp.colGammaCheck.some(Boolean)) return true;
     if (comp.colContrast.some((v) => !isDefault(v))) return true;
   }
   return false;
@@ -49,6 +56,7 @@ export function setupKeyboard(): void {
             const comp = activeComps[activeComps.length - 1];
             if (comp) {
               comp.colBrightness.fill(1.0);
+              comp.colGammaCheck.fill(null);
               comp.colContrast.fill(1.0);
             }
             syncAll();
@@ -190,41 +198,66 @@ export function setupKeyboard(): void {
         return;
       }
 
+      // G / Shift+G: cycle gamma mismatch check presets for current source
+      if (e.code === "KeyG" && activeComps.length > 0) {
+        const comp = activeComps[activeComps.length - 1];
+        const col = comp.currentCol;
+        const next = cycleGammaMismatchCheck(comp.colGammaCheck[col], e.shiftKey ? -1 : 1);
+        comp.colGammaCheck[col] = next;
+        syncAll();
+        const srcName = "Source " + (col + 1);
+        if (next) {
+          showToast([
+            { text: srcName, size: "small", muted: true },
+            { text: "Gamma mismatch check", size: "normal" },
+            { text: gammaMismatchCheckValueLabel(next), size: "large" },
+            { text: gammaMismatchCheckName(next), size: "small" },
+            { text: gammaMismatchCheckPowLabel(next), size: "tiny", muted: true },
+          ]);
+        } else {
+          showToast("Gamma mismatch check OFF");
+        }
+        return;
+      }
+
       // [ / ] : brightness down / up;  { / } (Shift+[ / Shift+]) : contrast down / up
       if (e.code === "BracketLeft" || e.code === "BracketRight") {
         const comp = activeComps[activeComps.length - 1];
         if (!comp) return;
         const col = comp.currentCol;
-        const delta = e.code === "BracketRight" ? BC_STEP : -BC_STEP;
-        const names = comp.allRowData[0]?.rowDiv.parentElement?.querySelector("._scf_comp_label");
+        const direction = e.code === "BracketRight" ? 1 : -1;
+        const delta = direction > 0 ? BC_STEP : -BC_STEP;
         const srcName = "Source " + (col + 1);
         if (e.shiftKey) {
           comp.colContrast[col] = Math.max(BC_MIN, Math.min(BC_MAX, +(comp.colContrast[col] + delta).toFixed(2)));
           syncAll();
           showToast("◐ " + srcName + " Contrast " + Math.round(comp.colContrast[col] * 100) + "%");
         } else {
-          comp.colBrightness[col] = Math.max(BC_MIN, Math.min(BC_MAX, +(comp.colBrightness[col] + delta).toFixed(2)));
+          const next = adjustBrightness(comp.colBrightness[col], direction);
+          comp.colBrightness[col] = next;
           syncAll();
-          showToast("☀ " + srcName + " Brightness " + Math.round(comp.colBrightness[col] * 100) + "%");
+          showToast("☀ " + srcName + " " + brightnessAdjustmentLabel(next));
         }
         return;
       }
 
-      // \ : reset current source B/C; Shift+\ : reset all sources
+      // \ : reset current source adjustments; Shift+\ : reset all sources
       if (e.code === "Backslash") {
         const comp = activeComps[activeComps.length - 1];
         if (!comp) return;
         if (e.shiftKey) {
           comp.colBrightness.fill(1.0);
+          comp.colGammaCheck.fill(null);
           comp.colContrast.fill(1.0);
           syncAll();
-          showToast("↺ Reset all B/C");
+          showToast("↺ Reset all adjustments");
         } else {
           const col = comp.currentCol;
           comp.colBrightness[col] = 1.0;
+          comp.colGammaCheck[col] = null;
           comp.colContrast[col] = 1.0;
           syncAll();
-          showToast("↺ Reset Source " + (col + 1) + " B/C");
+          showToast("↺ Reset Source " + (col + 1) + " adjustments");
         }
         return;
       }

@@ -85,15 +85,22 @@ export function loadRow(rd: RowData, comp: Comp): void {
     sizer.addEventListener("load", () => rowDiv.classList.remove("_scf_loading"), { once: true });
   }
   const activeCol = comp.currentCol || 0;
-  const loadImg = (img: HTMLImageElement) => {
+  const loadImg = (img: HTMLImageElement, ci: number) => {
     if (!img.dataset.src) return;
     img.src = img.dataset.src;
     delete img.dataset.src;
-    resolveFilter(img.src).then((f) => { img.style.filter = buildFilter(f); });
+    resolveFilter(img.src).then((f) => {
+      img.style.filter = buildFilter(
+        f,
+        comp.colBrightness[ci],
+        comp.colContrast[ci],
+        comp.colGammaCheck[ci],
+      );
+    });
     img.addEventListener("load", () => adjustRowAR(img), { once: true });
   };
-  if (imgs[activeCol]) loadImg(imgs[activeCol]);
+  if (imgs[activeCol]) loadImg(imgs[activeCol], activeCol);
   imgs.forEach((img, ci) => {
-    if (ci !== activeCol) loadImg(img);
+    if (ci !== activeCol) loadImg(img, ci);
   });
 }

@@ -5,6 +5,7 @@
 import { detectCS } from "./colorspace";
 import { cur } from "./modes";
 import { bcString } from "./brightness";
+import { gammaMismatchCheckFilter, type GammaMismatchCheckId } from "./gamma-check";
 import { injectFilters } from "./svg";
 import { active } from "./modes";
 import { updateHUD } from "../ui/hud";
@@ -34,9 +35,16 @@ export async function resolveFilter(src: string): Promise<string> {
   return mode.filter || "";
 }
 
-export function buildFilter(svgFilter: string, b = 1.0, c = 1.0): string {
+export function buildFilter(
+  svgFilter: string,
+  b = 1.0,
+  c = 1.0,
+  gammaCheck: GammaMismatchCheckId | null = null,
+): string {
   const parts: string[] = [];
   if (svgFilter) parts.push(svgFilter);
+  const gamma = gammaMismatchCheckFilter(gammaCheck);
+  if (gamma) parts.push(gamma);
   const bc = bcString(b, c);
   if (bc) parts.push(bc);
   return parts.join(" ");
@@ -58,11 +66,12 @@ export function syncAll(): void {
   for (const comp of activeComps) {
     const colB = comp.colBrightness;
     const colC = comp.colContrast;
+    const colG = comp.colGammaCheck;
     for (const rd of comp.allRowData) {
       rd.imgs.forEach((img, i) => {
         if (!img.src) return;
         resolveFilter(img.src).then((f) => {
-          img.style.filter = buildFilter(f, colB[i], colC[i]);
+          img.style.filter = buildFilter(f, colB[i], colC[i], colG[i]);
         });
       });
     }

@@ -2,6 +2,8 @@
 // ║  Viewer types                                                             ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
+import type { GammaMismatchCheckId } from "../filters/gamma-check";
+
 export interface RowData {
   rowDiv: HTMLDivElement;
   sizer: HTMLImageElement;
@@ -23,6 +25,7 @@ export interface Comp {
   allRowData: RowData[];
   navMapEl: HTMLDivElement;
   colBrightness: number[];
+  colGammaCheck: (GammaMismatchCheckId | null)[];
   colContrast: number[];
   bgLoadAll: () => boolean;
   setBgLoadAll: (v: boolean) => void;

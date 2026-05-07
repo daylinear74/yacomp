@@ -3,6 +3,20 @@
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
 import { lut } from "./lut";
+import { GAMMA_MISMATCH_CHECK_PRESETS, gammaMismatchCheckExponent } from "./gamma-check";
+
+function gammaMismatchCheckFilterDefs(): string {
+  return GAMMA_MISMATCH_CHECK_PRESETS.map((preset) => {
+    const exponent = gammaMismatchCheckExponent(preset.id).toFixed(6);
+    return `<filter id="${preset.svgId}" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
+      <feComponentTransfer>
+        <feFuncR type="gamma" amplitude="1" exponent="${exponent}" offset="0"/>
+        <feFuncG type="gamma" amplitude="1" exponent="${exponent}" offset="0"/>
+        <feFuncB type="gamma" amplitude="1" exponent="${exponent}" offset="0"/>
+      </feComponentTransfer>
+    </filter>`;
+  }).join("");
+}
 
 export function injectFilters(): void {
   if (document.getElementById("_scf_defs_")) return;
@@ -50,6 +64,7 @@ export function injectFilters(): void {
       <feColorMatrix type="matrix"
         values="0.7373 -0.6780 -0.0593 0 0.5 -0.2627 0.3220 -0.0593 0 0.5 -0.2627 -0.6780 0.9407 0 0.5 0 0 0 1 0"/>
     </filter>
+    ${gammaMismatchCheckFilterDefs()}
   </defs>`;
   document.body.appendChild(svg);
 }

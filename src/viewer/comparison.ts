@@ -138,7 +138,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
           img.src = img.dataset.src;
           delete img.dataset.src;
           resolveFilter(img.src).then((f) => {
-            img.style.filter = buildFilter(f);
+            img.style.filter = buildFilter(f, comp.colBrightness[i], comp.colContrast[i], comp.colGammaCheck[i]);
           });
           img.addEventListener("load", () => adjAR(img), { once: true });
         }
@@ -235,6 +235,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   comp.currentRow = 0;
   comp.currentCol = 0;
   comp.colBrightness = new Array(grid.numCols).fill(1.0);
+  comp.colGammaCheck = new Array(grid.numCols).fill(null);
   comp.colContrast = new Array(grid.numCols).fill(1.0);
   comp.allRowData = allRowData;
   comp.bgLoadAll = () => bgLoadAll;

@@ -4,6 +4,7 @@
 
 import { cur } from "../filters/modes";
 import { isDefault } from "../filters/brightness";
+import { gammaMismatchCheckHudLabel } from "../filters/gamma-check";
 import { activeComps } from "../filters/zoom";
 
 export function updateHUD(): void {
@@ -38,9 +39,12 @@ export function updateHUD(): void {
   if (comp) {
     const col = comp.currentCol;
     const b = comp.colBrightness[col];
+    const g = comp.colGammaCheck[col];
     const c = comp.colContrast[col];
     if (!isDefault(b))
       text += (text ? "  " : "") + "☀" + Math.round(b * 100) + "%";
+    if (g)
+      text += (text ? "  " : "") + gammaMismatchCheckHudLabel(g);
     if (!isDefault(c))
       text += (text ? "  " : "") + "◐" + Math.round(c * 100) + "%";
   }
