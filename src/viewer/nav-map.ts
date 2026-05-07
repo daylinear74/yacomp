@@ -8,11 +8,73 @@ import type { RowData, Comp } from "./types";
 const NAV_MAX = 200;
 const NAV_MIN = 48;
 
+export interface NavMapJumpGeometry {
+  fx: number;
+  fy: number;
+  rowLeft: number;
+  rowTop: number;
+  rowWidth: number;
+  rowHeight: number;
+  contentHeight: number;
+  viewportWidth: number;
+  viewportHeight: number;
+}
+
 export interface NavMap {
   navMapEl: HTMLDivElement;
   navMapImg: HTMLImageElement;
   updateNavMap: () => void;
   cleanup: () => void;
+}
+
+function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n));
+}
+
+export function calcNavMapJumpScroll(
+  geometry: NavMapJumpGeometry,
+): { scrollLeft: number; scrollTop: number } {
+  const rowWidth = geometry.rowWidth || 1;
+  const rowHeight = geometry.rowHeight || 1;
+  const viewportWidth = geometry.viewportWidth;
+  const viewportHeight = geometry.viewportHeight;
+  const maxLeft = Math.max(0, geometry.rowLeft + rowWidth - viewportWidth);
+  const contentMaxTop = Math.max(0, geometry.contentHeight - viewportHeight);
+
+  let scrollTop: number;
+  if (rowHeight <= viewportHeight) {
+    scrollTop = geometry.rowTop + rowHeight / 2 - viewportHeight / 2;
+  } else {
+    scrollTop = clamp(
+      geometry.rowTop + geometry.fy * rowHeight - viewportHeight / 2,
+      geometry.rowTop,
+      geometry.rowTop + rowHeight - viewportHeight,
+    );
+  }
+
+  return {
+    scrollLeft: clamp(
+      geometry.rowLeft + geometry.fx * rowWidth - viewportWidth / 2,
+      0,
+      maxLeft,
+    ),
+    scrollTop: clamp(scrollTop, 0, contentMaxTop),
+  };
+}
+
+function suppressRowSync(comp: Comp): void {
+  const token = (comp.rowSyncSuppressToken || 0) + 1;
+  comp.rowSyncSuppressToken = token;
+  comp.suppressRowSync = true;
+  const clear = () => {
+    if (comp.rowSyncSuppressToken !== token) return;
+    comp.suppressRowSync = false;
+  };
+  if (typeof window.requestAnimationFrame === "function") {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(clear));
+  } else {
+    setTimeout(clear, 0);
+  }
 }
 
 export function createNavMap(
@@ -67,23 +129,38 @@ export function createNavMap(
 
   // Nav map drag-to-jump
   let navDragging = false;
+  let navDragRow: number | null = null;
   function navJumpTo(e: MouseEvent) {
     const b = navMapEl.getBoundingClientRect();
     const fx = Math.max(0, Math.min(1, (e.clientX - b.left) / b.width));
     const fy = Math.max(0, Math.min(1, (e.clientY - b.top) / b.height));
-    const rd = allRowData[comp.currentRow];
+    const rowIdx = navDragRow ?? comp.currentRow;
+    const rd = allRowData[rowIdx];
     if (!rd) return;
     const row = rd.rowDiv;
-    const tx = fx * row.offsetWidth - compDiv.clientWidth / 2;
-    const ty = row.offsetTop + fy * row.offsetHeight - compDiv.clientHeight / 2;
-    compDiv.scrollLeft = Math.max(0, Math.min(tx, row.offsetWidth - compDiv.clientWidth));
-    compDiv.scrollTop = Math.max(row.offsetTop, Math.min(ty, row.offsetTop + row.offsetHeight - compDiv.clientHeight));
+    const next = calcNavMapJumpScroll({
+      fx,
+      fy,
+      rowLeft: row.offsetLeft,
+      rowTop: row.offsetTop,
+      rowWidth: row.offsetWidth,
+      rowHeight: row.offsetHeight,
+      contentHeight: compDiv.scrollHeight,
+      viewportWidth: compDiv.clientWidth,
+      viewportHeight: compDiv.clientHeight,
+    });
+    suppressRowSync(comp);
+    comp.currentRow = rowIdx;
+    compDiv.scrollLeft = next.scrollLeft;
+    compDiv.scrollTop = next.scrollTop;
+    if (comp.updateRowNav) comp.updateRowNav(rowIdx);
   }
   navMapEl.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
     navDragging = true;
+    navDragRow = comp.currentRow;
     navMapEl.style.cursor = "grabbing";
     navJumpTo(e);
   });
@@ -94,6 +171,7 @@ export function createNavMap(
   function onNavDragEnd() {
     if (!navDragging) return;
     navDragging = false;
+    navDragRow = null;
     navMapEl.style.cursor = "";
   }
   window.addEventListener("mousemove", onNavDragMove);
