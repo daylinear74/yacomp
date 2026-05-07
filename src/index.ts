@@ -5,9 +5,12 @@
 import { hasAdjustments } from "./filters/brightness";
 import { applyToImg, syncAll } from "./filters/imaging";
 import { setupKeyboard } from "./keyboard";
+import { setupComppics } from "./sites/comppics";
+import { setupFRDS } from "./sites/frds";
 import { setupHDBits } from "./sites/hdbits";
 import { setupPTP } from "./sites/ptp";
 import { setupSlowPics } from "./sites/slowpics";
+import { setupSSD } from "./sites/ssd";
 import { setupUnit3D } from "./sites/unit3d";
 
 (function () {
@@ -40,9 +43,12 @@ import { setupUnit3D } from "./sites/unit3d";
       }),
     );
     setupKeyboard();
+    setupComppics();
+    setupFRDS();
     setupHDBits();
     setupPTP();
     setupSlowPics();
+    setupSSD();
     setupUnit3D();
   }
 
