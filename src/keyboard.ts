@@ -19,6 +19,30 @@ import {
   activeComps, navMapEnabled, toggleNavMap,
   doZoomIn, doZoomOut, doZoomFit, doZoom1to1,
 } from "./filters/zoom";
+import type { Comp } from "./viewer/types";
+
+export function applyBracketAdjustment(
+  comp: Comp,
+  e: Pick<KeyboardEvent, "code" | "shiftKey">,
+): string | null {
+  if (e.code !== "BracketLeft" && e.code !== "BracketRight") return null;
+
+  const col = comp.currentCol;
+  const direction = e.code === "BracketRight" ? 1 : -1;
+  const delta = direction > 0 ? BC_STEP : -BC_STEP;
+  const srcName = "Source " + (col + 1);
+  if (e.shiftKey) {
+    comp.colContrast[col] = Math.max(
+      BC_MIN,
+      Math.min(BC_MAX, +(comp.colContrast[col] + delta).toFixed(2)),
+    );
+    return "◐ " + srcName + " Contrast " + Math.round(comp.colContrast[col] * 100) + "%";
+  }
+
+  const next = adjustBrightness(comp.colBrightness[col], direction);
+  comp.colBrightness[col] = next;
+  return "☀ " + srcName + " " + brightnessAdjustmentLabel(next);
+}
 
 function isEditing(): boolean {
   const el = document.activeElement;
@@ -147,6 +171,18 @@ export function setupKeyboard(): void {
           showToast(navMapEnabled ? "Minimap ON" : "Minimap OFF");
           break;
         }
+
+        case "BracketLeft":
+        case "BracketRight": {
+          const comp = activeComps[activeComps.length - 1];
+          if (!comp) break;
+          const toast = applyBracketAdjustment(comp, e);
+          if (!toast) break;
+          e.preventDefault();
+          syncAll();
+          showToast(toast);
+          break;
+        }
       }
     },
     true,
@@ -216,27 +252,6 @@ export function setupKeyboard(): void {
           ]);
         } else {
           showToast("Gamma mismatch check OFF");
-        }
-        return;
-      }
-
-      // [ / ] : brightness down / up;  { / } (Shift+[ / Shift+]) : contrast down / up
-      if (e.code === "BracketLeft" || e.code === "BracketRight") {
-        const comp = activeComps[activeComps.length - 1];
-        if (!comp) return;
-        const col = comp.currentCol;
-        const direction = e.code === "BracketRight" ? 1 : -1;
-        const delta = direction > 0 ? BC_STEP : -BC_STEP;
-        const srcName = "Source " + (col + 1);
-        if (e.shiftKey) {
-          comp.colContrast[col] = Math.max(BC_MIN, Math.min(BC_MAX, +(comp.colContrast[col] + delta).toFixed(2)));
-          syncAll();
-          showToast("◐ " + srcName + " Contrast " + Math.round(comp.colContrast[col] * 100) + "%");
-        } else {
-          const next = adjustBrightness(comp.colBrightness[col], direction);
-          comp.colBrightness[col] = next;
-          syncAll();
-          showToast("☀ " + srcName + " " + brightnessAdjustmentLabel(next));
         }
         return;
       }
