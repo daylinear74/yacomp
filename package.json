@@ -1,0 +1,23 @@
+{
+  "name": "yacomp",
+  "version": "5.8.3",
+  "description": "Yet Another Comparison Viewer — userscript for screenshot comparison viewing",
+  "type": "module",
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "watch": "bun run scripts/build.ts --watch",
+    "typecheck": "bun x tsc --noEmit",
+    "verify": "bun run scripts/verify-build.ts",
+    "check": "bun run typecheck && bun run build && bun run verify",
+    "clean": "rm -rf dist",
+    "prepare": "lefthook install || true"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^20.5.3",
+    "@commitlint/config-conventional": "^20.5.3",
+    "@types/bun": "latest",
+    "lefthook": "^1",
+    "typescript": "^5"
+  },
+  "license": "MIT"
+}

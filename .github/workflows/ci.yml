@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    name: Type-check, build & verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Type-check
+        run: bun run typecheck
+
+      - name: Build
+        run: bun run build
+
+      - name: Verify output
+        run: bun run verify
+
+  commit-lint:
+    name: Commit message lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Lint commit messages (PR)
+        if: github.event_name == 'pull_request'
+        run: bun x commitlint --from origin/${{ github.base_ref }} --to HEAD --verbose
+
+      - name: Lint commit messages (push)
+        if: github.event_name == 'push'
+        run: bun x commitlint --last --verbose

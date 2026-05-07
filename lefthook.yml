@@ -1,0 +1,12 @@
+pre-commit:
+  parallel: true
+  commands:
+    typecheck:
+      run: bun run typecheck
+    build-and-verify:
+      run: bun run build && bun run verify
+
+commit-msg:
+  commands:
+    commitlint:
+      run: bun x commitlint --edit {1}

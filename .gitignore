@@ -1,0 +1,49 @@
+# === Build artifacts ===
+node_modules/
+dist/
+*.tsbuildinfo
+yacomp.js
+
+# === OS files ===
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# === Editor / IDE ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# === AI tool artifacts ===
+.cursor/
+.claude/
+.aider*
+copilot-*
+.codeium/
+.continue/
+.omc/
+
+# === Local hooks (dev convenience, not required) ===
+.husky/
+.lefthook-local.yml
+
+# === Misc ===
+*.log
+*.env
+*.env.local
