@@ -14,9 +14,11 @@ import {
   type CapturedZoomAnchor,
 } from "../filters/zoom";
 import { setupDragHandlers, pointerColumn } from "./drag";
+import { setupTouchHandlers, showColumnHint } from "./touch";
 import { buildRow, loadRow } from "./row";
 import { createNavMap } from "./nav-map";
 import { createRowNav } from "./row-nav";
+import { isTouchDevice, createTouchToolbar } from "../ui/touch-toolbar";
 import type { Grid } from "../grid/types";
 import type { RowData, Comp } from "./types";
 
@@ -106,9 +108,9 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
 
   const { drag, onDragMove, onDragEnd } = setupDragHandlers(compDiv);
 
-  // Ctrl+Wheel zoom (centered on cursor)
+  const isTouch = isTouchDevice();
   compDiv.addEventListener("wheel", (e) => {
-    if (!e.ctrlKey) return;
+    if (!e.ctrlKey || isTouch) return;
     e.preventDefault();
     const oldW = zoomMode === "fit" ? window.innerWidth : zoomWidth;
     const anchor = getWheelZoomGestureAnchor(wheelZoomGesture, comp, e);
@@ -304,6 +306,16 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   }
   window.addEventListener("resize", onResize);
 
+  let cleanupTouch: (() => void) | null = null;
+  let cleanupToolbar: (() => void) | null = null;
+  let cleanupHint: (() => void) | null = null;
+  if (isTouch) {
+    cleanupTouch = setupTouchHandlers(compDiv, comp, switchColumn);
+    const toolbar = createTouchToolbar(comp);
+    cleanupToolbar = toolbar.cleanup;
+    cleanupHint = showColumnHint(grid.numCols, grid.names ?? null);
+  }
+
   function closeThis() {
     window.removeEventListener("mousemove", onDragMove);
     window.removeEventListener("mouseup", onDragEnd);
@@ -312,6 +324,9 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
 
     rowObserver.disconnect();
     resetWheelZoomGesture(wheelZoomGesture);
+    if (cleanupTouch) cleanupTouch();
+    if (cleanupToolbar) cleanupToolbar();
+    if (cleanupHint) cleanupHint();
     compDiv.remove();
     rowNav.cleanup();
     navMap.cleanup();

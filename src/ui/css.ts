@@ -167,6 +167,97 @@ export function injectCSS(): void {
       pointer-events: none;
       border-radius: 1px;
     }
+    ._scf_touch_toolbar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 2147483647;
+      display: flex;
+      justify-content: center;
+      gap: 2px;
+      padding: 6px 8px;
+      padding-bottom: max(6px, env(safe-area-inset-bottom));
+      background: rgba(12,12,12,.88);
+      backdrop-filter: blur(8px);
+      border-top: 1px solid rgba(255,255,255,.12);
+    }
+    ._scf_touch_btn {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(255,255,255,.08);
+      color: #fff;
+      font: 600 12px/1 system-ui, sans-serif;
+      padding: 8px 10px;
+      border-radius: 6px;
+      min-width: 34px;
+      text-align: center;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    ._scf_touch_btn:active {
+      background: rgba(255,255,255,.25);
+    }
+    ._scf_col_hint {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 2147483647;
+      pointer-events: none;
+      display: flex;
+      transition: opacity .6s ease;
+    }
+    ._scf_col_hint_zone {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-right: 1px solid rgba(255,255,255,.2);
+    }
+    ._scf_col_hint_zone:last-child {
+      border-right: none;
+    }
+    ._scf_col_hint_label {
+      background: rgba(0,0,0,.5);
+      color: rgba(255,255,255,.7);
+      font: 600 14px/1 system-ui, sans-serif;
+      padding: 6px 12px;
+      border-radius: 999px;
+    }
+    @media (hover: hover) and (pointer: fine) {
+      ._scf_touch_toolbar { display: none !important; }
+      ._scf_col_hint { display: none !important; }
+    }
+    @media (hover: none), (pointer: coarse) {
+      ._scf_row_nav_item {
+        width: 32px;
+        height: 32px;
+        font-size: 13px;
+        line-height: 32px;
+      }
+      ._scf_comp {
+        height: calc(100vh - 46px);
+        height: calc(100dvh - 46px - env(safe-area-inset-bottom));
+      }
+      ._scf_nav_map {
+        bottom: calc(54px + max(6px, env(safe-area-inset-bottom))) !important;
+      }
+      ._scf_comp_label {
+        font-size: 13px !important;
+        padding: 6px 0 !important;
+      }
+      #_scf_toast_ {
+        bottom: calc(54px + max(6px, env(safe-area-inset-bottom))) !important;
+      }
+      #_scf_hud_ {
+        top: 8px !important;
+        right: 40px !important;
+        font-size: 10px !important;
+      }
+    }
   `;
   document.head.appendChild(style);
 }
