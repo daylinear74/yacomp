@@ -18,7 +18,7 @@ differences, brightness drift, and gamma mismatches.
 | Integration style | Sites |
 | --- | --- |
 | Detect grids | HDB |
-| Replace native viewer | PTP, BLU, ATH, SSD, FRDS |
+| Replace native viewer | PTP, BLU, ATH, BHD, GPW, SSD, FRDS |
 | Add viewer mode | slow.pics, comp.pics |
 
 ## Install & Usage
