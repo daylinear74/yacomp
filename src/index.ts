@@ -6,6 +6,7 @@ import { hasAdjustments } from "./filters/brightness";
 import { applyToImg, syncAll } from "./filters/imaging";
 import { setupKeyboard } from "./keyboard";
 import { setupComppics } from "./sites/comppics";
+import { setupBHD } from "./sites/bhd";
 import { setupFRDS } from "./sites/frds";
 import { setupHDBits } from "./sites/hdbits";
 import { setupPTP } from "./sites/ptp";
@@ -43,6 +44,7 @@ import { setupUnit3D } from "./sites/unit3d";
       }),
     );
     setupKeyboard();
+    setupBHD();
     setupComppics();
     setupFRDS();
     setupHDBits();
