@@ -18,6 +18,7 @@ export interface Comp {
   link: HTMLElement;
   numCols: number;
   numRows: number;
+  sourceNames: string[] | null;
   currentRow: number;
   currentCol: number;
   suppressRowSync?: boolean;

@@ -232,6 +232,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   comp.link = btn;
   comp.numCols = grid.numCols;
   comp.numRows = allRowData.length;
+  comp.sourceNames = grid.names;
   comp.currentRow = 0;
   comp.currentCol = 0;
   comp.colBrightness = new Array(grid.numCols).fill(1.0);

@@ -22,6 +22,14 @@ import {
 import { openSlowPicsViewer } from "./sites/slowpics";
 import type { Comp } from "./viewer/types";
 
+export function sourceNameForColumn(
+  comp: Pick<Comp, "sourceNames">,
+  col: number,
+): string {
+  const name = comp.sourceNames?.[col]?.trim();
+  return name || "Source " + (col + 1);
+}
+
 export function applyBracketAdjustment(
   comp: Comp,
   e: Pick<KeyboardEvent, "code" | "shiftKey">,
@@ -259,7 +267,7 @@ export function setupKeyboard(): void {
         const next = cycleGammaMismatchCheck(comp.colGammaCheck[col], e.shiftKey ? -1 : 1);
         comp.colGammaCheck[col] = next;
         syncAll();
-        const srcName = "Source " + (col + 1);
+        const srcName = sourceNameForColumn(comp, col);
         if (next) {
           showToast([
             { text: srcName, size: "small", muted: true },
