@@ -1,79 +1,103 @@
 # yacomp
 
-**Yet Another Comparison Viewer** — a userscript for side-by-side screenshot comparison on tracker and image hosting sites.
+![CI](https://github.com/daylinear74/yacomp/actions/workflows/ci.yml/badge.svg)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)
+![Runtime](https://img.shields.io/badge/runtime-Bun-black)
 
-Hover to switch sources, scroll through rows, zoom and pan, and apply visual analysis filters — all without leaving the page.
+**Yet Another Comparison Viewer** — a userscript for side-by-side screenshot
+comparison on tracker and image hosting sites.
+
+yacomp gives comparison pages a consistent fullscreen viewer across different
+sites: hover to switch sources, navigate rows from the keyboard, zoom and pan,
+and use visual filters to inspect compression artifacts, luma/chroma
+differences, brightness drift, and gamma mismatches.
 
 ## Supported Sites
 
-| Site | How it works |
-|------|-------------|
-| **HDBits** | Detects image grids in forum posts, adds "Show comparison" links |
-| **PassThePopcorn** | Hijacks PTP's built-in comparison viewer with a better one |
-| **UNIT3D** | Hijacks UNIT3D's built-in comparison viewer on Blutopia and Aither |
-| **Spring Sunday** | Hijacks SSD's built-in fieldset comparison viewer |
-| **FRDS** | Hijacks FRDS's built-in fieldset comparison viewer |
-| **slow.pics** | Adds a viewer button to comparison pages |
-| **comp.pics** | Adds a viewer button to comparison pages |
+| Integration style | Sites |
+| --- | --- |
+| Detect grids | HDB |
+| Replace native viewer | PTP, BLU, ATH, SSD, FRDS |
+| Add viewer mode | slow.pics, comp.pics |
+
+## Install & Usage
+
+Install a userscript manager such as [Tampermonkey](https://www.tampermonkey.net/)
+or [Violentmonkey](https://violentmonkey.github.io/), then **[click here to
+install the latest release](https://github.com/daylinear74/yacomp/releases/latest/download/yacomp.user.js)**.
+
+- On grid-detection sites, yacomp adds a **Show comparison** link near detected
+  screenshot grids.
+- On native-viewer sites, use the site's comparison UI as usual; yacomp takes
+  over when the viewer opens.
+- On slow.pics and comp.pics, yacomp adds a native-style button that opens the
+  current comparison in yacomp.
 
 ## Features
 
-- **Hover to compare** — move the mouse across the image to switch between sources
-- **Keyboard navigation** — arrow keys or vim keys (H/J/K/L) to change source/row, 1-9 for direct source selection
-- **Zoom & pan** — `+`/`-` to zoom, `0` to fit, `O` for 1:1, Ctrl+Wheel for cursor-centered zoom, drag to pan
-- **Visual filters** — press `F` to cycle through:
-  - Solar curve (x1, x2) — exaggerates compression artifacts
-  - Residual — high-pass filter showing fine detail differences
-  - Luma — grayscale view using correct BT.709/BT.2020 coefficients
-  - Chroma — isolated color channel view
-- **Brightness / Contrast** — per-source adjustment: `[` / `]` to adjust brightness, `{` / `}` for contrast on the current source only; `\` to reset current source adjustments, `Shift+\` to reset all
-- **Gamma mismatch check** — press `G` to cycle diagnostic power-curve checks: 91.7% (2.2/2.4), 88.0% (2.2/2.5), and 81.8% (1.8/2.2)
-- **Auto colorspace detection** — reads ICC profiles from PNG/JPEG headers to apply correct BT.709 or BT.2020 luma/chroma matrices
-- **Lazy loading** — rows load as you scroll; press `B` to background-load everything
-- **Navigation minimap** — appears when zoomed in, drag to jump around; toggle with `M`
-- **Row nav sidebar** — numbered dots for quick row switching; toggle with `R`
+- **Consistent comparison viewer**: open supported site comparisons in the same
+  fullscreen UI.
+- **Fast source and row navigation**: hover, arrow/vim keys, and number keys for
+  switching sources and rows.
+- **Zoom and pan**: fit, 1:1, incremental zoom, `Ctrl` + wheel zoom, drag
+  panning, minimap, and row navigation.
+- **Visual filters**: solar, residual, luma, and chroma modes for artifact and
+  channel inspection.
+- **Per-source adjustments**: brightness, contrast, and gamma mismatch checks
+  for the selected source.
+- **Colorspace-aware luma/chroma**: BT.709/BT.2020 handling from URL hints or
+  PNG/JPEG ICC profile data when available.
+- **Lazy loading**: rows load on demand, with optional background loading and
+  synchronization for dynamically added images.
 
-## Keyboard Shortcuts
+## Shortcuts
 
 | Key | Action |
-|-----|--------|
-| `F` / `Shift+F` | Cycle filter forward / backward |
-| `[` / `]` | Brightness down / up (current source) |
-| `{` / `}` | Contrast down / up (current source) |
-| `G` / `Shift+G` | Cycle gamma mismatch check forward / backward (current source) |
-| `\` | Reset current source adjustments |
-| `Shift+\` | Reset all source adjustments |
+| --- | --- |
+| `F` / `Shift+F` | Cycle visual filter forward / backward |
+| `[` / `]` | Decrease / increase brightness for the current source |
+| `{` / `}` | Decrease / increase contrast for the current source |
+| `G` / `Shift+G` | Cycle gamma mismatch check for the current source |
+| `\` | Reset adjustments for the current source |
+| `Shift+\` | Reset adjustments for all sources |
 | `+` / `-` | Zoom in / out |
+| `Ctrl` + wheel | Cursor-centered zoom |
 | `0` | Fit to window |
-| `O` | 1:1 zoom |
+| `O` | Show image at 1:1 |
 | `H` / `L` or `Left` / `Right` | Previous / next source |
 | `K` / `J` or `Up` / `Down` | Previous / next row |
-| `1`-`9` | Jump to source N |
+| `1`-`9` | Jump to source number |
 | `M` | Toggle minimap |
-| `R` | Toggle row nav |
+| `R` | Toggle row navigation |
 | `B` | Toggle background loading |
-| `Esc` | Reset filters, or close viewer |
-
-## Install
-
-1. Install [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/)
-2. Install directly from the [latest release](https://github.com/daylinear74/yacomp/releases/latest/download/yacomp.user.js) — your userscript manager will pick it up automatically
-3. Updates are delivered automatically via the `@updateURL` in the script header
+| `Esc` | Reset active adjustments, or close the viewer |
 
 ## Development
 
-Requires [Bun](https://bun.sh/).
+The project uses Bun and TypeScript. The built userscript is written to
+`dist/yacomp.user.js`.
 
 ```bash
-bun install           # Install deps + set up git hooks
-
-bun run build         # Build → dist/yacomp.user.js
-bun run watch         # Auto-rebuild on file changes
-bun run typecheck     # Type-check only (no output)
-bun run verify        # Verify build output integrity
-bun run check         # Full pipeline: typecheck + build + verify
-bun run clean         # Remove dist/
+bun install
+bun run build       # Build dist/yacomp.user.js
+bun run watch       # Rebuild when src/ changes
+bun run typecheck   # Type-check without emitting files
+bun run verify      # Sanity-check the generated userscript
+bun run check       # typecheck + build + verify
+bun run clean       # Remove dist/
 ```
+
+Core code lives in `src/`: `sites/` contains site adapters, `viewer/` contains
+the fullscreen comparison UI, and `filters/` contains zoom, colorspace, and
+visual filter logic. Userscript metadata and URL matches live in
+`meta/banner.txt`.
+
+For new site support, parse the page into the shared grid model and reuse the
+existing viewer instead of adding site-specific viewer behavior.
+
+CI runs `bun run check` on pushes and pull requests. Releases are tag-driven:
+pushing a `v*` tag builds and uploads `dist/yacomp.user.js`.
 
 ## License
 
