@@ -89,6 +89,15 @@ export function gammaMismatchCheckLabel(id: GammaMismatchCheckId): string {
     + gammaMismatchCheckPowLabel(id);
 }
 
-export function gammaMismatchCheckHudLabel(id: GammaMismatchCheckId): string {
-  return "gamma " + gammaMismatchCheckValueLabel(id).split(" ")[0];
+export interface GammaMismatchCheckHudInfo {
+  line1: string;
+  line2: string;
+}
+
+export function gammaMismatchCheckHudLabel(id: GammaMismatchCheckId): GammaMismatchCheckHudInfo {
+  const preset = PRESET_BY_ID.get(id)!;
+  return {
+    line1: "γ " + (preset.ratio * 100).toFixed(1) + "% (" + preset.formula + ")",
+    line2: preset.label,
+  };
 }
