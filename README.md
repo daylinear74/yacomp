@@ -55,6 +55,7 @@ install the latest release](https://github.com/daylinear74/yacomp/releases/lates
 
 | Key | Action |
 | --- | --- |
+| `V` | Open yacomp viewer on slow.pics / comp.pics comparison pages |
 | `F` / `Shift+F` | Cycle visual filter forward / backward |
 | `[` / `]` | Decrease / increase brightness for the current source |
 | `{` / `}` | Decrease / increase contrast for the current source |
