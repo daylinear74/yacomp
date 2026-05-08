@@ -20,6 +20,7 @@ import {
   doZoomIn, doZoomOut, doZoomFit, doZoom1to1,
 } from "./filters/zoom";
 import { openSlowPicsViewer } from "./sites/slowpics";
+import { visibleColumnOffset } from "./viewer/source-visibility";
 import type { Comp } from "./viewer/types";
 
 export function sourceNameForColumn(
@@ -140,7 +141,9 @@ export function setupKeyboard(): void {
         case "KeyH": {
           e.preventDefault();
           const comp = activeComps[activeComps.length - 1];
-          comp.setColumn((comp.currentCol - 1 + comp.numCols) % comp.numCols);
+          const offset = visibleColumnOffset(comp.visibleCols, comp.currentCol);
+          const next = (offset - 1 + comp.visibleCols.length) % comp.visibleCols.length;
+          comp.setColumn(comp.visibleCols[next]);
           break;
         }
 
@@ -148,7 +151,9 @@ export function setupKeyboard(): void {
         case "KeyL": {
           e.preventDefault();
           const comp = activeComps[activeComps.length - 1];
-          comp.setColumn((comp.currentCol + 1) % comp.numCols);
+          const offset = visibleColumnOffset(comp.visibleCols, comp.currentCol);
+          const next = (offset + 1) % comp.visibleCols.length;
+          comp.setColumn(comp.visibleCols[next]);
           break;
         }
 
@@ -180,9 +185,9 @@ export function setupKeyboard(): void {
           const comp = activeComps[activeComps.length - 1];
           if (!comp) break;
           const idx = parseInt(e.code.charAt(5), 10) - 1;
-          if (idx < comp.numCols) {
+          if (idx < comp.visibleCols.length) {
             e.preventDefault();
-            comp.setColumn(idx);
+            comp.setColumn(comp.visibleCols[idx]);
           }
           break;
         }

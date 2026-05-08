@@ -11,6 +11,7 @@ export function buildRow(
   numCols: number,
   drag: DragState,
   switchColumn: (col: number) => void,
+  pointerColumnForEvent: (e: MouseEvent) => number,
   deferred: boolean,
 ): RowData {
   const rowDiv = document.createElement("div");
@@ -64,8 +65,7 @@ export function buildRow(
 
   rowDiv.addEventListener("mousemove", (e) => {
     if (drag.active) return;
-    const relX = Math.max(0, Math.min(0.9999, e.clientX / window.innerWidth));
-    const newCol = Math.floor(relX * numCols);
+    const newCol = pointerColumnForEvent(e);
     const prevCol = parseInt(rowDiv.dataset.col!, 10);
     if (newCol !== prevCol) {
       switchColumn(newCol);

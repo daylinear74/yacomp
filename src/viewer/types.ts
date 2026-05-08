@@ -19,6 +19,7 @@ export interface Comp {
   numCols: number;
   numRows: number;
   sourceNames: string[] | null;
+  visibleCols: number[];
   currentRow: number;
   currentCol: number;
   suppressRowSync?: boolean;
@@ -32,7 +33,9 @@ export interface Comp {
   setBgLoadAll: (v: boolean) => void;
   triggerBgLoad: () => void;
   setColumn: (col: number) => void;
+  setSourceVisible: (col: number, visible: boolean) => void;
   setRow: (rowIdx: number) => void;
+  updateSourceMenu?: () => void;
   updateRowNav?: (idx: number) => void;
   updateScrollSpacers?: () => void;
   updateNavMap: () => void;

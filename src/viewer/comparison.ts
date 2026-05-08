@@ -13,10 +13,16 @@ import {
   activeComps, addComp, removeComp,
   type CapturedZoomAnchor,
 } from "../filters/zoom";
-import { setupDragHandlers, pointerColumn } from "./drag";
+import { setupDragHandlers } from "./drag";
 import { buildRow, loadRow } from "./row";
 import { createNavMap } from "./nav-map";
 import { createRowNav } from "./row-nav";
+import { createSourceMenu } from "./source-menu";
+import {
+  createDefaultVisibleColumns,
+  pointerVisibleColumn,
+  setColumnVisibility,
+} from "./source-visibility";
 import type { Grid } from "../grid/types";
 import type { RowData, Comp } from "./types";
 
@@ -124,13 +130,19 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
 
   // Forward-declare comp so loadRow/switchColumn can reference it
   const comp = {} as Comp;
+  comp.visibleCols = createDefaultVisibleColumns(grid.numCols);
   const topSpacer = document.createElement("div");
   topSpacer.className = "_scf_scroll_spacer";
   const bottomSpacer = document.createElement("div");
   bottomSpacer.className = "_scf_scroll_spacer";
   compDiv.appendChild(topSpacer);
 
+  function pointerColumnForEvent(e: MouseEvent): number {
+    return pointerVisibleColumn(e.clientX, window.innerWidth, comp.visibleCols);
+  }
+
   function switchColumn(col: number) {
+    if (!comp.visibleCols.includes(col)) return;
     comp.currentCol = col;
     for (const { rowDiv: rd, imgs: ri, adjustRowAR: adjAR } of allRowData) {
       ri.forEach((img, i) => {
@@ -154,15 +166,19 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
       rd.dataset.col = String(col);
     }
     const names = grid.names || [];
-    const parts: string[] = [];
-    for (let i = 0; i < grid.numCols; i++) {
-      const n = names[i] ?? "Source " + (i + 1);
+    labelEl!.replaceChildren();
+    for (let i = 0; i < comp.visibleCols.length; i++) {
+      const visibleCol = comp.visibleCols[i];
+      const n = names[visibleCol] ?? "Source " + (visibleCol + 1);
       const label = (i + 1) + ". " + n;
-      parts.push(i === col
-        ? label
-        : '<span style="opacity:.4">' + label + "</span>");
+      const part = document.createElement("span");
+      part.textContent = label;
+      if (visibleCol !== col) part.style.opacity = ".4";
+      labelEl!.appendChild(part);
+      if (i < comp.visibleCols.length - 1) {
+        labelEl!.appendChild(document.createTextNode("\u00a0 "));
+      }
     }
-    labelEl!.innerHTML = parts.join("&nbsp; ");
     labelEl!.style.opacity = "1";
     // Update nav map thumbnail for new column (only when zoomed)
     if (compDiv.classList.contains("_scf_zoomed")) {
@@ -173,11 +189,19 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
         if (src && navMap.navMapImg && navMap.navMapImg.src !== src) navMap.navMapImg.src = src;
       }
     }
+    comp.updateSourceMenu?.();
     updateHUD();
   }
 
   for (let ri = 0; ri < grid.rows.length; ri++) {
-    const rowData = buildRow(grid.rows[ri], grid.numCols, drag, switchColumn, ri > 0);
+    const rowData = buildRow(
+      grid.rows[ri],
+      grid.numCols,
+      drag,
+      switchColumn,
+      pointerColumnForEvent,
+      ri > 0,
+    );
     if (ri === 0) rowData.loaded = true;
     compDiv.appendChild(rowData.rowDiv);
     allRowData.push(rowData);
@@ -257,14 +281,39 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
 
   compDiv.addEventListener("mousemove", (e) => {
     if (drag.active) return;
-    const newCol = pointerColumn(e, grid.numCols);
+    const newCol = pointerColumnForEvent(e);
     if (newCol !== comp.currentCol) switchColumn(newCol);
   });
 
   comp.setColumn = (col: number) => {
     if (col < 0 || col >= grid.numCols) return;
+    if (!comp.visibleCols.includes(col)) return;
     switchColumn(col);
-    comp.currentCol = col;
+  };
+
+  comp.setSourceVisible = (col: number, visible: boolean) => {
+    const prevVisible = comp.visibleCols;
+    const nextVisible = setColumnVisibility(prevVisible, col, visible, grid.numCols);
+    const changed = (
+      nextVisible.length !== prevVisible.length ||
+      nextVisible.some((c, i) => c !== prevVisible[i])
+    );
+    if (!changed) {
+      if (!visible && prevVisible.length <= 1 && prevVisible.includes(col)) {
+        showToast("At least one source must stay visible");
+      }
+      comp.updateSourceMenu?.();
+      return;
+    }
+
+    const prevIndex = Math.max(0, prevVisible.indexOf(col));
+    comp.visibleCols = nextVisible;
+    if (!nextVisible.includes(comp.currentCol)) {
+      switchColumn(nextVisible[Math.min(prevIndex, nextVisible.length - 1)]);
+    } else {
+      switchColumn(comp.currentCol);
+    }
+    showToast("Sources: " + nextVisible.length + " / " + grid.numCols);
   };
 
   // Row navigation sidebar
@@ -275,6 +324,10 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   const navMap = createNavMap(compDiv, allRowData, comp);
   comp.navMapEl = navMap.navMapEl as HTMLDivElement;
   comp.updateNavMap = navMap.updateNavMap;
+
+  // Source visibility menu
+  const sourceMenu = createSourceMenu(comp);
+  comp.updateSourceMenu = sourceMenu.updateSourceMenu;
 
   comp.setRow = (rowIdx: number) => {
     if (rowIdx < 0 || rowIdx >= comp.numRows) return;
@@ -315,6 +368,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     compDiv.remove();
     rowNav.cleanup();
     navMap.cleanup();
+    sourceMenu.cleanup();
     document.body.style.overflow = "";
     container.style.display = origContainerDisplay;
     btn.style.display = origBtnDisplay;
