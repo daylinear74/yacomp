@@ -19,6 +19,7 @@ import {
   activeComps, navMapEnabled, toggleNavMap,
   doZoomIn, doZoomOut, doZoomFit, doZoom1to1,
 } from "./filters/zoom";
+import { openSlowPicsViewer } from "./sites/slowpics";
 import type { Comp } from "./viewer/types";
 
 export function applyBracketAdjustment(
@@ -70,6 +71,23 @@ export function setupKeyboard(): void {
     (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (isEditing()) return;
+
+      // V: open viewer on slow.pics / comp.pics (before comp-only guard)
+      if (e.code === "KeyV" && activeComps.length === 0) {
+        const btn = document.querySelector<HTMLElement>("[data-yacomp-comppics]");
+        if (btn) {
+          e.preventDefault();
+          e.stopPropagation();
+          btn.click();
+          return;
+        }
+        if (openSlowPicsViewer()) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        return;
+      }
+
       if (activeComps.length === 0) return;
 
       switch (e.code) {
