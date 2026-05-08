@@ -72,12 +72,14 @@ export function injectCSS(): void {
       right: 12px;
       top: 50%;
       transform: translateY(-50%);
+      box-sizing: border-box;
       max-height: calc(100vh - 24px);
       overflow-y: auto;
       scrollbar-width: none;
       display: flex;
       flex-direction: column;
       gap: 4px;
+      padding: 5px 7px 5px 9px;
       z-index: 2147483647;
       pointer-events: none;
       transition: opacity .3s ease;
@@ -93,11 +95,51 @@ export function injectCSS(): void {
       text-align: center;
       pointer-events: auto;
       cursor: pointer;
-      transition: background .15s, color .15s;
+      transform: translateX(0) scale(1);
+      transition:
+        transform .18s cubic-bezier(.22, 1, .36, 1),
+        background .18s cubic-bezier(.22, 1, .36, 1),
+        color .18s cubic-bezier(.22, 1, .36, 1),
+        box-shadow .18s cubic-bezier(.22, 1, .36, 1);
+    }
+    ._scf_row_nav_item:is(:hover, :focus-visible):not(._scf_active) {
+      background: rgba(255,255,255,.36);
+      color: rgba(255,255,255,.94);
+      box-shadow: 0 0 0 2px rgba(255,255,255,.1);
+      transform: translateX(-1px) scale(1.06);
+    }
+    ._scf_row_nav_item:focus-visible {
+      outline: 1px solid rgba(255,255,255,.72);
+      outline-offset: 2px;
     }
     ._scf_row_nav_item._scf_active {
-      background: rgba(255,255,255,.85);
-      color: #000;
+      background: rgba(0,0,0,.62);
+      color: rgba(255,255,255,.96);
+    }
+    ._scf_row_nav_item._scf_active:is(:hover, :focus-visible) {
+      background: rgba(0,0,0,.9);
+      color: #fff;
+      box-shadow: 0 3px 12px rgba(0,0,0,.46);
+      transform: translateX(-2px) scale(1.12);
+    }
+    ._scf_row_nav_item:is(:hover, :focus-visible):active {
+      transform: translateX(-1px) scale(.98);
+      transition-duration: .08s;
+    }
+    ._scf_row_nav_item._scf_active:is(:hover, :focus-visible):active {
+      transform: translateX(-1px) scale(1.04);
+      transition-duration: .08s;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      ._scf_row_nav_item {
+        transition: none;
+      }
+      ._scf_row_nav_item:is(:hover, :focus-visible):not(._scf_active),
+      ._scf_row_nav_item._scf_active:is(:hover, :focus-visible),
+      ._scf_row_nav_item:is(:hover, :focus-visible):active,
+      ._scf_row_nav_item._scf_active:is(:hover, :focus-visible):active {
+        transform: none;
+      }
     }
     ._scf_comp_sizer {
       width: 100%;
