@@ -13,5 +13,5 @@ export interface Grid {
   rows: GridCell[][];
   numCols: number;
   names: string[] | null;
-  anchorEl?: Element | null;
+  anchorEl?: Node | null;
 }

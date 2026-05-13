@@ -8,14 +8,42 @@ export function looksLikeNames(parts: string[]): boolean {
   return parts.length >= 2 && !parts.some((p) => META_RE.test(p.trim()));
 }
 
+const GENERIC_HEADING_PREFIX_RE = /^\s*(?:screenshot\s+comparison|comparison|screenshots?)\s*/i;
 const VS_RE = /\s+vs\.?\s+/i;
 const VS_TEST = /\bvs\.?\s/i;
+const DASH_RE = /\s+-\s+/;
+const SLASH_RE = /\s+\/\s+/;
+
+function cleanNameCandidate(text: string): string {
+  return text.replace(GENERIC_HEADING_PREFIX_RE, "").trim();
+}
+
+function cleanNamePart(text: string): string {
+  return text.replace(/^-+|-+$/g, "").trim();
+}
+
 export function splitNames(text: string): string[] {
-  const sep = text.includes("|") ? "|" : VS_RE;
-  return text.split(sep).map((n) => n.trim()).filter(Boolean);
+  const candidate = cleanNameCandidate(text);
+  if (candidate.includes("|")) {
+    return candidate.split("|").map(cleanNamePart).filter(Boolean);
+  }
+  if (VS_TEST.test(candidate)) {
+    return candidate.split(VS_RE).map(cleanNamePart).filter(Boolean);
+  }
+  if (candidate.includes(",")) {
+    return candidate.split(",").map(cleanNamePart).filter(Boolean);
+  }
+  if (DASH_RE.test(candidate)) {
+    return candidate.split(DASH_RE).map(cleanNamePart).filter(Boolean);
+  }
+  if (SLASH_RE.test(candidate)) {
+    return candidate.split(SLASH_RE).map(cleanNamePart).filter(Boolean);
+  }
+  return [cleanNamePart(candidate)].filter(Boolean);
 }
 export function hasVsOrPipe(text: string): boolean {
-  return text.includes("|") || VS_TEST.test(text);
+  const candidate = cleanNameCandidate(text);
+  return candidate.includes("|") || VS_TEST.test(candidate) || candidate.includes(",") || DASH_RE.test(candidate) || SLASH_RE.test(candidate);
 }
 
 // ── Name-finding sub-strategies ──

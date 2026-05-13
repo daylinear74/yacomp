@@ -403,7 +403,16 @@ export function insertLinkAfter(refNode: Node, link: HTMLElement): void {
       link.nextSibling,
     );
   } else {
-    refNode.parentNode!.insertBefore(link, refNode.nextSibling);
+    const insertionPoint = refNode.nextSibling;
+    refNode.parentNode!.insertBefore(
+      document.createElement("br"),
+      insertionPoint,
+    );
+    refNode.parentNode!.insertBefore(link, insertionPoint);
+    refNode.parentNode!.insertBefore(
+      document.createElement("br"),
+      link.nextSibling,
+    );
   }
 }
 

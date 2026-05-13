@@ -4,7 +4,16 @@
 
 import { injectCSS } from "../ui/css";
 import { getGrids } from "../grid";
+import { hasVsOrPipe } from "../grid/names";
 import { buildComparison, insertLinkAfter } from "../viewer";
+
+export function findComparisonLinkAnchor(container: Element): Node | null {
+  const parent = container.parentElement || container;
+  for (const s of parent.querySelectorAll("strong")) {
+    if (hasVsOrPipe(s.textContent || "")) return s;
+  }
+  return null;
+}
 
 export function setupHDBits(): void {
   if (!/(?:^|\.)hdbits\.org$/.test(location.hostname)) return;
@@ -26,17 +35,11 @@ export function setupHDBits(): void {
       continue;
     }
 
-    // Single-comp: insert after the first <strong> with "|"
-    let inserted = false;
-    const parent = container.parentElement || container;
-    for (const s of parent.querySelectorAll("strong")) {
-      if (s.textContent!.includes("|")) {
-        insertLinkAfter(s, link);
-        inserted = true;
-        break;
-      }
-    }
-    if (!inserted) {
+    // Single-comp fallback: insert after the first comparison-like heading.
+    const anchor = findComparisonLinkAnchor(container);
+    if (anchor) {
+      insertLinkAfter(anchor, link);
+    } else {
       // Insert inside container to avoid invalid HTML when
       // container is a <td> (forum posts)
       link.style.display = "block";

@@ -21,6 +21,34 @@ interface GroupsResult {
   groupLabelEls: (ChildNode | null)[];
 }
 
+function collectTextLines(node: ChildNode, lines: string[]): void {
+  if (node.nodeName === "BR") {
+    lines.push("");
+    return;
+  }
+  if (node.nodeType === 3) {
+    lines[lines.length - 1] += node.textContent || "";
+    return;
+  }
+  for (const child of node.childNodes) {
+    collectTextLines(child, lines);
+  }
+}
+
+function textAfterLastBreak(el: Element): string | null {
+  const lines = [""];
+  collectTextLines(el, lines);
+  const nonEmpty = lines.map((line) => line.trim()).filter(Boolean);
+  return nonEmpty[nonEmpty.length - 1] || null;
+}
+
+function labelTextFromNode(node: ChildNode): string | null {
+  const t = node.nodeType === 1
+    ? textAfterLastBreak(node as Element)
+    : (node.textContent || "").trim();
+  return t ? t.replace(/:$/, "").trim() : null;
+}
+
 /** Walk container's childNodes, collecting BR-separated image groups with labels */
 function collectGroups(container: Element): GroupsResult | null {
   const groups: GridCell[][] = [];
@@ -29,7 +57,8 @@ function collectGroups(container: Element): GroupsResult | null {
   let group: GridCell[] = [];
   let pendingLabel: string | null = null;
   let pendingLabelEl: ChildNode | null = null;
-  for (const node of container.childNodes) {
+
+  const visit = (node: ChildNode): void => {
     if (node.nodeName === "BR") {
       if (group.length) {
         groups.push(group);
@@ -50,13 +79,19 @@ function collectGroups(container: Element): GroupsResult | null {
             : img.src;
         group.push({ thumb: img.src, full, a: node as HTMLAnchorElement, img });
       }
+    } else if (node.nodeType === 1 && (node as Element).querySelector("img")) {
+      for (const child of node.childNodes) visit(child);
     } else if (!group.length) {
-      const t = (node.textContent || "").trim();
+      const t = labelTextFromNode(node);
       if (t) {
-        pendingLabel = t.replace(/:$/, "").trim();
+        pendingLabel = t;
         pendingLabelEl = node;
       }
     }
+  };
+
+  for (const node of container.childNodes) {
+    visit(node);
   }
   if (group.length) {
     groups.push(group);
@@ -71,35 +106,92 @@ function collectGroups(container: Element): GroupsResult | null {
 
 /** When groups carry their own vs/| labels, each becomes its own grid */
 function buildMultiCompGrids(groups: GridCell[][], groupLabels: (string | null)[], groupLabelEls: (ChildNode | null)[]): Grid[] | null {
-  const hasVsLabels = groupLabels.some(
-    (l) => l && hasVsOrPipe(l),
-  );
-  if (!hasVsLabels) return null;
+  const labeledGroups = groupLabels
+    .map((label, index) => ({ label, index }))
+    .filter((g): g is { label: string; index: number } => !!g.label && hasVsOrPipe(g.label));
+  if (!labeledGroups.length) return null;
+  if (groups.length > 1 && labeledGroups.length === 1) return null;
 
   const results: Grid[] = [];
-  for (let gi = 0; gi < groups.length; gi++) {
-    const label = groupLabels[gi];
-    const imgs = groups[gi];
-    if (!label || imgs.length < 2) continue;
-    if (!hasVsOrPipe(label)) continue;
+  for (let i = 0; i < labeledGroups.length; i++) {
+    const { label, index } = labeledGroups[i];
+    const nextIndex = labeledGroups[i + 1]?.index ?? groups.length;
+    const sectionGroups = groups.slice(index, nextIndex);
+    const imgs = sectionGroups.flat();
+    if (imgs.length < 2) continue;
 
     const names = splitNames(label);
-    if (!names || !looksLikeNames(names) || imgs.length % names.length !== 0)
+    if (!names || !looksLikeNames(names))
       continue;
 
-    const numCols = names.length;
-    const gridRows: GridCell[][] = [];
-    for (let i = 0; i < imgs.length; i += numCols) {
-      gridRows.push(imgs.slice(i, i + numCols));
-    }
+    const shaped = reshapeGrid(sectionGroups, imgs, names);
+    if (!shaped) continue;
     results.push({
-      rows: gridRows,
-      numCols,
+      rows: shaped.gridRows,
+      numCols: shaped.numCols,
       names,
-      anchorEl: groupLabelEls[gi] as Element | null,
+      anchorEl: groupLabelEls[index],
     });
   }
   return results.length ? results : null;
+}
+
+function singleGroupLabelInfo(groupLabels: (string | null)[], groupLabelEls: (ChildNode | null)[]): { names: string[]; anchorEl: ChildNode | null } | null {
+  const labels = groupLabels
+    .map((label, index) => ({ label, index }))
+    .filter((g): g is { label: string; index: number } => !!g.label && hasVsOrPipe(g.label));
+  if (labels.length !== 1) return null;
+  const names = splitNames(labels[0].label);
+  return looksLikeNames(names) ? { names, anchorEl: groupLabelEls[labels[0].index] } : null;
+}
+
+function leadingBoldLabelInfo(container: Element): { names: string[]; anchorEl: Element } | null {
+  const bolds: Element[] = [];
+  for (const node of container.childNodes) {
+    if (node.nodeName === "A" && (node as Element).querySelector("img")) break;
+    if (node.nodeName === "STRONG" || node.nodeName === "B") {
+      const t = node.textContent!.trim();
+      if (t) bolds.push(node as Element);
+    }
+  }
+  if (bolds.length < 2) return null;
+  const names = bolds.map((b) => b.textContent!.trim()).filter(Boolean);
+  if (!looksLikeNames(names)) return null;
+  return { names, anchorEl: bolds[bolds.length - 1] };
+}
+
+function hasLocalNonNameHeading(groupLabels: (string | null)[]): boolean {
+  const firstImageLabel = groupLabels.find((label) => !!label);
+  if (!firstImageLabel) return false;
+  if (/^\d+$/.test(firstImageLabel)) return false;
+  if (/^(?:screenshots?|screenshot\s+comparison|comparison)$/i.test(firstImageLabel)) return false;
+  return !hasVsOrPipe(firstImageLabel);
+}
+
+function trimTrailingLabeledSectionAfterSingleGridLabel(collected: GroupsResult): GroupsResult {
+  const gridLabelIndexes = collected.groupLabels
+    .map((label, index) => ({ label, index }))
+    .filter((g): g is { label: string; index: number } => !!g.label && hasVsOrPipe(g.label))
+    .map((g) => g.index);
+  if (gridLabelIndexes.length !== 1) return collected;
+
+  let sawUnlabeledGridRow = false;
+  let sectionIndex = -1;
+  for (let i = gridLabelIndexes[0] + 1; i < collected.groupLabels.length; i++) {
+    if (!collected.groupLabels[i]) {
+      sawUnlabeledGridRow = true;
+    } else if (sawUnlabeledGridRow) {
+      sectionIndex = i;
+      break;
+    }
+  }
+
+  if (sectionIndex < 0) return collected;
+  return {
+    groups: collected.groups.slice(0, sectionIndex),
+    groupLabels: collected.groupLabels.slice(0, sectionIndex),
+    groupLabelEls: collected.groupLabelEls.slice(0, sectionIndex),
+  };
 }
 
 /** Reshape groups into a grid based on name count */
@@ -157,20 +249,41 @@ function reshapeGrid(groups: GridCell[][], allImages: GridCell[], names: string[
 }
 
 export function parseGrid(container: Element): Grid[] | null {
-  const collected = collectGroups(container);
+  let collected = collectGroups(container);
   if (!collected) return null;
-  const { groups, groupLabels, groupLabelEls } = collected;
+  let { groups, groupLabels, groupLabelEls } = collected;
 
   const multiComp = buildMultiCompGrids(groups, groupLabels, groupLabelEls);
   if (multiComp) return multiComp;
+
+  collected = trimTrailingLabeledSectionAfterSingleGridLabel(collected);
+  ({ groups, groupLabels, groupLabelEls } = collected);
 
   // Prefer per-group text labels over page-level headings.
   // Numeric-only labels (1, 2, 37…) are frame/row indices, not source names —
   // each group is already a row, so skip them and let findComparisonNames run.
   let names: string[] | null = null;
+  let anchorEl: ChildNode | null = null;
   if (groupLabels.length >= 2 && groupLabels.every((l) => l)) {
     const allNumeric = groupLabels.every((l) => /^\d+$/.test(l!));
     if (!allNumeric) names = groupLabels as string[];
+  }
+  if (!names) {
+    const singleLabel = singleGroupLabelInfo(groupLabels, groupLabelEls);
+    if (singleLabel) {
+      names = singleLabel.names;
+      anchorEl = singleLabel.anchorEl;
+    }
+  }
+  if (!names) {
+    const leadingBold = leadingBoldLabelInfo(container);
+    if (leadingBold) {
+      names = leadingBold.names;
+      anchorEl = leadingBold.anchorEl;
+    }
+  }
+  if (!names && hasLocalNonNameHeading(groupLabels)) {
+    return null;
   }
   if (!names) {
     names = findComparisonNames(container);
@@ -195,7 +308,7 @@ export function parseGrid(container: Element): Grid[] | null {
     }
   }
 
-  return [{ rows: shaped.gridRows, numCols: shaped.numCols, names }];
+  return [{ rows: shaped.gridRows, numCols: shaped.numCols, names, anchorEl }];
 }
 
 let _grids: { grid: Grid; container: Element }[] | null = null;
