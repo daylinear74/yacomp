@@ -6,6 +6,24 @@ import { resolveFilter, buildFilter } from "../filters/imaging";
 import type { DragState } from "./drag";
 import type { RowData, Comp } from "./types";
 
+interface ImageDimensions {
+  naturalWidth: number;
+  naturalHeight: number;
+}
+
+function rowCanvasAspectRatio(images: Iterable<ImageDimensions>): string | null {
+  let maxWidth = 0;
+  let maxHeight = 0;
+
+  for (const img of images) {
+    if (!img.naturalWidth || !img.naturalHeight) continue;
+    maxWidth = Math.max(maxWidth, img.naturalWidth);
+    maxHeight = Math.max(maxHeight, img.naturalHeight);
+  }
+
+  return maxWidth && maxHeight ? `${maxWidth} / ${maxHeight}` : null;
+}
+
 export function buildRow(
   rowCells: { full: string }[],
   numCols: number,
@@ -29,14 +47,15 @@ export function buildRow(
   }
   rowDiv.appendChild(sizer);
 
-  let maxAR = 0;
+  const knownDimensions = new Map<HTMLImageElement, ImageDimensions>();
   const adjustRowAR = (img: HTMLImageElement) => {
     if (!img.naturalWidth || !img.naturalHeight) return;
-    const ar = img.naturalHeight / img.naturalWidth;
-    if (ar > maxAR) {
-      maxAR = ar;
-      rowDiv.style.aspectRatio = img.naturalWidth + " / " + img.naturalHeight;
-    }
+    knownDimensions.set(img, {
+      naturalWidth: img.naturalWidth,
+      naturalHeight: img.naturalHeight,
+    });
+    const aspectRatio = rowCanvasAspectRatio(knownDimensions.values());
+    if (aspectRatio) rowDiv.style.aspectRatio = aspectRatio;
   };
 
   const imgs: HTMLImageElement[] = [];
