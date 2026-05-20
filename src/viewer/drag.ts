@@ -62,11 +62,3 @@ export function setupDragHandlers(compDiv: HTMLDivElement): DragHandlers {
 
   return { drag, onDragMove, onDragEnd };
 }
-
-export function pointerColumn(e: MouseEvent, numCols: number): number {
-  const relX = Math.max(
-    0,
-    Math.min(0.9999, e.clientX / window.innerWidth),
-  );
-  return Math.floor(relX * numCols);
-}

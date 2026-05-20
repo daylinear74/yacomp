@@ -15,9 +15,6 @@ export interface GammaMismatchCheckPreset {
   svgId: string;
 }
 
-export const GAMMA_MISMATCH_CHECK_NOTE =
-  "Gamma mismatch check applies a nonlinear power curve; it does not fix range, matrix, ICC/profile, or tone-mapping errors.";
-
 export const GAMMA_MISMATCH_CHECK_PRESETS: GammaMismatchCheckPreset[] = [
   {
     id: "srgb-bt1886",
@@ -81,12 +78,6 @@ export function gammaMismatchCheckPowLabel(id: GammaMismatchCheckId): string {
 
 export function gammaMismatchCheckName(id: GammaMismatchCheckId): string {
   return PRESET_BY_ID.get(id)!.label;
-}
-
-export function gammaMismatchCheckLabel(id: GammaMismatchCheckId): string {
-  return gammaMismatchCheckValueLabel(id) + " — "
-    + gammaMismatchCheckName(id) + " — "
-    + gammaMismatchCheckPowLabel(id);
 }
 
 export interface GammaMismatchCheckHudInfo {

@@ -4,6 +4,10 @@ dist/
 *.tsbuildinfo
 yacomp.js
 
+# === Test artifacts ===
+test-results/
+playwright-report/
+
 # === OS files ===
 # macOS
 .DS_Store
