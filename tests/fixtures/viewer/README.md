@@ -3,7 +3,7 @@
 This fixture is a local development page for checking the fullscreen viewer
 without installing the userscript into tracker pages.
 
-It uses the first six comparisons and three sources from
+It uses six comparisons and three sources based on
 `https://slow.pics/c/soQpR0zy`. The page sets `window.collection` in the same
 shape as slow.pics and opens yacomp through `openSlowPicsViewer()`, so row
 numbers and source labels come from the real viewer code.
@@ -22,3 +22,7 @@ http://127.0.0.1:4173/tests/fixtures/viewer/basic.html
 
 The fixture is not imported by `src/index.ts`, is not included in
 `dist/yacomp.user.js`, and does not affect release builds.
+
+Playwright e2e tests use this fixture and stub `i.slow.pics` image requests
+locally. The first two fixture rows use semantic filenames so tests can return
+mixed intrinsic sizes for vertical and horizontal letterboxing coverage.

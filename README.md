@@ -84,7 +84,12 @@ bun install
 bun run build       # Build dist/yacomp.user.js
 bun run watch       # Rebuild when src/ changes
 bun run typecheck   # Type-check without emitting files
+bun run typecheck:tests # Type-check tests and Playwright config
 bun run verify      # Sanity-check the generated userscript
+bun run test        # Run unit tests
+bunx playwright install chromium # Install local browser for e2e tests
+bun run test:e2e    # Run Playwright viewer tests
+bun run fixture     # Serve the local viewer fixture
 bun run check       # typecheck + build + verify
 bun run clean       # Remove dist/
 ```
@@ -97,8 +102,14 @@ visual filter logic. Userscript metadata and URL matches live in
 For new site support, parse the page into the shared grid model and reuse the
 existing viewer instead of adding site-specific viewer behavior.
 
-CI runs `bun run check` on pushes and pull requests. Releases are tag-driven:
-pushing a `v*` tag builds and uploads `dist/yacomp.user.js`.
+Unit tests live in `tests/unit`. Playwright e2e tests live in `tests/e2e` and
+use the local fixture in `tests/fixtures/viewer`, so viewer controls can be
+tested without external network access.
+
+CI runs type-checking, build verification, unit tests, installs Playwright
+Chromium, and runs the e2e suite for pushes and pull requests targeting `main`.
+Releases are tag-driven: pushing a `v*` tag builds and uploads
+`dist/yacomp.user.js`.
 
 ## License
 
