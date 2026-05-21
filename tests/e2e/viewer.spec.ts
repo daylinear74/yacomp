@@ -37,6 +37,12 @@ async function expectRowCanvasAspectRatio(
   expect(box!.width / box!.height).toBeCloseTo(expectedRatio, 2);
 }
 
+async function openViewer(page: Page): Promise<void> {
+  await page.goto("/");
+  await page.click("#open-viewer");
+  await expect(page.locator("._scf_comp")).toBeVisible();
+}
+
 test.beforeEach(async ({ page }) => {
   await page.route(/i\.slow\.pics/, (route) => {
     const filename = new URL(route.request().url()).pathname.split("/").pop() ?? "";
@@ -53,9 +59,7 @@ test("fixture page loads and shows comparisons", async ({ page }) => {
 });
 
 test("viewer opens on button click", async ({ page }) => {
-  await page.goto("/");
-  await page.click("#open-viewer");
-  await expect(page.locator("._scf_comp")).toBeVisible();
+  await openViewer(page);
 });
 
 test("viewer opens with V shortcut", async ({ page }) => {
@@ -65,17 +69,13 @@ test("viewer opens with V shortcut", async ({ page }) => {
 });
 
 test("viewer closes on Escape", async ({ page }) => {
-  await page.goto("/");
-  await page.click("#open-viewer");
-  await expect(page.locator("._scf_comp")).toBeVisible();
+  await openViewer(page);
   await page.keyboard.press("Escape");
   await expect(page.locator("._scf_comp")).not.toBeVisible();
 });
 
 test("column switching with number keys", async ({ page }) => {
-  await page.goto("/");
-  await page.click("#open-viewer");
-  await expect(page.locator("._scf_comp")).toBeVisible();
+  await openViewer(page);
 
   const label = page.locator("._scf_comp_label");
 
@@ -91,20 +91,85 @@ test("column switching with number keys", async ({ page }) => {
   await expect(label.locator("span", { hasText: "3." })).toHaveCSS("opacity", "0.4");
 });
 
+test("source navigation wraps with arrow keys", async ({ page }) => {
+  await openViewer(page);
+
+  const label = page.locator("._scf_comp_label");
+
+  await page.keyboard.press("ArrowRight");
+  await expect(label.locator("span", { hasText: "2." })).toHaveCSS("opacity", "1");
+  await expect(label.locator("span", { hasText: "1." })).toHaveCSS("opacity", "0.4");
+
+  await page.keyboard.press("ArrowLeft");
+  await expect(label.locator("span", { hasText: "1." })).toHaveCSS("opacity", "1");
+  await expect(label.locator("span", { hasText: "2." })).toHaveCSS("opacity", "0.4");
+
+  await page.keyboard.press("ArrowLeft");
+  await expect(label.locator("span", { hasText: "3." })).toHaveCSS("opacity", "1");
+  await expect(label.locator("span", { hasText: "1." })).toHaveCSS("opacity", "0.4");
+});
+
 test("row navigation with arrow keys", async ({ page }) => {
-  await page.goto("/");
-  await page.click("#open-viewer");
-  await expect(page.locator("._scf_comp")).toBeVisible();
+  await openViewer(page);
 
   await page.keyboard.press("ArrowDown");
   const nav = page.locator("._scf_row_nav_item._scf_active");
   await expect(nav).toContainText("2");
 });
 
+test("source menu hides sources and protects the last visible source", async ({ page }) => {
+  await openViewer(page);
+
+  const sourceMenu = page.locator("._scf_source_menu");
+  const sourceButton = sourceMenu.getByRole("button", { name: "Choose visible sources" });
+  const count = sourceButton.locator("._scf_source_menu_count");
+  const options = sourceMenu.locator("._scf_source_option");
+
+  await expect(count).toHaveText("3 / 3");
+  await sourceButton.click();
+  await expect(sourceButton).toHaveAttribute("aria-expanded", "true");
+  await expect(options).toHaveCount(3);
+
+  await options.nth(1).locator("input").uncheck();
+  await expect(count).toHaveText("2 / 3");
+
+  await sourceButton.click();
+  await expect(sourceButton).toHaveAttribute("aria-expanded", "false");
+  await page.keyboard.press("2");
+
+  const label = page.locator("._scf_comp_label");
+  await expect(label.locator("span")).toHaveCount(2);
+  await expect(label.locator("span", { hasText: "2." })).toHaveCSS("opacity", "1");
+
+  await sourceButton.click();
+  await options.nth(0).locator("input").uncheck();
+  await expect(count).toHaveText("1 / 3");
+  await expect(options.nth(2).locator("input")).toBeChecked();
+  await expect(options.nth(2).locator("input")).toBeDisabled();
+});
+
+test("zoom shortcuts zoom in and reset to fit", async ({ page }) => {
+  await openViewer(page);
+
+  const comp = page.locator("._scf_comp");
+  const row = page.locator("._scf_comp_row").first();
+  const viewportWidth = page.viewportSize()?.width ?? 1280;
+
+  await expect(comp).not.toHaveClass(/_scf_zoomed/);
+
+  await page.keyboard.press("Equal");
+  await expect(comp).toHaveClass(/_scf_zoomed/);
+  await expect.poll(async () => row.evaluate((el) => (el as HTMLElement).style.width))
+    .toBe(`${Math.round(viewportWidth * 1.25)}px`);
+
+  await page.keyboard.press("Digit0");
+  await expect(comp).not.toHaveClass(/_scf_zoomed/);
+  await expect.poll(async () => row.evaluate((el) => (el as HTMLElement).style.width))
+    .toBe("100vw");
+});
+
 test("mixed-resolution rows keep max canvas aspect ratio", async ({ page }) => {
-  await page.goto("/");
-  await page.click("#open-viewer");
-  await expect(page.locator("._scf_comp")).toBeVisible();
+  await openViewer(page);
 
   await expectRowCanvasAspectRatio(page, 0, "1920 / 1080", 1920 / 1080);
 
