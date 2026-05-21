@@ -9,16 +9,16 @@ const collection: SlowPicsCollection = {
   comparisons: [
     {
       images: [
-        { name: "FRA", publicFileName: "8CyYMgrL.webp" },
-        { name: "TWN", publicFileName: "9zRl7mrI.webp" },
-        { name: "TWN(Gamma=0.92)", publicFileName: "sMJeu22E.webp" },
+        { name: "FRA", publicFileName: "wide-source-a.webp" },
+        { name: "TWN", publicFileName: "wide-source-b.webp" },
+        { name: "TWN(Gamma=0.92)", publicFileName: "wide-source-c.webp" },
       ],
     },
     {
       images: [
-        { name: "FRA", publicFileName: "mQL84APQ.webp" },
-        { name: "TWN", publicFileName: "wWZNai7p.webp" },
-        { name: "TWN(Gamma=0.92)", publicFileName: "0MqqnHpt.webp" },
+        { name: "FRA", publicFileName: "pillar-source-a.webp" },
+        { name: "TWN", publicFileName: "pillar-source-b.webp" },
+        { name: "TWN(Gamma=0.92)", publicFileName: "pillar-source-c.webp" },
       ],
     },
     {

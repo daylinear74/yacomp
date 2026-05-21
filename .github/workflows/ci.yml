@@ -8,7 +8,7 @@ on:
 
 jobs:
   check:
-    name: Type-check, build & verify
+    name: Type-check, build, verify & test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,11 +22,23 @@ jobs:
       - name: Type-check
         run: bun run typecheck
 
+      - name: Type-check tests
+        run: bun run typecheck:tests
+
       - name: Build
         run: bun run build
 
       - name: Verify output
         run: bun run verify
+
+      - name: Unit tests
+        run: bun run test
+
+      - name: Install Playwright Chromium
+        run: bunx playwright install --with-deps --only-shell chromium
+
+      - name: E2E tests
+        run: bun run test:e2e
 
   commit-lint:
     name: Commit message lint
