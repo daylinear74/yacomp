@@ -7,6 +7,7 @@
     "build": "bun run scripts/build.ts",
     "watch": "bun run scripts/build.ts --watch",
     "typecheck": "bun x tsc --noEmit",
+    "typecheck:tests": "bun x tsc --noEmit -p tsconfig.test.json",
     "verify": "bun run scripts/verify-build.ts",
     "test": "bun test tests/unit",
     "test:e2e": "bunx playwright test",
