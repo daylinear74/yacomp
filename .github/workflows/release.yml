@@ -7,12 +7,20 @@ on:
 permissions:
   contents: write
 
+# Opt every javascript-based action in this workflow into the Node.js 24
+# runtime. GitHub deprecated the Node 20 runner; setting this here keeps the
+# pipeline working with action versions that haven't shipped a Node 24
+# release yet (e.g. softprops/action-gh-release). Drop once every action
+# we use bundles Node 24 by default.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   release:
     name: Build & publish release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: oven-sh/setup-bun@v2
         with:

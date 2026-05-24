@@ -15,7 +15,6 @@ export interface RowData {
 export interface Comp {
   compDiv: HTMLDivElement;
   container: HTMLElement;
-  link: HTMLElement;
   numCols: number;
   numRows: number;
   sourceNames: string[] | null;
@@ -25,7 +24,6 @@ export interface Comp {
   suppressRowSync?: boolean;
   rowSyncSuppressToken?: number;
   allRowData: RowData[];
-  navMapEl: HTMLDivElement;
   colBrightness: number[];
   colGammaCheck: (GammaMismatchCheckId | null)[];
   colContrast: number[];

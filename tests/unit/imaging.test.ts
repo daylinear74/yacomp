@@ -86,10 +86,8 @@ function makeFakeComp(opts: {
     // numCols, currentRow, currentCol, allRowData[].imgs
     compDiv: {} as HTMLDivElement,
     container: {} as HTMLElement,
-    link: {} as HTMLElement,
     sourceNames: null,
     visibleCols: Array.from({ length: opts.cols }, (_, i) => i),
-    navMapEl: {} as HTMLDivElement,
     colBrightness: [],
     colGammaCheck: [],
     colContrast: [],

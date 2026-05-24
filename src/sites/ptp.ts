@@ -6,7 +6,7 @@ import { injectCSS } from "../ui/css";
 import { openWithDummyWrapper } from "../viewer";
 import type { Grid, GridCell } from "../grid";
 
-function parsePTPOnclick(onclick: string): Grid | null {
+export function parsePTPOnclick(onclick: string): Grid | null {
   // Extract the two array arguments from:
   //   BBCode.ScreenshotComparisonToggleShow(this, [names], [urls])
   let depth = 0,

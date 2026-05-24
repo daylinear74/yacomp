@@ -260,7 +260,6 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   // Populate comp
   comp.compDiv = compDiv;
   comp.container = container;
-  comp.link = btn;
   comp.numCols = grid.numCols;
   comp.numRows = allRowData.length;
   comp.sourceNames = grid.names;
@@ -329,7 +328,6 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
 
   // Thumbnail navigation minimap
   const navMap = createNavMap(compDiv, allRowData, comp);
-  comp.navMapEl = navMap.navMapEl as HTMLDivElement;
   comp.updateNavMap = navMap.updateNavMap;
 
   // Source visibility menu

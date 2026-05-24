@@ -195,7 +195,7 @@ function trimTrailingLabeledSectionAfterSingleGridLabel(collected: GroupsResult)
 }
 
 /** Reshape groups into a grid based on name count */
-function reshapeGrid(groups: GridCell[][], allImages: GridCell[], names: string[] | null): { numCols: number; gridRows: GridCell[][] } | null {
+export function reshapeGrid(groups: GridCell[][], allImages: GridCell[], names: string[] | null): { numCols: number; gridRows: GridCell[][] } | null {
   const firstLen = groups[0].length;
   const isProperGrid =
     groups.length >= 2 &&

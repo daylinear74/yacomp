@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>yacomp dev fixture</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Arial, Helvetica, sans-serif;
+        background: #151515;
+        color: #d8d8d8;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: #151515;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        height: 44px;
+        padding: 0 14px;
+        border-bottom: 1px solid #303030;
+        background: #101010;
+      }
+
+      .brand {
+        color: #f0f0f0;
+        font-size: 15px;
+        font-weight: 700;
+      }
+
+      .build-info {
+        color: #787878;
+        font-size: 11px;
+        margin-left: auto;
+      }
+
+      main {
+        width: min(1040px, calc(100vw - 24px));
+        margin: 0 auto;
+        padding: 14px 0 32px;
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+
+      h1 {
+        margin: 0;
+        color: #eeeeee;
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .meta {
+        margin: 0 0 10px;
+        color: #9c9c9c;
+        font-size: 12px;
+      }
+
+      button {
+        border: 1px solid #5b6f86;
+        border-radius: 3px;
+        background: #2c5e87;
+        color: #ffffff;
+        padding: 5px 10px;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      button:focus-visible {
+        outline: 2px solid #8ab4f8;
+        outline-offset: 2px;
+      }
+
+      .contact-sheet {
+        display: grid;
+        gap: 8px;
+      }
+
+      .fixture-row {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .frame {
+        display: block;
+        overflow: hidden;
+        border: 1px solid #303030;
+        background: #090909;
+      }
+
+      .frame img {
+        display: block;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        object-fit: cover;
+      }
+
+      @media (max-width: 760px) {
+        main {
+          width: min(100vw - 16px, 1040px);
+        }
+
+        .contact-sheet {
+          overflow-x: auto;
+        }
+
+        .fixture-row {
+          min-width: 860px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="topbar">
+      <div class="brand">yacomp dev fixture</div>
+      <span id="build-info" class="build-info">{{GIT_INFO}}</span>
+    </nav>
+
+    <main>
+      <div class="toolbar">
+        <h1>Lan Yu 2001 FRA vs. TWN</h1>
+        <button id="open-viewer" type="button">Open yacomp viewer</button>
+      </div>
+      <p id="fixture-status" class="meta">Loading fixture...</p>
+      <section id="fixture-grid" class="contact-sheet" aria-label="Fixture contact sheet"></section>
+    </main>
+
+    <script type="module" src="/fixture-entry.js"></script>
+  </body>
+</html>
