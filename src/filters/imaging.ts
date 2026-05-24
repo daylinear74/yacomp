@@ -57,9 +57,11 @@ export function orderedColumnsAroundAnchor(totalCols: number, currentCol: number
   if (totalCols <= 0) return [];
   const anchor = Math.max(0, Math.min(totalCols - 1, Math.trunc(currentCol)));
   const cols = [anchor];
-  for (let col = 0; col < totalCols; col++) {
-    if (col !== anchor) cols.push(col);
-  }
+  // Expand leftward first (toward column 0), then rightward (toward the end).
+  // The user's eye moves outward from the anchor; loading nearby columns first
+  // means the next likely-needed image is filtered before the far edge.
+  for (let col = anchor - 1; col >= 0; col--) cols.push(col);
+  for (let col = anchor + 1; col < totalCols; col++) cols.push(col);
   return cols;
 }
 
@@ -184,22 +186,95 @@ type FilterTargetTask =
   | { type: "viewer"; target: CompImageFilterTarget }
   | { type: "page"; img: HTMLImageElement };
 
+// Splits viewer targets into the anchor cell(s) — the currently visible image
+// in each open comp — and everything else. The anchors must run *before* the
+// background queue so users see the active image's filter apply immediately;
+// running them inside the concurrent queue lets non-anchor work win the race
+// when detectCS() blocks on a network fetch.
+export function partitionAnchorTargets(
+  viewerTargets: CompImageFilterTarget[],
+): { anchors: CompImageFilterTarget[]; rest: CompImageFilterTarget[] } {
+  const anchors: CompImageFilterTarget[] = [];
+  const rest: CompImageFilterTarget[] = [];
+  for (const target of viewerTargets) {
+    if (
+      target.row === target.comp.currentRow &&
+      target.col === target.comp.currentCol
+    ) {
+      anchors.push(target);
+    } else {
+      rest.push(target);
+    }
+  }
+  return { anchors, rest };
+}
+
+// Awaits one full paint cycle: `requestAnimationFrame` fires *before* the
+// browser paints, so the second nested call resolves after that paint has
+// completed. The setTimeout fallback keeps this usable in non-DOM
+// environments (Bun unit tests).
+export function yieldToBrowserPaint(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
+}
+
+// Awaits the anchors sequentially, optionally yields so the browser can paint
+// the just-applied anchor filter, then drains the rest through the bounded
+// concurrent queue. Exported so the "anchor-first" guarantee can be exercised
+// in unit tests without a DOM.
+export async function applyAnchorsThenQueue<A, T>(
+  anchors: A[],
+  queueTargets: T[],
+  concurrency: number,
+  shouldApply: () => boolean,
+  applyAnchor: (anchor: A) => Promise<void>,
+  applyQueueTarget: (target: T) => Promise<void>,
+  yieldBetween?: () => Promise<void>,
+): Promise<void> {
+  for (const anchor of anchors) {
+    if (!shouldApply()) return;
+    await applyAnchor(anchor);
+  }
+  if (!shouldApply()) return;
+  // Only pay the yield cost when there's actually an anchor to paint —
+  // otherwise (e.g. page-image-only sync) the yield is pure latency.
+  if (yieldBetween && anchors.length > 0) {
+    await yieldBetween();
+    if (!shouldApply()) return;
+  }
+  await runBoundedFilterQueue(queueTargets, concurrency, shouldApply, applyQueueTarget);
+}
+
 async function applyFilterTargetsConcurrently(
   viewerTargets: CompImageFilterTarget[],
   pageTargets: HTMLImageElement[],
   shouldApply: () => boolean,
 ): Promise<void> {
-  const targets: FilterTargetTask[] = [
-    ...viewerTargets.map((target) => ({ type: "viewer" as const, target })),
+  const { anchors, rest } = partitionAnchorTargets(viewerTargets);
+  const queueTargets: FilterTargetTask[] = [
+    ...rest.map((target) => ({ type: "viewer" as const, target })),
     ...pageTargets.map((img) => ({ type: "page" as const, img })),
   ];
-  await runBoundedFilterQueue(targets, LUMA_CHROMA_FILTER_CONCURRENCY, shouldApply, async (task) => {
-    if (task.type === "viewer") {
-      await applyToCompTargetIfCurrent(task.target, shouldApply);
-    } else {
-      await applyFilterToImg(task.img, { shouldApply });
-    }
-  });
+  await applyAnchorsThenQueue(
+    anchors,
+    queueTargets,
+    LUMA_CHROMA_FILTER_CONCURRENCY,
+    shouldApply,
+    (anchor) => applyToCompTargetIfCurrent(anchor, shouldApply),
+    async (task) => {
+      if (task.type === "viewer") {
+        await applyToCompTargetIfCurrent(task.target, shouldApply);
+      } else {
+        await applyFilterToImg(task.img, { shouldApply });
+      }
+    },
+    yieldToBrowserPaint,
+  );
 }
 
 export function syncAll(): void {
