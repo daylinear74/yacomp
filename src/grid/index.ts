@@ -1,2 +1,2 @@
-export type { GridCell, Grid } from "./types";
+export type { GridCell, Grid, GridInitialZoom } from "./types";
 export { parseGrid, getGrids } from "./parser";

@@ -2,7 +2,7 @@
 // ║  Row building & lazy loading                                              ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
-import { resolveFilter, buildFilter } from "../filters/imaging";
+import { applyFilterToImg } from "../filters/imaging";
 import type { DragState } from "./drag";
 import type { RowData, Comp } from "./types";
 
@@ -11,21 +11,32 @@ interface ImageDimensions {
   naturalHeight: number;
 }
 
-function rowCanvasAspectRatio(images: Iterable<ImageDimensions>): string | null {
+interface KnownCellDimensions {
+  width?: number | null;
+  height?: number | null;
+}
+
+function rowCanvasAspectRatio(images: Iterable<ImageDimensions | KnownCellDimensions>): string | null {
   let maxWidth = 0;
   let maxHeight = 0;
 
   for (const img of images) {
-    if (!img.naturalWidth || !img.naturalHeight) continue;
-    maxWidth = Math.max(maxWidth, img.naturalWidth);
-    maxHeight = Math.max(maxHeight, img.naturalHeight);
+    const width = "naturalWidth" in img ? img.naturalWidth : img.width;
+    const height = "naturalHeight" in img ? img.naturalHeight : img.height;
+    if (!width || !height) continue;
+    maxWidth = Math.max(maxWidth, width);
+    maxHeight = Math.max(maxHeight, height);
   }
 
   return maxWidth && maxHeight ? `${maxWidth} / ${maxHeight}` : null;
 }
 
+export function rowCellsAspectRatio(rowCells: KnownCellDimensions[]): string | null {
+  return rowCanvasAspectRatio(rowCells);
+}
+
 export function buildRow(
-  rowCells: { full: string }[],
+  rowCells: { full: string; width?: number | null; height?: number | null }[],
   numCols: number,
   drag: DragState,
   switchColumn: (col: number) => void,
@@ -38,9 +49,11 @@ export function buildRow(
 
   const sizer = document.createElement("img");
   sizer.className = "_scf_comp_sizer";
+  const knownAspectRatio = rowCellsAspectRatio(rowCells);
+  if (knownAspectRatio) rowDiv.style.aspectRatio = knownAspectRatio;
   if (deferred) {
     sizer.dataset.src = rowCells[0].full;
-    rowDiv.style.aspectRatio = "16 / 9";
+    if (!knownAspectRatio) rowDiv.style.aspectRatio = "16 / 9";
   } else {
     sizer.src = rowCells[0].full;
     sizer.addEventListener("load", () => rowDiv.classList.remove("_scf_loading"), { once: true });
@@ -72,9 +85,7 @@ export function buildRow(
     }
     img.style.visibility = ci === 0 ? "visible" : "hidden";
     if (img.src) {
-      resolveFilter(img.src).then((f) => {
-        img.style.filter = buildFilter(f);
-      });
+      void applyFilterToImg(img);
       img.addEventListener("load", () => adjustRowAR(img), { once: true });
     }
     cell.appendChild(img);
@@ -108,13 +119,10 @@ export function loadRow(rd: RowData, comp: Comp): void {
     if (!img.dataset.src) return;
     img.src = img.dataset.src;
     delete img.dataset.src;
-    resolveFilter(img.src).then((f) => {
-      img.style.filter = buildFilter(
-        f,
-        comp.colBrightness[ci],
-        comp.colContrast[ci],
-        comp.colGammaCheck[ci],
-      );
+    void applyFilterToImg(img, {
+      brightness: comp.colBrightness[ci],
+      contrast: comp.colContrast[ci],
+      gammaCheck: comp.colGammaCheck[ci],
     });
     img.addEventListener("load", () => adjustRowAR(img), { once: true });
   };
