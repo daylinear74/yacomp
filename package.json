@@ -1,6 +1,6 @@
 {
   "name": "yacomp",
-  "version": "5.8.9",
+  "version": "5.8.10-rc.1",
   "description": "Yet Another Comparison Viewer — userscript for screenshot comparison viewing",
   "type": "module",
   "scripts": {
