@@ -10,20 +10,89 @@ import { injectFilters } from "./svg";
 import { active } from "./modes";
 import { updateHUD } from "../ui/hud";
 import { activeComps } from "./zoom";
+import type { Comp } from "../viewer/types";
+
+export const LUMA_CHROMA_FILTER_CONCURRENCY = 4;
+
+export interface CompImageFilterTarget {
+  comp: Comp;
+  row: number;
+  col: number;
+  img: HTMLImageElement;
+}
+
+export interface FilterApplyOptions {
+  brightness?: number;
+  contrast?: number;
+  gammaCheck?: GammaMismatchCheckId | null;
+  shouldApply?: () => boolean;
+}
+
+let filterSyncGeneration = 0;
+
+export function currentFilterSyncGuard(): () => boolean {
+  const generation = filterSyncGeneration;
+  return () => generation === filterSyncGeneration;
+}
+
+export function createFilterSyncGuard(): () => boolean {
+  filterSyncGeneration++;
+  return currentFilterSyncGuard();
+}
+
+export function orderedRowsAroundAnchor(totalRows: number, currentRow: number): number[] {
+  if (totalRows <= 0) return [];
+  const anchor = Math.max(0, Math.min(totalRows - 1, Math.trunc(currentRow)));
+  const rows = [anchor];
+  for (let distance = 1; rows.length < totalRows; distance++) {
+    const before = anchor - distance;
+    const after = anchor + distance;
+    if (before >= 0) rows.push(before);
+    if (after < totalRows) rows.push(after);
+  }
+  return rows;
+}
+
+export function orderedColumnsAroundAnchor(totalCols: number, currentCol: number): number[] {
+  if (totalCols <= 0) return [];
+  const anchor = Math.max(0, Math.min(totalCols - 1, Math.trunc(currentCol)));
+  const cols = [anchor];
+  for (let col = 0; col < totalCols; col++) {
+    if (col !== anchor) cols.push(col);
+  }
+  return cols;
+}
+
+export function orderedCompImageTargetsByAnchor(comp: Comp): CompImageFilterTarget[] {
+  const targets: CompImageFilterTarget[] = [];
+  const rows = orderedRowsAroundAnchor(comp.allRowData.length, comp.currentRow);
+  const cols = orderedColumnsAroundAnchor(comp.numCols, comp.currentCol);
+  for (const row of rows) {
+    const rd = comp.allRowData[row];
+    if (!rd) continue;
+    for (const col of cols) {
+      const img = rd.imgs[col];
+      if (img?.src) targets.push({ comp, row, col, img });
+    }
+  }
+  return targets;
+}
+
+export function shouldApplyFilterToImage(img: HTMLImageElement): boolean {
+  if (
+    img.closest("._scf_comp") ||
+    img.closest("._scf_nav_map") ||
+    img.closest("#_scf_hud_") ||
+    img.closest("#_scf_toast_")
+  )
+    return false;
+  if (img.offsetWidth > 200 || img.naturalWidth > 200) return true;
+  if (img.classList.contains("screenshot-comparison__image")) return true;
+  return false;
+}
 
 export function getImages(): HTMLImageElement[] {
-  return [...document.querySelectorAll("img")].filter((img) => {
-    if (
-      img.closest("._scf_comp") ||
-      img.closest("._scf_nav_map") ||
-      img.closest("#_scf_hud_") ||
-      img.closest("#_scf_toast_")
-    )
-      return false;
-    if (img.offsetWidth > 200 || img.naturalWidth > 200) return true;
-    if (img.classList.contains("screenshot-comparison__image")) return true;
-    return false;
-  }) as HTMLImageElement[];
+  return [...document.querySelectorAll("img")].filter(shouldApplyFilterToImage) as HTMLImageElement[];
 }
 
 export async function resolveFilter(src: string): Promise<string> {
@@ -50,31 +119,111 @@ export function buildFilter(
   return parts.join(" ");
 }
 
+export async function applyFilterToImg(
+  img: HTMLImageElement,
+  options: FilterApplyOptions = {},
+): Promise<void> {
+  const shouldApply = options.shouldApply ?? currentFilterSyncGuard();
+  const filter = buildFilter(
+    await resolveFilter(img.src),
+    options.brightness,
+    options.contrast,
+    options.gammaCheck ?? null,
+  );
+  if (!shouldApply() || img.isConnected === false) return;
+  img.style.filter = filter;
+}
+
 export async function applyToImg(img: HTMLImageElement): Promise<void> {
-  img.style.filter = buildFilter(await resolveFilter(img.src));
+  if (!shouldApplyFilterToImage(img)) return;
+  await applyFilterToImg(img);
+}
+
+async function applyToCompTargetIfCurrent(
+  target: CompImageFilterTarget,
+  shouldApply: () => boolean,
+): Promise<void> {
+  const { comp, col, img } = target;
+  await applyFilterToImg(img, {
+    brightness: comp.colBrightness[col],
+    contrast: comp.colContrast[col],
+    gammaCheck: comp.colGammaCheck[col],
+    shouldApply,
+  });
+}
+
+function deferNextFilterTarget(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+export async function runBoundedFilterQueue<T>(
+  targets: T[],
+  concurrency: number,
+  shouldApply: () => boolean,
+  applyTarget: (target: T) => Promise<void>,
+): Promise<void> {
+  if (!targets.length || !shouldApply()) return;
+  const limit = Math.max(1, Math.floor(Number.isFinite(concurrency) ? concurrency : 1));
+  const workerCount = Math.min(limit, targets.length);
+  let nextIndex = 0;
+
+  async function runWorker(): Promise<void> {
+    while (shouldApply()) {
+      const index = nextIndex++;
+      const target = targets[index];
+      if (target === undefined) return;
+      await applyTarget(target);
+      await deferNextFilterTarget();
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+}
+
+type FilterTargetTask =
+  | { type: "viewer"; target: CompImageFilterTarget }
+  | { type: "page"; img: HTMLImageElement };
+
+async function applyFilterTargetsConcurrently(
+  viewerTargets: CompImageFilterTarget[],
+  pageTargets: HTMLImageElement[],
+  shouldApply: () => boolean,
+): Promise<void> {
+  const targets: FilterTargetTask[] = [
+    ...viewerTargets.map((target) => ({ type: "viewer" as const, target })),
+    ...pageTargets.map((img) => ({ type: "page" as const, img })),
+  ];
+  await runBoundedFilterQueue(targets, LUMA_CHROMA_FILTER_CONCURRENCY, shouldApply, async (task) => {
+    if (task.type === "viewer") {
+      await applyToCompTargetIfCurrent(task.target, shouldApply);
+    } else {
+      await applyFilterToImg(task.img, { shouldApply });
+    }
+  });
 }
 
 export function syncAll(): void {
+  const shouldApply = createFilterSyncGuard();
+  const mode = cur();
+  const pageImages = getImages();
+  const viewerTargets = activeComps.flatMap(orderedCompImageTargetsByAnchor);
   injectFilters();
-  if (active()) {
-    getImages().forEach(applyToImg);
+  if (active(mode)) {
+    if (mode.f709) {
+      void applyFilterTargetsConcurrently(viewerTargets, pageImages, shouldApply);
+      updateHUD();
+      return;
+    }
+    pageImages.forEach((img) => {
+      void applyFilterToImg(img, { shouldApply });
+    });
   } else {
-    for (const img of getImages()) {
+    for (const img of pageImages) {
       img.style.filter = "";
     }
   }
-  for (const comp of activeComps) {
-    const colB = comp.colBrightness;
-    const colC = comp.colContrast;
-    const colG = comp.colGammaCheck;
-    for (const rd of comp.allRowData) {
-      rd.imgs.forEach((img, i) => {
-        if (!img.src) return;
-        resolveFilter(img.src).then((f) => {
-          img.style.filter = buildFilter(f, colB[i], colC[i], colG[i]);
-        });
-      });
-    }
-  }
+  viewerTargets.forEach((target) => {
+    void applyToCompTargetIfCurrent(target, shouldApply);
+  });
   updateHUD();
 }

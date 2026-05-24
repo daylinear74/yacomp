@@ -4,7 +4,7 @@
 
 import { injectCSS } from "../ui/css";
 import { injectFilters } from "../filters/svg";
-import { resolveFilter, buildFilter } from "../filters/imaging";
+import { applyFilterToImg } from "../filters/imaging";
 import { showToast } from "../ui/toast";
 import { updateHUD } from "../ui/hud";
 import {
@@ -18,6 +18,7 @@ import { buildRow, loadRow } from "./row";
 import { createNavMap } from "./nav-map";
 import { createRowNav } from "./row-nav";
 import { createSourceMenu } from "./source-menu";
+import { normalizeGridInitialPosition, normalizeGridInitialZoom } from "./initial-state";
 import {
   createDefaultVisibleColumns,
   pointerVisibleColumn,
@@ -95,6 +96,10 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
 
   setZoomMode("fit");
   setZoomWidth(0);
+  const initialPosition = normalizeGridInitialPosition(grid);
+  const initialZoom = normalizeGridInitialZoom(grid.initialZoom);
+  setZoomMode(initialZoom.mode);
+  setZoomWidth(initialZoom.mode === "custom" ? initialZoom.width : 0);
 
   let labelEl = document.getElementById("_scf_comp_label_");
   if (!labelEl) {
@@ -149,8 +154,10 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
         if (i === col && !img.src && img.dataset.src) {
           img.src = img.dataset.src;
           delete img.dataset.src;
-          resolveFilter(img.src).then((f) => {
-            img.style.filter = buildFilter(f, comp.colBrightness[i], comp.colContrast[i], comp.colGammaCheck[i]);
+          void applyFilterToImg(img, {
+            brightness: comp.colBrightness[i],
+            contrast: comp.colContrast[i],
+            gammaCheck: comp.colGammaCheck[i],
           });
           img.addEventListener("load", () => adjAR(img), { once: true });
         }
@@ -200,9 +207,9 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
       drag,
       switchColumn,
       pointerColumnForEvent,
-      ri > 0,
+      ri > 0 && ri !== initialPosition.row,
     );
-    if (ri === 0) rowData.loaded = true;
+    if (ri === 0 || ri === initialPosition.row) rowData.loaded = true;
     compDiv.appendChild(rowData.rowDiv);
     allRowData.push(rowData);
   }
@@ -256,8 +263,8 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   comp.numCols = grid.numCols;
   comp.numRows = allRowData.length;
   comp.sourceNames = grid.names;
-  comp.currentRow = 0;
-  comp.currentCol = 0;
+  comp.currentRow = initialPosition.row;
+  comp.currentCol = initialPosition.col;
   comp.colBrightness = new Array(grid.numCols).fill(1.0);
   comp.colGammaCheck = new Array(grid.numCols).fill(null);
   comp.colContrast = new Array(grid.numCols).fill(1.0);
@@ -326,6 +333,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   // Source visibility menu
   const sourceMenu = createSourceMenu(comp);
   comp.updateSourceMenu = sourceMenu.updateSourceMenu;
+  if (initialPosition.col !== 0) switchColumn(initialPosition.col);
 
   comp.setRow = (rowIdx: number) => {
     if (rowIdx < 0 || rowIdx >= comp.numRows) return;
@@ -389,6 +397,16 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   comp.updateScrollSpacers();
 
   addComp(comp);
+  if (initialZoom.mode === "custom") applyZoom();
+  rowNav.updateRowNav(initialPosition.row);
+  if (initialPosition.row !== 0) {
+    requestAnimationFrame(() => {
+      const row = allRowData[initialPosition.row];
+      if (!row) return;
+      row.rowDiv.scrollIntoView({ behavior: "auto", block: "center" });
+      comp.updateNavMap();
+    });
+  }
 }
 
 /** Insert a link node after refNode, skipping past any trailing BR */
