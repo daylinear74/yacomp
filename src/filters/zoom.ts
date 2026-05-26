@@ -2,6 +2,7 @@
 // ║  Zoom state                                                               ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
+import { zoomScaleFactor } from "../config";
 import { showToast } from "../ui/toast";
 import type { Comp } from "../viewer/types";
 
@@ -15,6 +16,8 @@ export function toggleNavMap(): void { navMapEnabled = !navMapEnabled; }
 
 export let fillCanvasEnabled = false;
 export function toggleFillCanvas(): void { fillCanvasEnabled = !fillCanvasEnabled; }
+export function setFillCanvas(v: boolean): void { fillCanvasEnabled = v; }
+export function setNavMap(v: boolean): void { navMapEnabled = v; }
 
 export function applyFillCanvas(): void {
   for (const comp of activeComps) {
@@ -215,9 +218,10 @@ export function zoomToast(): string {
 }
 
 export function calcZoom(base: number, direction: number): number {
+  const scale = zoomScaleFactor();
   return direction > 0
-    ? Math.min(Math.round(base * 1.25), window.innerWidth * 8)
-    : Math.max(Math.round(base / 1.25), Math.round(window.innerWidth * 0.1));
+    ? Math.min(Math.round(base * scale), window.innerWidth * 8)
+    : Math.max(Math.round(base / scale), Math.round(window.innerWidth * 0.1));
 }
 
 export function doZoomStep(dir: number): void {

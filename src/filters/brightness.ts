@@ -3,6 +3,7 @@
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
 import { active, setModeIndex } from "./modes";
+import { bcStep } from "../config";
 
 export const BC_STEP = 0.05;
 export const BC_MIN = 0.05;
@@ -12,7 +13,8 @@ export function isDefault(v: number): boolean { return Math.abs(v - 1.0) <= 0.00
 
 export function adjustBrightness(value: number, direction: number): number {
   const current = +value.toFixed(2);
-  const delta = direction > 0 ? BC_STEP : -BC_STEP;
+  const step = bcStep();
+  const delta = direction > 0 ? step : -step;
   return Math.max(BC_MIN, Math.min(BC_MAX, +(current + delta).toFixed(2)));
 }
 

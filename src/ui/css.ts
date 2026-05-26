@@ -450,6 +450,199 @@ export function injectCSS(): void {
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    ._scf_settings_overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 2147483647;
+      background: rgba(0,0,0,.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    ._scf_settings_panel {
+      width: min(420px, calc(100vw - 32px));
+      max-height: min(600px, calc(100vh - 64px));
+      display: flex;
+      flex-direction: column;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 12px;
+      background: rgba(12,12,12,.94);
+      box-shadow: 0 8px 32px rgba(0,0,0,.6);
+      backdrop-filter: blur(12px);
+      color: #fff;
+      font: 600 13px/1.4 system-ui, sans-serif;
+    }
+    ._scf_settings_header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px 12px;
+      border-bottom: 1px solid rgba(255,255,255,.1);
+    }
+    ._scf_settings_title {
+      font-size: 15px;
+      font-weight: 700;
+    }
+    ._scf_settings_close {
+      width: 28px;
+      height: 28px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: rgba(255,255,255,.5);
+      font: 600 18px/28px system-ui, sans-serif;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    ._scf_settings_close:hover { background: rgba(255,255,255,.1); color: #fff; }
+    ._scf_settings_body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 20px 16px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,.2) transparent;
+    }
+    ._scf_settings_group_label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      color: rgba(255,255,255,.4);
+      margin: 14px 0 8px;
+    }
+    ._scf_settings_group_label:first-child { margin-top: 0; }
+    ._scf_settings_row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 38px;
+      padding: 4px 0;
+    }
+    ._scf_settings_label {
+      color: rgba(255,255,255,.88);
+      font-weight: 600;
+    }
+    ._scf_settings_radios {
+      display: flex;
+      gap: 4px;
+    }
+    ._scf_settings_radio {
+      padding: 5px 12px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 6px;
+      background: transparent;
+      color: rgba(255,255,255,.6);
+      font: 600 12px/1 system-ui, sans-serif;
+      cursor: pointer;
+      transition: background .12s, color .12s, border-color .12s;
+    }
+    ._scf_settings_radio:hover {
+      border-color: rgba(255,255,255,.32);
+      color: rgba(255,255,255,.88);
+    }
+    ._scf_settings_radio._scf_selected {
+      background: rgba(255,255,255,.14);
+      border-color: rgba(255,255,255,.4);
+      color: #fff;
+    }
+    ._scf_settings_toggle {
+      position: relative;
+      width: 38px;
+      height: 22px;
+      border: none;
+      border-radius: 11px;
+      background: rgba(255,255,255,.18);
+      cursor: pointer;
+      transition: background .15s;
+      padding: 0;
+    }
+    ._scf_settings_toggle._scf_on {
+      background: rgba(100,200,120,.7);
+    }
+    ._scf_settings_toggle::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform .15s;
+    }
+    ._scf_settings_toggle._scf_on::after {
+      transform: translateX(16px);
+    }
+    ._scf_settings_slider_row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    ._scf_settings_range {
+      width: 120px;
+      height: 4px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: rgba(255,255,255,.18);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+    ._scf_settings_range::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      cursor: pointer;
+    }
+    ._scf_settings_range::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border: none;
+      border-radius: 50%;
+      background: #fff;
+      cursor: pointer;
+    }
+    ._scf_settings_value {
+      min-width: 42px;
+      text-align: right;
+      font-size: 12px;
+      color: rgba(255,255,255,.6);
+      font-variant-numeric: tabular-nums;
+    }
+    ._scf_settings_footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      border-top: 1px solid rgba(255,255,255,.1);
+    }
+    ._scf_settings_reset {
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 6px;
+      background: transparent;
+      color: rgba(255,255,255,.5);
+      font: 600 12px/1 system-ui, sans-serif;
+      padding: 6px 14px;
+      cursor: pointer;
+    }
+    ._scf_settings_reset:hover { color: #fff; border-color: rgba(255,255,255,.32); }
+    ._scf_settings_done {
+      border: 1px solid rgba(255,255,255,.3);
+      border-radius: 6px;
+      background: rgba(255,255,255,.1);
+      color: #fff;
+      font: 600 12px/1 system-ui, sans-serif;
+      padding: 6px 18px;
+      cursor: pointer;
+    }
+    ._scf_settings_done:hover { background: rgba(255,255,255,.18); }
   `;
   document.head.appendChild(style);
 }

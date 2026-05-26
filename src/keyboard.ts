@@ -4,9 +4,10 @@
 
 import { MODES, modeIndex, setModeIndex, cur } from "./filters/modes";
 import {
-  BC_STEP, BC_MIN, BC_MAX, isDefault, adjustBrightness, brightnessAdjustmentLabel,
+  BC_MIN, BC_MAX, isDefault, adjustBrightness, brightnessAdjustmentLabel,
   hasAdjustments, resetAdjustments,
 } from "./filters/brightness";
+import { bcStep } from "./config";
 import {
   cycleGammaMismatchCheck,
   gammaMismatchCheckName,
@@ -40,7 +41,8 @@ export function applyBracketAdjustment(
 
   const col = comp.currentCol;
   const direction = e.code === "BracketRight" ? 1 : -1;
-  const delta = direction > 0 ? BC_STEP : -BC_STEP;
+  const step = bcStep();
+  const delta = direction > 0 ? step : -step;
   const srcName = "Source " + (col + 1);
   if (e.shiftKey) {
     comp.colContrast[col] = Math.max(

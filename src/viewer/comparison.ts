@@ -8,9 +8,13 @@ import { applyFilterToImg } from "../filters/imaging";
 import { showToast } from "../ui/toast";
 import { updateHUD } from "../ui/hud";
 import {
+  defaultZoomMode as cfgZoomMode,
+  fillCanvasDefault, navMapDefault, bgLoadDefault, lazyLoadMargin,
+} from "../config";
+import {
   zoomMode, zoomWidth, setZoomMode, setZoomWidth,
   applyZoom, calcZoom, captureZoomAnchor, zoomToast, navMapEnabled,
-  fillCanvasEnabled, applyFillCanvas,
+  fillCanvasEnabled, applyFillCanvas, setFillCanvas, setNavMap,
   activeComps, addComp, removeComp,
   type CapturedZoomAnchor,
 } from "../filters/zoom";
@@ -97,12 +101,18 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   injectCSS();
   injectFilters();
 
+  if (!activeComps.length) {
+    setFillCanvas(fillCanvasDefault());
+    setNavMap(navMapDefault());
+  }
   setZoomMode("fit");
   setZoomWidth(0);
   const initialPosition = normalizeGridInitialPosition(grid);
   const initialZoom = normalizeGridInitialZoom(grid.initialZoom);
-  setZoomMode(initialZoom.mode);
-  setZoomWidth(initialZoom.mode === "custom" ? initialZoom.width : 0);
+  if (initialZoom.mode === "custom") {
+    setZoomMode("custom");
+    setZoomWidth(initialZoom.width);
+  }
 
   let labelEl = document.getElementById("_scf_comp_label_");
   if (!labelEl) {
@@ -134,7 +144,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
 
   const allRowData: RowData[] = [];
 
-  let bgLoadAll = false;
+  let bgLoadAll = bgLoadDefault();
 
   // Forward-declare comp so loadRow/switchColumn can reference it
   const comp = {} as Comp;
@@ -229,7 +239,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
         }
       }
     }
-  }, { root: compDiv, rootMargin: "200px", threshold: 0 });
+  }, { root: compDiv, rootMargin: lazyLoadMargin() + "px", threshold: 0 });
 
   for (let i = 1; i < allRowData.length; i++) {
     rowObserver.observe(allRowData[i].rowDiv);
@@ -410,7 +420,18 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
 
   addComp(comp);
   if (fillCanvasEnabled) applyFillCanvas();
-  if (initialZoom.mode === "custom") applyZoom();
+  if (initialZoom.mode === "custom") {
+    applyZoom();
+  } else if (cfgZoomMode() === "1:1") {
+    const apply1to1 = () => {
+      if (!row0Sizer.naturalWidth) return;
+      setZoomWidth(row0Sizer.naturalWidth);
+      setZoomMode("1:1");
+      applyZoom();
+    };
+    if (row0Sizer.complete && row0Sizer.naturalWidth) apply1to1();
+    else row0Sizer.addEventListener("load", apply1to1, { once: true });
+  }
   rowNav.updateRowNav(initialPosition.row);
   if (initialPosition.row !== 0) {
     requestAnimationFrame(() => {

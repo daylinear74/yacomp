@@ -22,6 +22,8 @@
 // @match        https://greatposterwall.com/torrents.php*id=*
 // @updateURL    https://github.com/daylinear74/yacomp/releases/latest/download/yacomp.user.js
 // @downloadURL  https://github.com/daylinear74/yacomp/releases/latest/download/yacomp.user.js
-// @grant        none
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_registerMenuCommand
 // @run-at       document-end
 // ==/UserScript==

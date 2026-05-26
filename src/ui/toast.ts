@@ -2,6 +2,8 @@
 // ║  Toast notification                                                       ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
+import { toastDuration as toastDur } from "../config";
+
 let toastTimer: ReturnType<typeof setTimeout>;
 
 export interface ToastLine {
@@ -68,5 +70,5 @@ export function showToast(msg: string | ToastLine[]): void {
   }
   el.style.opacity = "1";
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (el!.style.opacity = "0"), 2000);
+  toastTimer = setTimeout(() => (el!.style.opacity = "0"), toastDur());
 }
