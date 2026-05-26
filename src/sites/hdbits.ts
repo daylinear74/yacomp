@@ -29,8 +29,9 @@ export function setupHDBits(): void {
       buildComparison(grid, container as HTMLElement, link);
     });
 
-    // Multi-comp: insert after the section's anchor label
-    if (grid.anchorEl) {
+    // Keep links for a BBCode hide block inside its hidden content. Inserting
+    // after the external label breaks HDBits' adjacent-sibling toggle lookup.
+    if (grid.anchorEl && !container.closest("div.div_showhide")) {
       insertLinkAfter(grid.anchorEl, link);
       continue;
     }

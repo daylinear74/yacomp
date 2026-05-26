@@ -43,9 +43,12 @@ function textAfterLastBreak(el: Element): string | null {
 }
 
 function labelTextFromNode(node: ChildNode): string | null {
-  const t = node.nodeType === 1
+  let t = node.nodeType === 1
     ? textAfterLastBreak(node as Element)
     : (node.textContent || "").trim();
+  if (t && node.nodeType === 1 && (node as Element).matches("label.label_showhide")) {
+    t = t.replace(/\s*\[(?:show|hide)\]\s*$/i, "");
+  }
   return t ? t.replace(/:$/, "").trim() : null;
 }
 
@@ -312,6 +315,21 @@ export function parseGrid(container: Element): Grid[] | null {
 }
 
 let _grids: { grid: Grid; container: Element }[] | null = null;
+
+function hdbGridParseContainer(container: Element): Element {
+  const hiddenContent = container.closest("div.div_showhide");
+  const label = hiddenContent?.previousElementSibling;
+  if (
+    !hiddenContent ||
+    !label?.matches("label.label_showhide") ||
+    !/(?:\||\bvs\.?\s)/i.test(label.textContent || "")
+  ) {
+    return container;
+  }
+
+  return hiddenContent.parentElement || container;
+}
+
 export function getGrids(): { grid: Grid; container: Element }[] {
   if (_grids) return _grids;
   _grids = [];
@@ -322,9 +340,11 @@ export function getGrids(): { grid: Grid; container: Element }[] {
     const a = img.closest("a");
     if (!a) continue;
     const c = a.parentElement;
-    if (!c || seen.has(c)) continue;
-    seen.add(c);
-    const parsed = parseGrid(c);
+    if (!c) continue;
+    const parseContainer = hdbGridParseContainer(c);
+    if (seen.has(parseContainer)) continue;
+    seen.add(parseContainer);
+    const parsed = parseGrid(parseContainer);
     if (parsed) {
       for (const grid of parsed) {
         _grids.push({ grid, container: c });
