@@ -170,7 +170,7 @@ export function parseComppicsComparisonData(data: ComppicsData, pageUrl: string 
 export function comppicsButtonProps(kind: "desktop" | "mobile"): { className: string; innerHTML: string } {
   return {
     className: kind === "mobile" ? "btn btn-secondary w-100 mb-2" : "nav-link d-inline-block",
-    innerHTML: '<i class="fa fa-search"></i> YAComp Viewer',
+    innerHTML: '<i class="fa fa-search"></i> yacomp viewer',
   };
 }
 

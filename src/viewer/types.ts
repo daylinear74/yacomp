@@ -34,6 +34,7 @@ export interface Comp {
   setSourceVisible: (col: number, visible: boolean) => void;
   setRow: (rowIdx: number) => void;
   updateSourceMenu?: () => void;
+  updateFillCanvasBtn?: () => void;
   updateRowNav?: (idx: number) => void;
   updateScrollSpacers?: () => void;
   updateNavMap: () => void;

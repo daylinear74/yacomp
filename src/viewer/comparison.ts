@@ -10,6 +10,7 @@ import { updateHUD } from "../ui/hud";
 import {
   zoomMode, zoomWidth, setZoomMode, setZoomWidth,
   applyZoom, calcZoom, captureZoomAnchor, zoomToast, navMapEnabled,
+  fillCanvasEnabled, applyFillCanvas,
   activeComps, addComp, removeComp,
   type CapturedZoomAnchor,
 } from "../filters/zoom";
@@ -18,6 +19,8 @@ import { buildRow, loadRow } from "./row";
 import { createNavMap } from "./nav-map";
 import { createRowNav } from "./row-nav";
 import { createSourceMenu } from "./source-menu";
+import { createFillCanvasBtn } from "./fill-canvas-btn";
+import { createToolbar } from "./toolbar";
 import { normalizeGridInitialPosition, normalizeGridInitialZoom } from "./initial-state";
 import {
   createDefaultVisibleColumns,
@@ -330,8 +333,15 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   const navMap = createNavMap(compDiv, allRowData, comp);
   comp.updateNavMap = navMap.updateNavMap;
 
-  // Source visibility menu
-  const sourceMenu = createSourceMenu(comp);
+  // Bottom-left toolbar (hosts source menu + fill canvas toggle)
+  const toolbar = createToolbar();
+
+  // Fill canvas toggle button (added first → appears above source menu)
+  const fillCanvasBtn = createFillCanvasBtn(toolbar);
+  comp.updateFillCanvasBtn = fillCanvasBtn.updateFillCanvasBtn;
+
+  // Source visibility menu (added last → appears at bottom)
+  const sourceMenu = createSourceMenu(comp, toolbar);
   comp.updateSourceMenu = sourceMenu.updateSourceMenu;
   if (initialPosition.col !== 0) switchColumn(initialPosition.col);
 
@@ -375,6 +385,8 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     rowNav.cleanup();
     navMap.cleanup();
     sourceMenu.cleanup();
+    fillCanvasBtn.cleanup();
+    toolbar.cleanup();
     document.body.style.overflow = "";
     container.style.display = origContainerDisplay;
     btn.style.display = origBtnDisplay;
@@ -397,6 +409,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   comp.updateScrollSpacers();
 
   addComp(comp);
+  if (fillCanvasEnabled) applyFillCanvas();
   if (initialZoom.mode === "custom") applyZoom();
   rowNav.updateRowNav(initialPosition.row);
   if (initialPosition.row !== 0) {

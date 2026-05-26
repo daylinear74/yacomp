@@ -160,6 +160,9 @@ export function injectCSS(): void {
       display: block;
       image-rendering: auto;
     }
+    ._scf_comp._scf_fill_canvas ._scf_comp_img {
+      object-fit: cover;
+    }
     ._scf_comp_label {
       position: fixed;
       top: 0;
@@ -209,15 +212,22 @@ export function injectCSS(): void {
       pointer-events: none;
       border-radius: 1px;
     }
-    ._scf_source_menu {
+    ._scf_toolbar {
       position: fixed;
       left: max(6px, calc(env(safe-area-inset-left) + 6px));
       bottom: max(6px, calc(env(safe-area-inset-bottom) + 6px));
       z-index: 2147483647;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
+      padding: 10px;
       font: 600 12px/1.2 system-ui, sans-serif;
       text-align: left;
       color: #fff;
-      padding: 10px;
+    }
+    ._scf_source_menu {
+      position: relative;
     }
     ._scf_source_menu_btn {
       display: flex;
@@ -333,6 +343,109 @@ export function injectCSS(): void {
       text-align: right;
     }
     ._scf_source_option_name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    ._scf_fill_canvas_toggle {
+      position: relative;
+    }
+    ._scf_fill_canvas_btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      min-width: 44px;
+      min-height: 44px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 999px;
+      background: rgba(12,12,12,.82);
+      color: #fff;
+      box-shadow: 0 2px 10px rgba(0,0,0,.4);
+      backdrop-filter: blur(8px);
+      font: inherit;
+      cursor: pointer;
+      padding: 0;
+      opacity: .48;
+      transition: opacity .15s ease, background .15s ease, border-color .15s ease;
+    }
+    ._scf_fill_canvas_btn:hover,
+    ._scf_fill_canvas_btn:focus-visible,
+    ._scf_fill_canvas_toggle._scf_open ._scf_fill_canvas_btn {
+      opacity: 1;
+      border-color: rgba(255,255,255,.32);
+      background: rgba(24,24,24,.9);
+    }
+    ._scf_fill_canvas_btn._scf_active {
+      opacity: 1;
+      border-color: rgba(255,255,255,.5);
+      background: rgba(40,40,40,.92);
+    }
+    ._scf_fill_canvas_btn:focus-visible {
+      outline: 2px solid rgba(255,255,255,.72);
+      outline-offset: 2px;
+    }
+    ._scf_fill_canvas_icon {
+      position: relative;
+      display: block;
+      width: 20px;
+      height: 14px;
+    }
+    ._scf_fill_canvas_icon::before,
+    ._scf_fill_canvas_icon::after {
+      content: "";
+      position: absolute;
+      border: 2px solid currentColor;
+      border-radius: 1px;
+    }
+    ._scf_fill_canvas_icon::before {
+      top: 0;
+      left: 1px;
+      width: 8px;
+      height: 6px;
+      border-right: none;
+      border-bottom: none;
+    }
+    ._scf_fill_canvas_icon::after {
+      bottom: 0;
+      right: 1px;
+      width: 8px;
+      height: 6px;
+      border-left: none;
+      border-top: none;
+    }
+    ._scf_fill_canvas_panel {
+      position: absolute;
+      left: 0;
+      bottom: 52px;
+      width: 140px;
+      padding: 6px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 8px;
+      background: rgba(12,12,12,.9);
+      box-shadow: 0 6px 24px rgba(0,0,0,.55);
+      backdrop-filter: blur(10px);
+    }
+    ._scf_fill_canvas_option {
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr);
+      align-items: center;
+      min-height: 36px;
+      gap: 6px;
+      border-radius: 6px;
+      padding: 2px 8px 2px 4px;
+      cursor: pointer;
+    }
+    ._scf_fill_canvas_option:hover,
+    ._scf_fill_canvas_option._scf_active {
+      background: rgba(255,255,255,.11);
+    }
+    ._scf_fill_canvas_option input {
+      margin: 0;
+      accent-color: #fff;
+      cursor: pointer;
+    }
+    ._scf_fill_canvas_option_name {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;

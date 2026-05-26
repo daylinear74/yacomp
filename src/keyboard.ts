@@ -17,6 +17,7 @@ import { syncAll } from "./filters/imaging";
 import { showToast } from "./ui/toast";
 import {
   activeComps, navMapEnabled, toggleNavMap,
+  fillCanvasEnabled, toggleFillCanvas, applyFillCanvas,
   doZoomIn, doZoomOut, doZoomFit, doZoom1to1,
 } from "./filters/zoom";
 import { openSlowPicsViewer } from "./sites/slowpics";
@@ -251,6 +252,15 @@ export function setupKeyboard(): void {
         comp.setBgLoadAll(next);
         showToast("Lazy load: " + (next ? "bg (load all)" : "viewport only"));
         if (next) comp.triggerBgLoad();
+        return;
+      }
+
+      // C: toggle canvas fill/fit mode
+      if (e.code === "KeyC" && activeComps.length > 0) {
+        toggleFillCanvas();
+        applyFillCanvas();
+        for (const comp of activeComps) comp.updateFillCanvasBtn?.();
+        showToast(fillCanvasEnabled ? "Canvas: Fill" : "Canvas: Fit");
         return;
       }
 

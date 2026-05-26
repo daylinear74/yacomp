@@ -13,6 +13,15 @@ export function setZoomMode(m: "fit" | "1:1" | "custom"): void { zoomMode = m; }
 export function setZoomWidth(w: number): void { zoomWidth = w; }
 export function toggleNavMap(): void { navMapEnabled = !navMapEnabled; }
 
+export let fillCanvasEnabled = false;
+export function toggleFillCanvas(): void { fillCanvasEnabled = !fillCanvasEnabled; }
+
+export function applyFillCanvas(): void {
+  for (const comp of activeComps) {
+    comp.compDiv.classList.toggle("_scf_fill_canvas", fillCanvasEnabled);
+  }
+}
+
 export let activeComps: Comp[] = [];
 export function addComp(c: Comp): void { activeComps.push(c); }
 export function removeComp(c: Comp): void { activeComps = activeComps.filter((x) => x !== c); }

@@ -1,4 +1,5 @@
 import type { Comp } from "./types";
+import type { Toolbar } from "./toolbar";
 import { sourceMenuCountText } from "./source-visibility";
 
 export interface SourceMenu {
@@ -12,7 +13,9 @@ function sourceName(comp: Comp, col: number): string {
   return name || "Source " + (col + 1);
 }
 
-export function createSourceMenu(comp: Comp): SourceMenu {
+export function createSourceMenu(comp: Comp, toolbar: Toolbar): SourceMenu {
+  const slot = toolbar.addSlot(() => setOpen(false));
+
   const sourceMenuEl = document.createElement("div");
   sourceMenuEl.className = "_scf_source_menu";
 
@@ -36,13 +39,14 @@ export function createSourceMenu(comp: Comp): SourceMenu {
   panel.hidden = true;
 
   sourceMenuEl.append(button, panel);
-  document.body.appendChild(sourceMenuEl);
+  toolbar.toolbarEl.appendChild(sourceMenuEl);
   let pointerOpening = false;
 
   function setOpen(open: boolean) {
     sourceMenuEl.classList.toggle("_scf_open", open);
     panel.hidden = !open;
     button.setAttribute("aria-expanded", String(open));
+    if (open) slot.notifyOpen();
   }
 
   function updateSourceMenu() {
@@ -84,19 +88,13 @@ export function createSourceMenu(comp: Comp): SourceMenu {
     pointerOpening = false;
   });
 
-  const stop = (e: Event) => e.stopPropagation();
-  for (const eventName of ["click", "mousedown", "mousemove", "pointermove", "wheel"]) {
-    sourceMenuEl.addEventListener(eventName, stop);
-  }
-
   const closeOnOutsideClick = (e: MouseEvent) => {
-    if (!sourceMenuEl.contains(e.target as Node | null)) setOpen(false);
+    if (!toolbar.toolbarEl.contains(e.target as Node | null)) setOpen(false);
   };
   document.addEventListener("mousedown", closeOnOutsideClick);
 
   function cleanup() {
     document.removeEventListener("mousedown", closeOnOutsideClick);
-    sourceMenuEl.remove();
   }
 
   updateSourceMenu();
