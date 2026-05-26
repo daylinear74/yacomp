@@ -13,6 +13,13 @@ const VS_RE = /\s+vs\.?\s+/i;
 const VS_TEST = /\bvs\.?\s/i;
 const DASH_RE = /\s+-\s+/;
 const SLASH_RE = /\s+\/\s+/;
+const TIMES_RE = /\s+×\s+/;
+const STRUCTURED_LABEL_SELECTOR = 'span[style*="color"], strong, b';
+
+export interface NameLabelInfo {
+  names: string[];
+  anchorEl: Element;
+}
 
 function cleanNameCandidate(text: string): string {
   return text.replace(GENERIC_HEADING_PREFIX_RE, "").trim();
@@ -39,11 +46,14 @@ export function splitNames(text: string): string[] {
   if (SLASH_RE.test(candidate)) {
     return candidate.split(SLASH_RE).map(cleanNamePart).filter(Boolean);
   }
+  if (TIMES_RE.test(candidate)) {
+    return candidate.split(TIMES_RE).map(cleanNamePart).filter(Boolean);
+  }
   return [cleanNamePart(candidate)].filter(Boolean);
 }
 export function hasVsOrPipe(text: string): boolean {
   const candidate = cleanNameCandidate(text);
-  return candidate.includes("|") || VS_TEST.test(candidate) || candidate.includes(",") || DASH_RE.test(candidate) || SLASH_RE.test(candidate);
+  return candidate.includes("|") || VS_TEST.test(candidate) || candidate.includes(",") || DASH_RE.test(candidate) || SLASH_RE.test(candidate) || TIMES_RE.test(candidate);
 }
 
 // ── Name-finding sub-strategies ──
@@ -107,6 +117,38 @@ export function namesFromColorSpans(container: Element): string[] | null {
     if (csNames.length >= 2) return csNames;
   }
   return null;
+}
+
+function leadingStructuredLabelNodes(container: Element): Element[] {
+  const labels: Element[] = [];
+  for (const node of container.childNodes) {
+    if (node.nodeType !== 1) continue;
+    const el = node as Element;
+    if (el.matches("a") && el.querySelector("img")) break;
+    if (el.querySelector("a img, img")) break;
+
+    if (el.matches(STRUCTURED_LABEL_SELECTOR)) {
+      labels.push(el);
+      continue;
+    }
+
+    const nested = [...el.querySelectorAll(STRUCTURED_LABEL_SELECTOR)]
+      .filter((candidate) => !candidate.parentElement?.closest(STRUCTURED_LABEL_SELECTOR));
+    labels.push(...nested);
+  }
+  return labels;
+}
+
+export function namesFromLeadingStructuredLabels(container: Element, expectedCount: number): NameLabelInfo | null {
+  const labels = leadingStructuredLabelNodes(container);
+  if (labels.length !== expectedCount) return null;
+
+  const names = labels
+    .map((label) => label.textContent!.trim())
+    .filter(Boolean);
+  if (names.length !== expectedCount || !looksLikeNames(names)) return null;
+
+  return { names, anchorEl: labels[labels.length - 1] };
 }
 
 /** Strategy 2c: bold/strong tags that are direct children of the container

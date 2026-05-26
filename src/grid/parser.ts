@@ -5,7 +5,7 @@
 import type { GridCell, Grid } from "./types";
 import {
   hasVsOrPipe, splitNames, looksLikeNames,
-  findComparisonNames,
+  findComparisonNames, namesFromLeadingStructuredLabels,
 } from "./names";
 
 function hdbFull(src: string): string {
@@ -163,12 +163,30 @@ function leadingBoldLabelInfo(container: Element): { names: string[]; anchorEl: 
   return { names, anchorEl: bolds[bolds.length - 1] };
 }
 
+function stableGridColumnCount(groups: GridCell[][]): number | null {
+  const firstLen = groups[0]?.length ?? 0;
+  if (
+    groups.length >= 2 &&
+    firstLen >= 2 &&
+    groups.every((g) => g.length === firstLen)
+  ) {
+    return firstLen;
+  }
+  return null;
+}
+
+function leadingStructuredLabelInfo(container: Element, groups: GridCell[][]): { names: string[]; anchorEl: Element } | null {
+  const numCols = stableGridColumnCount(groups);
+  if (!numCols) return null;
+  return namesFromLeadingStructuredLabels(container, numCols);
+}
+
 function hasLocalNonNameHeading(groupLabels: (string | null)[]): boolean {
   const firstImageLabel = groupLabels.find((label) => !!label);
   if (!firstImageLabel) return false;
   if (/^\d+$/.test(firstImageLabel)) return false;
   if (/^(?:screenshots?|screenshot\s+comparison|comparison)$/i.test(firstImageLabel)) return false;
-  return !hasVsOrPipe(firstImageLabel);
+  return !looksLikeNames(splitNames(firstImageLabel));
 }
 
 function trimTrailingLabeledSectionAfterSingleGridLabel(collected: GroupsResult): GroupsResult {
@@ -283,6 +301,13 @@ export function parseGrid(container: Element): Grid[] | null {
     if (leadingBold) {
       names = leadingBold.names;
       anchorEl = leadingBold.anchorEl;
+    }
+  }
+  if (!names) {
+    const structured = leadingStructuredLabelInfo(container, groups);
+    if (structured) {
+      names = structured.names;
+      anchorEl = structured.anchorEl;
     }
   }
   if (!names && hasLocalNonNameHeading(groupLabels)) {
