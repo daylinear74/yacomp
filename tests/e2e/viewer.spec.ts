@@ -309,6 +309,23 @@ test("switching the active source re-anchors the next chroma sync to the new col
   // Switch the visible source to col 2 (number keys are 1-indexed).
   await page.keyboard.press("3");
 
+  // switchColumn lazy-loads col 2 across all rows and fires applyFilterToImg
+  // for each WITHOUT a generation guard (src/viewer/comparison.ts) — those
+  // writes are still in-flight while we toggle the filter off/on below.
+  // Wait for every row's col 2 to land in the chroma log first, otherwise a
+  // late lingering write (e.g. row 3 col 2) can race past the new sync's
+  // anchor (0, 2) once the log is reset. (Race observed in CI; the test
+  // had been passing locally because of faster timing.)
+  await expect
+    .poll(
+      async () => {
+        const log = await readFilterLog(page);
+        return new Set(log.filter((e) => e.colIdx === 2).map((e) => e.rowIdx)).size;
+      },
+      { timeout: 5000 },
+    )
+    .toBeGreaterThanOrEqual(6);
+
   // Toggle the filter off then back on so a fresh sync fires with the new
   // active column as the anchor. (Switching sources alone doesn't re-run
   // the filter pipeline — what we want to verify is that the next sync
