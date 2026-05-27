@@ -643,6 +643,7 @@ test("gamma mismatch filter defs live in the same tree as the comp images", asyn
 interface YacompTestHooks {
   saveConfig: (partial: Record<string, unknown>) => void;
   resetConfig: () => void;
+  getConfig: () => { closeBtnPosition: "auto" | "left" | "right" };
   openSettings: () => void;
 }
 
@@ -734,6 +735,39 @@ test("settings: openSettings renders the modal in the shadow root with config co
   // which is what the slider invokes on input.
   const sliders = page.locator("._scf_settings_range");
   await expect.poll(() => sliders.count(), { timeout: 5000 }).toBeGreaterThanOrEqual(3);
+});
+
+test("settings: Reset Defaults immediately restores an open viewer close button position", async ({
+  page,
+}) => {
+  await openViewer(page, { config: { closeBtnPosition: "auto" } });
+
+  const closeButton = page.locator("._scf_close_btn");
+  const autoSide = await closeButton.evaluate((button) => {
+    if (button.classList.contains("_scf_left")) return "left";
+    if (button.classList.contains("_scf_right")) return "right";
+    throw new Error("close button has no resolved position");
+  });
+  const changedSide = autoSide === "left" ? "right" : "left";
+
+  await page.evaluate(() => {
+    (window as unknown as { __yacomp: YacompTestHooks }).__yacomp.openSettings();
+  });
+  const row = page.locator("._scf_settings_row", { hasText: "Close button" });
+
+  await row.getByRole("button", {
+    name: changedSide === "left" ? "Left" : "Right",
+    exact: true,
+  }).click();
+  await expect(closeButton).toHaveClass(new RegExp(`\\b_scf_${changedSide}\\b`));
+
+  await page.getByRole("button", { name: "Reset Defaults", exact: true }).click();
+  const resetPosition = await page.evaluate(() =>
+    (window as unknown as { __yacomp: YacompTestHooks }).__yacomp.getConfig().closeBtnPosition
+  );
+  expect(resetPosition).toBe("auto");
+  await expect(row.getByRole("button", { name: "Auto", exact: true })).toHaveClass(/_scf_selected/);
+  await expect(closeButton).toHaveClass(new RegExp(`\\b_scf_${autoSide}\\b`));
 });
 
 test("settings: mouseSwitch=false suppresses pointer-driven column switching", async ({

@@ -526,6 +526,7 @@ export function openSettings(): void {
   resetBtn.textContent = "Reset Defaults";
   resetBtn.addEventListener("click", () => {
     resetConfig();
+    for (const c of activeComps) c.updateCloseBtn?.();
     for (const r of renderers) r();
   });
 
