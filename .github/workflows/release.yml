@@ -42,5 +42,11 @@ jobs:
         with:
           files: dist/yacomp.user.js
           generate_release_notes: true
+          # Tags with a hyphen are semver prereleases (e.g. v5.8.14-dev.1,
+          # v5.9.0-rc.1). Mark them as prerelease and keep /releases/latest/
+          # pinned to the newest non-hyphen tag so users on the stable
+          # update URL don't pick up dev builds.
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          make_latest: ${{ contains(github.ref_name, '-') && 'false' || 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
