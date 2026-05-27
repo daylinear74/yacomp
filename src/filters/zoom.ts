@@ -2,7 +2,9 @@
 // ║  Zoom state                                                               ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
-import { showToast } from "../ui/toast";
+import { zoomScaleFactor, zoomPercentBase, verboseZoom } from "../config";
+import { showToast, type ToastLine } from "../ui/toast";
+import { getShadowRoot } from "../ui/shadow";
 import type { Comp } from "../viewer/types";
 
 export let zoomMode: "fit" | "1:1" | "custom" = "fit";
@@ -15,10 +17,13 @@ export function toggleNavMap(): void { navMapEnabled = !navMapEnabled; }
 
 export let fillCanvasEnabled = false;
 export function toggleFillCanvas(): void { fillCanvasEnabled = !fillCanvasEnabled; }
+export function setFillCanvas(v: boolean): void { fillCanvasEnabled = v; }
+export function setNavMap(v: boolean): void { navMapEnabled = v; }
 
 export function applyFillCanvas(): void {
   for (const comp of activeComps) {
     comp.compDiv.classList.toggle("_scf_fill_canvas", fillCanvasEnabled);
+    if (comp.updateNavMap) comp.updateNavMap();
   }
 }
 
@@ -206,24 +211,69 @@ export function applyZoom(anchors: CapturedZoomAnchor[] = []): void {
   }
 }
 
-export function zoomToast(): string {
-  if (zoomMode === "fit") return "🔍 Fit";
-  if (zoomMode === "1:1") return "🔍 1:1";
-  return (
-    "🔍 " + Math.round((zoomWidth / window.innerWidth) * 100) + "%"
-  );
+function getReferenceWidth(): number {
+  if (zoomPercentBase() === "fit") return window.innerWidth;
+  const sizer = getShadowRoot().querySelector("._scf_comp_sizer") as HTMLImageElement | null;
+  return sizer?.naturalWidth || window.innerWidth;
+}
+
+function getSizerNaturalWidth(): number {
+  const sizer = getShadowRoot().querySelector("._scf_comp_sizer") as HTMLImageElement | null;
+  return sizer?.naturalWidth || 0;
+}
+
+export function zoomToast(): string | ToastLine[] {
+  const briefLabel = zoomMode === "fit"
+    ? "🔍 Fit"
+    : zoomMode === "1:1"
+      ? "🔍 1:1"
+      : "🔍 " + Math.round((zoomWidth / getReferenceWidth()) * 100) + "%";
+
+  if (!verboseZoom()) return briefLabel;
+
+  const vw = window.innerWidth;
+  const ow = getSizerNaturalWidth();
+  const ew = zoomMode === "fit" ? vw : zoomWidth;
+
+  const lines: ToastLine[] = [
+    { text: briefLabel, size: "large" },
+    { text: ew + "px", size: "normal" },
+  ];
+
+  if (ow && ow === vw) {
+    lines.push({ text: "Viewport · Original " + vw + "px (" + Math.round((ew / vw) * 100) + "%)", size: "small", muted: true });
+  } else {
+    lines.push({ text: "Viewport " + vw + "px (" + Math.round((ew / vw) * 100) + "%)", size: "small", muted: true });
+    if (ow) {
+      lines.push({ text: "Original " + ow + "px (" + Math.round((ew / ow) * 100) + "%)", size: "small", muted: true });
+    }
+  }
+
+  return lines;
 }
 
 export function calcZoom(base: number, direction: number): number {
+  const scale = zoomScaleFactor();
   return direction > 0
-    ? Math.min(Math.round(base * 1.25), window.innerWidth * 8)
-    : Math.max(Math.round(base / 1.25), Math.round(window.innerWidth * 0.1));
+    ? Math.min(Math.round(base * scale), window.innerWidth * 8)
+    : Math.max(Math.round(base / scale), Math.round(window.innerWidth * 0.1));
+}
+
+export function snapZoom(base: number, next: number): number {
+  const ref = getReferenceWidth();
+  if (ref > 0 && base !== ref) {
+    if ((next > base && base < ref && next > ref) ||
+        (next < base && base > ref && next < ref)) {
+      return ref;
+    }
+  }
+  return next;
 }
 
 export function doZoomStep(dir: number): void {
   const anchors = captureActiveZoomAnchors();
   const base = zoomMode === "fit" ? window.innerWidth : zoomWidth;
-  zoomWidth = calcZoom(base, dir);
+  zoomWidth = snapZoom(base, calcZoom(base, dir));
   zoomMode = "custom";
   applyZoom(anchors);
   showToast(zoomToast());
@@ -241,7 +291,7 @@ export function doZoomFit(): void {
 }
 
 export function doZoom1to1(): void {
-  const sizer = document.querySelector("._scf_comp_sizer") as HTMLImageElement | null;
+  const sizer = getShadowRoot().querySelector("._scf_comp_sizer") as HTMLImageElement | null;
   if (!sizer) return;
   const anchors = captureActiveZoomAnchors();
   function apply() {

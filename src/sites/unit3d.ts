@@ -2,6 +2,7 @@
 // ║  UNIT3D comparison hijack                                                  ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
+import { siteEnabled, type SiteKey } from "../config";
 import { injectCSS } from "../ui/css";
 import { openWithDummyWrapper } from "../viewer";
 import type { Grid, GridCell } from "../grid";
@@ -51,8 +52,16 @@ export function parseUnit3DComparison(root: Element): Grid | null {
   return { rows, numCols, names: names && names.length === numCols ? names : null };
 }
 
+const HOST_SITE_KEY: Record<string, SiteKey> = {
+  blutopia: "blutopia",
+  aither: "aither",
+};
+
 export function setupUnit3D(): void {
-  if (!UNIT3D_HOST_RE.test(location.hostname)) return;
+  const m = location.hostname.match(UNIT3D_HOST_RE);
+  if (!m) return;
+  const key = HOST_SITE_KEY[m[2].toLowerCase()];
+  if (key && !siteEnabled(key)) return;
   injectCSS();
 
   document.addEventListener(

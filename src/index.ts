@@ -2,9 +2,11 @@
 // ║  Yet Another Comparison Viewer — Entry point                              ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
+import { siteEnabled } from "./config";
 import { hasAdjustments } from "./filters/brightness";
 import { applyToImg, syncAll } from "./filters/imaging";
 import { setupKeyboard } from "./keyboard";
+import { openSettings } from "./ui/settings";
 import { setupComppics } from "./sites/comppics";
 import { setupBHD } from "./sites/bhd";
 import { setupFRDS } from "./sites/frds";
@@ -38,6 +40,7 @@ import { setupUnit3D } from "./sites/unit3d";
   // ╚═══════════════════════════════════════════════════════════════════════════╝
 
   function init() {
+    GM_registerMenuCommand("yacomp Settings", openSettings);
     mo.observe(document.body, { childList: true, subtree: true });
     (["popstate", "hashchange"] as const).forEach((ev) =>
       window.addEventListener(ev, () => {
@@ -45,15 +48,15 @@ import { setupUnit3D } from "./sites/unit3d";
       }),
     );
     setupKeyboard();
-    setupBHD();
-    setupComppics();
-    setupFRDS();
-    setupGPW();
-    setupHDBits();
-    setupPTP();
-    setupSlowPics();
-    setupSSD();
-    setupUnit3D();
+    if (siteEnabled("bhd")) setupBHD();
+    if (siteEnabled("comppics")) setupComppics();
+    if (siteEnabled("frds")) setupFRDS();
+    if (siteEnabled("gpw")) setupGPW();
+    if (siteEnabled("hdbits")) setupHDBits();
+    if (siteEnabled("ptp")) setupPTP();
+    if (siteEnabled("slowpics")) setupSlowPics();
+    if (siteEnabled("ssd")) setupSSD();
+    if (siteEnabled("blutopia") || siteEnabled("aither")) setupUnit3D();
   }
 
   if (document.body) init();

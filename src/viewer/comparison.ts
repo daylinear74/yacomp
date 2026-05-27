@@ -3,14 +3,20 @@
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
 import { injectCSS } from "../ui/css";
+import { getShadowRoot } from "../ui/shadow";
 import { injectFilters } from "../filters/svg";
 import { applyFilterToImg } from "../filters/imaging";
 import { showToast } from "../ui/toast";
 import { updateHUD } from "../ui/hud";
 import {
+  defaultZoomMode as cfgZoomMode,
+  fillCanvasDefault, navMapDefault, bgLoadDefault, lazyLoadMargin,
+  mouseSwitch as cfgMouseSwitch,
+} from "../config";
+import {
   zoomMode, zoomWidth, setZoomMode, setZoomWidth,
-  applyZoom, calcZoom, captureZoomAnchor, zoomToast, navMapEnabled,
-  fillCanvasEnabled, applyFillCanvas,
+  applyZoom, calcZoom, snapZoom, captureZoomAnchor, zoomToast, navMapEnabled,
+  fillCanvasEnabled, applyFillCanvas, setFillCanvas, setNavMap,
   activeComps, addComp, removeComp,
   type CapturedZoomAnchor,
 } from "../filters/zoom";
@@ -22,6 +28,7 @@ import { createSourceMenu } from "./source-menu";
 import { createFillCanvasBtn } from "./fill-canvas-btn";
 import { createToolbar } from "./toolbar";
 import { normalizeGridInitialPosition, normalizeGridInitialZoom } from "./initial-state";
+import { createCloseBtn } from "./close-btn";
 import {
   createDefaultVisibleColumns,
   pointerVisibleColumn,
@@ -97,19 +104,26 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   injectCSS();
   injectFilters();
 
+  if (!activeComps.length) {
+    setFillCanvas(fillCanvasDefault());
+    setNavMap(navMapDefault());
+  }
   setZoomMode("fit");
   setZoomWidth(0);
   const initialPosition = normalizeGridInitialPosition(grid);
   const initialZoom = normalizeGridInitialZoom(grid.initialZoom);
-  setZoomMode(initialZoom.mode);
-  setZoomWidth(initialZoom.mode === "custom" ? initialZoom.width : 0);
+  if (initialZoom.mode === "custom") {
+    setZoomMode("custom");
+    setZoomWidth(initialZoom.width);
+  }
 
-  let labelEl = document.getElementById("_scf_comp_label_");
+  const shadowRoot = getShadowRoot();
+  let labelEl = shadowRoot.getElementById("_scf_comp_label_");
   if (!labelEl) {
     labelEl = document.createElement("div");
     labelEl.id = "_scf_comp_label_";
     labelEl.className = "_scf_comp_label";
-    document.body.appendChild(labelEl);
+    shadowRoot.appendChild(labelEl);
   }
   labelEl.innerHTML = "";
   labelEl.style.opacity = "0";
@@ -126,7 +140,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     e.preventDefault();
     const oldW = zoomMode === "fit" ? window.innerWidth : zoomWidth;
     const anchor = getWheelZoomGestureAnchor(wheelZoomGesture, comp, e);
-    setZoomWidth(calcZoom(oldW, e.deltaY < 0 ? 1 : -1));
+    setZoomWidth(snapZoom(oldW, calcZoom(oldW, e.deltaY < 0 ? 1 : -1)));
     setZoomMode("custom");
     applyZoom(anchor ? [anchor] : []);
     showToast(zoomToast());
@@ -134,7 +148,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
 
   const allRowData: RowData[] = [];
 
-  let bgLoadAll = false;
+  let bgLoadAll = bgLoadDefault();
 
   // Forward-declare comp so loadRow/switchColumn can reference it
   const comp = {} as Comp;
@@ -229,7 +243,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
         }
       }
     }
-  }, { root: compDiv, rootMargin: "200px", threshold: 0 });
+  }, { root: compDiv, rootMargin: lazyLoadMargin() + "px", threshold: 0 });
 
   for (let i = 1; i < allRowData.length; i++) {
     rowObserver.observe(allRowData[i].rowDiv);
@@ -289,7 +303,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   };
 
   compDiv.addEventListener("mousemove", (e) => {
-    if (drag.active) return;
+    if (drag.active || !cfgMouseSwitch()) return;
     const newCol = pointerColumnForEvent(e);
     if (newCol !== comp.currentCol) switchColumn(newCol);
   });
@@ -343,6 +357,11 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   // Source visibility menu (added last → appears at bottom)
   const sourceMenu = createSourceMenu(comp, toolbar);
   comp.updateSourceMenu = sourceMenu.updateSourceMenu;
+
+  // Close button (top-left on Mac, top-right on Windows)
+  const closeBtn = createCloseBtn(() => comp.close());
+  comp.updateCloseBtn = closeBtn.updatePosition;
+
   if (initialPosition.col !== 0) switchColumn(initialPosition.col);
 
   comp.setRow = (rowIdx: number) => {
@@ -386,6 +405,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     navMap.cleanup();
     sourceMenu.cleanup();
     fillCanvasBtn.cleanup();
+    closeBtn.cleanup();
     toolbar.cleanup();
     document.body.style.overflow = "";
     container.style.display = origContainerDisplay;
@@ -405,12 +425,23 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   container.style.display = "none";
   btn.style.display = "none";
   document.body.style.overflow = "hidden";
-  document.body.appendChild(compDiv);
+  shadowRoot.appendChild(compDiv);
   comp.updateScrollSpacers();
 
   addComp(comp);
   if (fillCanvasEnabled) applyFillCanvas();
-  if (initialZoom.mode === "custom") applyZoom();
+  if (initialZoom.mode === "custom") {
+    applyZoom();
+  } else if (cfgZoomMode() === "1:1") {
+    const apply1to1 = () => {
+      if (!row0Sizer.naturalWidth) return;
+      setZoomWidth(row0Sizer.naturalWidth);
+      setZoomMode("1:1");
+      applyZoom();
+    };
+    if (row0Sizer.complete && row0Sizer.naturalWidth) apply1to1();
+    else row0Sizer.addEventListener("load", apply1to1, { once: true });
+  }
   rowNav.updateRowNav(initialPosition.row);
   if (initialPosition.row !== 0) {
     requestAnimationFrame(() => {
@@ -449,13 +480,14 @@ export function openWithDummyWrapper(grid: Grid, extraCleanup?: () => void): voi
   injectCSS();
   injectFilters();
 
+  const sr = getShadowRoot();
   const wrapper = document.createElement("div");
   wrapper.style.display = "none";
-  document.body.appendChild(wrapper);
+  sr.appendChild(wrapper);
 
   const dummyBtn = document.createElement("span");
   dummyBtn.style.display = "none";
-  document.body.appendChild(dummyBtn);
+  sr.appendChild(dummyBtn);
 
   buildComparison(grid, wrapper, dummyBtn);
 

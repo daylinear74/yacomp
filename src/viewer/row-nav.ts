@@ -2,6 +2,7 @@
 // ║  Row navigation sidebar                                                   ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
+import { getShadowRoot } from "../ui/shadow";
 import type { Comp, RowData } from "./types";
 
 export interface RowNav {
@@ -23,7 +24,7 @@ export function createRowNav(allRowData: RowData[], comp: Comp): RowNav {
       item.addEventListener("click", () => comp.setRow(i));
       rowNavEl.appendChild(item);
     }
-    document.body.appendChild(rowNavEl);
+    getShadowRoot().appendChild(rowNavEl);
   }
 
   function updateRowNav(idx: number) {

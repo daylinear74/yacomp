@@ -2,11 +2,12 @@
 // ║  Keyboard — window capture phase                                          ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
-import { MODES, modeIndex, setModeIndex, cur } from "./filters/modes";
+import { cycleMode, cur } from "./filters/modes";
 import {
-  BC_STEP, BC_MIN, BC_MAX, isDefault, adjustBrightness, brightnessAdjustmentLabel,
+  BC_MIN, BC_MAX, isDefault, adjustBrightness, brightnessAdjustmentLabel,
   hasAdjustments, resetAdjustments,
 } from "./filters/brightness";
+import { bcStep } from "./config";
 import {
   cycleGammaMismatchCheck,
   gammaMismatchCheckName,
@@ -22,6 +23,7 @@ import {
 } from "./filters/zoom";
 import { openSlowPicsViewer } from "./sites/slowpics";
 import { visibleColumnOffset } from "./viewer/source-visibility";
+import { getShadowRoot } from "./ui/shadow";
 import type { Comp } from "./viewer/types";
 
 export function sourceNameForColumn(
@@ -40,7 +42,8 @@ export function applyBracketAdjustment(
 
   const col = comp.currentCol;
   const direction = e.code === "BracketRight" ? 1 : -1;
-  const delta = direction > 0 ? BC_STEP : -BC_STEP;
+  const step = bcStep();
+  const delta = direction > 0 ? step : -step;
   const srcName = "Source " + (col + 1);
   if (e.shiftKey) {
     comp.colContrast[col] = Math.max(
@@ -56,7 +59,10 @@ export function applyBracketAdjustment(
 }
 
 function isEditing(): boolean {
-  const el = document.activeElement;
+  let el: Element | null = document.activeElement;
+  while (el?.shadowRoot?.activeElement) {
+    el = el.shadowRoot.activeElement;
+  }
   const tag = el?.tagName;
   return (
     tag === "INPUT" ||
@@ -235,11 +241,7 @@ export function setupKeyboard(): void {
 
       // F / Shift+F: cycle filter modes
       if (e.code === "KeyF") {
-        if (e.shiftKey) {
-          setModeIndex((modeIndex - 1 + MODES.length) % MODES.length);
-        } else {
-          setModeIndex((modeIndex + 1) % MODES.length);
-        }
+        cycleMode(e.shiftKey ? -1 : 1);
         syncAll();
         showToast(cur().toast);
         return;
@@ -266,7 +268,7 @@ export function setupKeyboard(): void {
 
       // R: toggle row nav sidebar
       if (e.code === "KeyR" && activeComps.length > 0) {
-        const nav = document.querySelector("._scf_row_nav") as HTMLElement | null;
+        const nav = getShadowRoot().querySelector("._scf_row_nav") as HTMLElement | null;
         if (nav) {
           const visible = nav.style.opacity !== "0";
           nav.style.opacity = visible ? "0" : "1";
