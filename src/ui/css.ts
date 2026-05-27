@@ -796,6 +796,46 @@ export function injectCSS(): void {
       background: rgba(255,255,255,.1);
       margin: 4px 0;
     }
+    ._scf_settings_help {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      margin-left: 6px;
+      padding: 0;
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: 50%;
+      background: transparent;
+      color: rgba(255,255,255,.5);
+      font: 700 9px/1 system-ui, sans-serif;
+      cursor: help;
+      vertical-align: middle;
+      transition: color .12s, border-color .12s;
+    }
+    ._scf_settings_help:hover,
+    ._scf_settings_help:focus-visible {
+      color: rgba(255,255,255,.9);
+      border-color: rgba(255,255,255,.55);
+      outline: none;
+    }
+    ._scf_settings_group_label ._scf_settings_help {
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    ._scf_settings_tooltip {
+      position: fixed;
+      z-index: 10;
+      max-width: 280px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: rgba(20, 20, 20, .96);
+      color: rgba(255,255,255,.92);
+      font: 400 12px/1.45 system-ui, sans-serif;
+      box-shadow: 0 4px 16px rgba(0,0,0,.5);
+      border: 1px solid rgba(255,255,255,.12);
+      pointer-events: none;
+    }
   `;
   root.appendChild(style);
 }

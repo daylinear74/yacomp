@@ -80,17 +80,67 @@ install the latest release](https://github.com/daylinear74/yacomp/releases/lates
 Open the settings panel from the userscript manager menu (**yacomp Settings**).
 Settings persist via `GM_setValue` and are scoped per userscript manager.
 
-- **Viewer defaults** — initial zoom mode (`Fit` / `1:1`), the meaning of
-  100% in the zoom indicator (`Original` native pixels vs `Fit` to viewport),
-  brief/verbose zoom info, canvas fill vs fit, minimap, background loading,
-  hover-to-switch source, and close-button position (auto / left / right).
-- **Adjustments** — brightness/contrast step size, toast duration, zoom scale
-  factor, and lazy-load margin.
-- **Sites** — enable or disable yacomp per supported site without uninstalling.
-- **Filter cycle** — pick which visual filters are reachable via `F` /
-  `Shift+F`, and drag to reorder them.
-- **Gamma cycle** — pick which gamma-mismatch presets are reachable via `G` /
-  `Shift+G`, and drag to reorder them.
+### Viewer defaults
+
+- **Initial zoom mode** (`Fit` / `1:1`) — whether the viewer opens scaled to
+  fit the viewport or at native 1:1 pixels. Default `1:1`.
+- **Zoom indicator base** (`Original` / `Fit`) — what 100% in the zoom HUD
+  refers to. `Original` means 100% = source's native pixels; `Fit` means
+  100% = scaled-to-viewport. Default `Original`.
+- **Verbose zoom info** — when on, the zoom toast adds pixel counts and
+  viewport callouts; when off, the toast is a single-line percentage label.
+  Default off.
+- **Fill canvas by default** — whether each row canvas fills the viewport
+  (cropping) or fits inside it (letterbox) at open. Toggle later with `C`.
+  Default off (fit).
+- **Minimap by default** — whether the thumbnail navigation minimap is on at
+  open. Toggle later with `M`. Default on.
+- **Background loading by default** — when on, all rows start downloading
+  immediately at open rather than waiting for lazy-load. Toggle later with
+  `B`. Default off.
+- **Hover to switch source** — when on, moving the cursor across a row
+  switches the visible source by horizontal position; when off, switching
+  requires the keyboard or source menu. Default on.
+- **Close button position** (`Auto` / `Left` / `Right`) — `Auto` places the
+  button on the left on macOS and on the right elsewhere, to match each
+  platform's native window controls.
+
+### Adjustments
+
+- **Brightness / contrast step** — the increment applied per `[` / `]` and
+  `{` / `}` press. Range 0.01–0.25, default 0.05.
+- **Toast duration** — how long a HUD toast stays visible, in milliseconds.
+  Range 500–10000 ms, default 2000 ms.
+- **Zoom scale factor** — the multiplier applied per `+` / `-` press. 1.25
+  means each step grows or shrinks the image by 25%. Range 1.05–2.0, default
+  1.25.
+- **Lazy-load margin** — how far outside the visible area, in pixels,
+  deferred rows start downloading. Measured in CSS pixels against the
+  viewer's scroll container, **not** relative to image size, so the number
+  of rows actually covered shifts with the current zoom (a row rendered
+  smaller fits more of the margin). Range 0–2000 px, default 200 px. Set to
+  0 to load only when a row enters view; raise it to start downloads earlier
+  at the cost of bandwidth.
+
+### Sites
+
+Per-site toggle for every supported integration (HDB, PTP, BLU, ATH, BHD,
+GPW, SSD, FRDS, slow.pics, comp.pics). Disabling a site stops yacomp from
+injecting on that site without requiring an uninstall — useful for
+temporarily falling back to a site's native viewer.
+
+### Filter cycle
+
+Pick which visual filters are reachable via `F` / `Shift+F`, and drag to
+reorder them. Unchecked filters are skipped by the cycle; the order in the
+list is the order the cycle walks.
+
+### Gamma cycle
+
+Pick which gamma-mismatch presets are reachable via `G` / `Shift+G`, and
+drag to reorder them. Same skip-and-order behavior as the filter cycle.
+
+### Storage and migration
 
 A schema version is stored alongside the config; older payloads are migrated
 forward on first load, and unknown or out-of-range values fall back to the

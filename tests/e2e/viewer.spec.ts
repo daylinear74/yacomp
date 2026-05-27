@@ -770,6 +770,31 @@ test("settings: Reset Defaults immediately restores an open viewer close button 
   await expect(closeButton).toHaveClass(new RegExp(`\\b_scf_${autoSide}\\b`));
 });
 
+test("settings: hovering a help icon reveals its tooltip", async ({ page }) => {
+  await openViewer(page);
+  await page.evaluate(() => {
+    (window as unknown as { __yacomp: YacompTestHooks }).__yacomp.openSettings();
+  });
+  await expect(page.locator("._scf_settings_overlay")).toBeVisible();
+
+  // The Lazy load margin slider's row is the most informative tooltip in the
+  // panel; find its (?) icon by walking from the label text. The label span
+  // contains the row's help button as its only child element.
+  const lazyRow = page.locator("._scf_settings_row").filter({
+    has: page.locator("._scf_settings_label", { hasText: "Lazy load margin" }),
+  });
+  const helpIcon = lazyRow.locator("._scf_settings_help");
+  await expect(helpIcon).toHaveCount(1);
+
+  const tooltip = page.locator("._scf_settings_tooltip");
+  // Tooltip element exists but is hidden until hover.
+  await expect(tooltip).toBeHidden();
+
+  await helpIcon.hover();
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toContainText("CSS pixels");
+});
+
 test("settings: mouseSwitch=false suppresses pointer-driven column switching", async ({
   page,
 }) => {
