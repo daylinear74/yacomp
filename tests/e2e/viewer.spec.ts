@@ -37,8 +37,21 @@ async function expectRowCanvasAspectRatio(
   expect(box!.width / box!.height).toBeCloseTo(expectedRatio, 2);
 }
 
-async function openViewer(page: Page): Promise<void> {
+async function openViewer(
+  page: Page,
+  opts?: { config?: Record<string, unknown> },
+): Promise<void> {
   await page.goto("/");
+  if (opts?.config) {
+    // The fixture boots synchronously before #open-viewer is clickable, so by
+    // the time page.click runs the __yacomp hooks are wired up. Apply config
+    // BEFORE opening because viewer-open paths (defaultZoomMode, etc.) read
+    // the config at open time, not on every render.
+    await page.evaluate((c) => {
+      (window as unknown as { __yacomp: { saveConfig: (p: Record<string, unknown>) => void } })
+        .__yacomp.saveConfig(c);
+    }, opts.config);
+  }
   await page.click("#open-viewer");
   await expect(page.locator("._scf_comp")).toBeVisible();
 }
@@ -149,7 +162,10 @@ test("source menu hides sources and protects the last visible source", async ({ 
 });
 
 test("zoom shortcuts zoom in and reset to fit", async ({ page }) => {
-  await openViewer(page);
+  // Pin to fit mode: this test validates the +/0 keyboard pathway against a
+  // fit baseline, not the chosen default. Default is "1:1" so the viewer
+  // would open already zoomed and the not-zoomed precondition would fail.
+  await openViewer(page, { config: { defaultZoomMode: "fit" } });
 
   const comp = page.locator("._scf_comp");
   const row = page.locator("._scf_comp_row").first();
@@ -518,7 +534,10 @@ test("settings: openSettings renders the modal in the shadow root with config co
 test("settings: mouseSwitch=false suppresses pointer-driven column switching", async ({
   page,
 }) => {
-  await openViewer(page);
+  // Fit mode keeps the row geometry as a clean horizontal split of three
+  // columns; in 1:1 the row is wider than the viewport and the rightX
+  // calculation no longer maps to col 2 reliably.
+  await openViewer(page, { config: { defaultZoomMode: "fit" } });
 
   const label = page.locator("._scf_comp_label");
   const row = page.locator("._scf_comp_row").first();

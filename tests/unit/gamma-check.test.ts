@@ -16,11 +16,11 @@ beforeEach(() => {
 
 describe("cycleGammaMismatchCheck — default cycle (all presets enabled)", () => {
   test("forward from off enters the first preset", () => {
-    expect(cycleGammaMismatchCheck(null, 1)).toBe("srgb-bt1886");
+    expect(cycleGammaMismatchCheck(null, 1)).toBe("aeqt-0p88");
   });
   test("forward advances through the presets", () => {
-    expect(cycleGammaMismatchCheck("srgb-bt1886", 1)).toBe("aeqt-0p88");
-    expect(cycleGammaMismatchCheck("aeqt-0p88", 1)).toBe("legacy-mac");
+    expect(cycleGammaMismatchCheck("aeqt-0p88", 1)).toBe("srgb-bt1886");
+    expect(cycleGammaMismatchCheck("srgb-bt1886", 1)).toBe("legacy-mac");
   });
   test("forward past the last preset returns to off", () => {
     expect(cycleGammaMismatchCheck("legacy-mac", 1)).toBeNull();
@@ -29,7 +29,7 @@ describe("cycleGammaMismatchCheck — default cycle (all presets enabled)", () =
     expect(cycleGammaMismatchCheck(null, -1)).toBe("legacy-mac");
   });
   test("backward from the first preset returns to off", () => {
-    expect(cycleGammaMismatchCheck("srgb-bt1886", -1)).toBeNull();
+    expect(cycleGammaMismatchCheck("aeqt-0p88", -1)).toBeNull();
   });
 });
 

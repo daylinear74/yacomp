@@ -27,7 +27,7 @@ export const FILTER_MODE_IDS = [
 export type FilterModeId = typeof FILTER_MODE_IDS[number];
 
 export const GAMMA_PRESET_IDS = [
-  "srgb-bt1886", "aeqt-0p88", "legacy-mac",
+  "aeqt-0p88", "srgb-bt1886", "legacy-mac",
 ] as const;
 export type GammaPresetId = typeof GAMMA_PRESET_IDS[number];
 
@@ -59,7 +59,7 @@ const ALL_SITES_ENABLED = Object.fromEntries(
 
 export const DEFAULTS: Readonly<YacompConfig> = {
   v: CURRENT_VERSION,
-  defaultZoomMode: "fit",
+  defaultZoomMode: "1:1",
   fillCanvasDefault: false,
   navMapDefault: true,
   bgLoadDefault: false,
