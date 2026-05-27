@@ -5,7 +5,6 @@
 import { injectCSS } from "../ui/css";
 import { getShadowRoot } from "../ui/shadow";
 import { injectFilters } from "../filters/svg";
-import { applyFilterToImg } from "../filters/imaging";
 import { showToast } from "../ui/toast";
 import { updateHUD } from "../ui/hud";
 import {
@@ -21,7 +20,7 @@ import {
   type CapturedZoomAnchor,
 } from "../filters/zoom";
 import { setupDragHandlers } from "./drag";
-import { buildRow, loadRow } from "./row";
+import { buildRow, fillRow, loadRow, loadRowColumn } from "./row";
 import { createNavMap } from "./nav-map";
 import { createRowNav } from "./row-nav";
 import { createSourceMenu } from "./source-menu";
@@ -166,28 +165,37 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   function switchColumn(col: number) {
     if (!comp.visibleCols.includes(col)) return;
     comp.currentCol = col;
-    for (const { rowDiv: rd, imgs: ri, adjustRowAR: adjAR } of allRowData) {
-      ri.forEach((img, i) => {
-        if (i === col && !img.src && img.dataset.src) {
-          img.src = img.dataset.src;
-          delete img.dataset.src;
-          void applyFilterToImg(img, {
-            brightness: comp.colBrightness[i],
-            contrast: comp.colContrast[i],
-            gammaCheck: comp.colGammaCheck[i],
-          });
-          img.addEventListener("load", () => adjAR(img), { once: true });
+    for (const rowData of allRowData) {
+      const { rowDiv, imgs, loaded } = rowData;
+      // Only promote a deferred src → src in rows the IO has already
+      // loaded. Unloaded rows keep their `dataset.src` and pick up the
+      // new active column when they're eventually scrolled into view
+      // (loadRow reads `comp.currentCol` at IO-fire time). Without this
+      // gate, switchColumn would mass-load `col` across every row in
+      // the grid, defeating lazy load.
+      if (loaded) {
+        const img = imgs[col];
+        if (img && !img.src && img.dataset.src) {
+          loadRowColumn(rowData, comp, col);
         }
+      }
+      imgs.forEach((img, i) => {
         img.style.visibility = i === col ? "visible" : "hidden";
       });
-      const activeImg = ri[col];
-      if (activeImg && activeImg.src && !activeImg.complete) {
-        rd.classList.add("_scf_loading");
-        activeImg.addEventListener("load", () => rd.classList.remove("_scf_loading"), { once: true });
-      } else {
-        rd.classList.remove("_scf_loading");
+      // Spinner state only makes sense for rows the user can actually
+      // see right now. Unloaded rows still carry the initial
+      // `_scf_loading` class from buildRow; loadRow will clear it when
+      // the sizer lands.
+      if (loaded) {
+        const activeImg = imgs[col];
+        if (activeImg && activeImg.src && !activeImg.complete) {
+          rowDiv.classList.add("_scf_loading");
+          activeImg.addEventListener("load", () => rowDiv.classList.remove("_scf_loading"), { once: true });
+        } else {
+          rowDiv.classList.remove("_scf_loading");
+        }
       }
-      rd.dataset.col = String(col);
+      rowDiv.dataset.col = String(col);
     }
     const names = grid.names || [];
     labelEl!.replaceChildren();
@@ -251,11 +259,13 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
 
   function triggerBgLoad() {
     if (!bgLoadAll) return;
-    for (let i = 1; i < allRowData.length; i++) {
-      if (!allRowData[i].loaded) {
-        loadRow(allRowData[i], comp);
-        rowObserver.unobserve(allRowData[i].rowDiv);
-      }
+    for (let i = 0; i < allRowData.length; i++) {
+      const rd = allRowData[i];
+      if (!rd.loaded) rowObserver.unobserve(rd.rowDiv);
+      // fillRow handles both "row not yet IO-loaded" and "row loaded but
+      // only the active column was promoted" — it idempotently promotes
+      // every remaining `dataset.src` → `src`.
+      fillRow(rd, comp);
     }
   }
 

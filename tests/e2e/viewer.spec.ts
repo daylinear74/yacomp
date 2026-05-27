@@ -187,6 +187,15 @@ test("zoom shortcuts zoom in and reset to fit", async ({ page }) => {
 test("mixed-resolution rows keep max canvas aspect ratio", async ({ page }) => {
   await openViewer(page);
 
+  // The row canvas aspect ratio is the max of every loaded source's
+  // natural dimensions. Under default lazy-load only the active column
+  // is fetched per row, so the row reads col 0's AR until other columns
+  // are explored. Toggle bg-load (B shortcut) to bring every source in
+  // and make the max-AR contract observable without driving every
+  // column-switch keystroke. The asymptote is the contract; bg-load is
+  // the deterministic path to it.
+  await page.keyboard.press("KeyB");
+
   await expectRowCanvasAspectRatio(page, 0, "1920 / 1080", 1920 / 1080);
 
   await page.keyboard.press("ArrowDown");
@@ -285,29 +294,31 @@ test("chroma applies the anchor source's filter before any background source", a
   expect(log[0]).toMatchObject({ rowIdx: 0, colIdx: 0 });
 });
 
-test("chroma's background queue fills the anchor row's eagerly-loaded sources", async ({
+test("chroma's background queue runs past the anchor cell to other eligible rows", async ({
   page,
 }) => {
   await openViewer(page);
   await installFilterMutationLogger(page, "chroma");
   await page.keyboard.press("Shift+KeyF");
 
-  // Liveness: the queue must run past the anchor and reach the other
-  // eligible cell of the anchor row. Only cols 0 and 1 are eligible at
-  // open — row.ts eagerly loads `img.src` for ci<=1 and defers col 2 to
-  // `img.dataset.src` until the user activates it. The filter pipeline
-  // skips cells with no `src`, so col 2 is intentionally absent from the
-  // chroma log until B8 (column switch) brings it in.
+  // Liveness: the queue must run past the anchor cell. At viewer open
+  // only col 0 of any row carries `src` — buildRow eagerly loads col 0
+  // for non-deferred rows and loadRow loads only the active column for
+  // rows the IO promotes. The filter pipeline skips cells with no
+  // `src`, so a healthy chroma sync touches (0, 0) plus at least one
+  // additional cell — typically another row's col 0 once the IO has
+  // brought it into the buffer. If the bounded queue stalls at the
+  // anchor, this assertion catches it.
   await expect
     .poll(
       async () => {
         const log = await readFilterLog(page);
-        const cols = new Set(log.filter((e) => e.rowIdx === 0).map((e) => e.colIdx));
-        return Array.from(cols).sort();
+        const cells = new Set(log.map((e) => `${e.rowIdx},${e.colIdx}`));
+        return cells.has("0,0") && cells.size >= 2;
       },
       { timeout: 5000 },
     )
-    .toEqual([0, 1]);
+    .toBe(true);
 });
 
 test("switching the active source re-anchors the next chroma sync to the new column", async ({
@@ -325,22 +336,23 @@ test("switching the active source re-anchors the next chroma sync to the new col
   // Switch the visible source to col 2 (number keys are 1-indexed).
   await page.keyboard.press("3");
 
-  // switchColumn lazy-loads col 2 across all rows and fires applyFilterToImg
-  // for each WITHOUT a generation guard (src/viewer/comparison.ts) — those
-  // writes are still in-flight while we toggle the filter off/on below.
-  // Wait for every row's col 2 to land in the chroma log first, otherwise a
-  // late lingering write (e.g. row 3 col 2) can race past the new sync's
-  // anchor (0, 2) once the log is reset. (Race observed in CI; the test
-  // had been passing locally because of faster timing.)
+  // switchColumn now only promotes col 2 in rows the IO has already
+  // loaded (see src/viewer/comparison.ts). Each promotion fires
+  // applyFilterToImg WITHOUT a generation guard, so the writes are
+  // async (detectCS awaits a Range fetch). Wait for row 0 col 2 to
+  // land in the chroma log — that's the deterministic case — then
+  // yield a tick so any other loaded row's lingering write flushes
+  // before we reset the log.
   await expect
     .poll(
       async () => {
         const log = await readFilterLog(page);
-        return new Set(log.filter((e) => e.colIdx === 2).map((e) => e.rowIdx)).size;
+        return log.some((e) => e.rowIdx === 0 && e.colIdx === 2);
       },
       { timeout: 5000 },
     )
-    .toBeGreaterThanOrEqual(6);
+    .toBe(true);
+  await page.waitForTimeout(150);
 
   // Toggle the filter off then back on so a fresh sync fires with the new
   // active column as the anchor. (Switching sources alone doesn't re-run

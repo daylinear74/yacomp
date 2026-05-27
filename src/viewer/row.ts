@@ -79,7 +79,10 @@ export function buildRow(
     const img = document.createElement("img");
     img.className = "_scf_comp_img";
     const src = rowCells[ci].full;
-    if (!deferred && ci <= 1) {
+    // Eager-load only column 0 of non-deferred rows; every other cell
+    // waits until the user activates it (switchColumn / loadRowColumn)
+    // or the row enters the IO buffer (loadRow loads the active col).
+    if (!deferred && ci === 0) {
       img.src = src;
     } else {
       img.dataset.src = src;
@@ -106,6 +109,29 @@ export function buildRow(
   return { rowDiv, sizer, imgs, adjustRowAR };
 }
 
+// Promotes a single cell's deferred `dataset.src` → `src` and applies the
+// column's current filter. No-op if the cell is already loaded.
+function loadCellSrc(
+  img: HTMLImageElement,
+  ci: number,
+  comp: Comp,
+  adjustRowAR: (img: HTMLImageElement) => void,
+): void {
+  if (!img.dataset.src) return;
+  img.src = img.dataset.src;
+  delete img.dataset.src;
+  void applyFilterToImg(img, {
+    brightness: comp.colBrightness[ci],
+    contrast: comp.colContrast[ci],
+    gammaCheck: comp.colGammaCheck[ci],
+  });
+  img.addEventListener("load", () => adjustRowAR(img), { once: true });
+}
+
+// IO-triggered row entry: load the sizer (for the row's natural aspect
+// ratio) and only the *active* column. Hidden columns stay deferred until
+// the user switches to them via switchColumn → loadRowColumn, or until
+// fillRow runs in bg-load mode.
 export function loadRow(rd: RowData, comp: Comp): void {
   if (rd.loaded) return;
   rd.loaded = true;
@@ -116,19 +142,26 @@ export function loadRow(rd: RowData, comp: Comp): void {
     sizer.addEventListener("load", () => rowDiv.classList.remove("_scf_loading"), { once: true });
   }
   const activeCol = comp.currentCol || 0;
-  const loadImg = (img: HTMLImageElement, ci: number) => {
-    if (!img.dataset.src) return;
-    img.src = img.dataset.src;
-    delete img.dataset.src;
-    void applyFilterToImg(img, {
-      brightness: comp.colBrightness[ci],
-      contrast: comp.colContrast[ci],
-      gammaCheck: comp.colGammaCheck[ci],
-    });
-    img.addEventListener("load", () => adjustRowAR(img), { once: true });
-  };
-  if (imgs[activeCol]) loadImg(imgs[activeCol], activeCol);
-  imgs.forEach((img, ci) => {
-    if (ci !== activeCol) loadImg(img, ci);
-  });
+  if (imgs[activeCol]) loadCellSrc(imgs[activeCol], activeCol, comp, adjustRowAR);
+}
+
+// switchColumn hook: promote one column's deferred src in a row that's
+// already been loaded. No-op for cells that already have `src`, and the
+// caller is expected to gate this by `rd.loaded` so unloaded rows stay
+// lazy.
+export function loadRowColumn(rd: RowData, comp: Comp, col: number): void {
+  const img = rd.imgs[col];
+  if (!img) return;
+  loadCellSrc(img, col, comp, rd.adjustRowAR);
+}
+
+// Background-load hook: ensure every cell in the row has been promoted
+// from `dataset.src` → `src`. Used by triggerBgLoad and by the user's
+// explicit "load all" toggle.
+export function fillRow(rd: RowData, comp: Comp): void {
+  if (!rd.loaded) loadRow(rd, comp);
+  const { imgs, adjustRowAR } = rd;
+  for (let ci = 0; ci < imgs.length; ci++) {
+    loadCellSrc(imgs[ci], ci, comp, adjustRowAR);
+  }
 }
