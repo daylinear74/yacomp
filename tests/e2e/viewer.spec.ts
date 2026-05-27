@@ -541,6 +541,49 @@ async function expectFilterIdResolvesFromImageRoot(
   expect(found).toBe(true);
 }
 
+test("SVG filter defs live in the same tree as page images before viewer opens", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.keyboard.press("KeyF");
+
+  async function readPageFilterState(): Promise<{
+    fragmentId: string;
+    rootIsDocument: boolean;
+    resolvesFromImageRoot: boolean;
+  } | null> {
+    return await page.evaluate(() => {
+      const img = document.querySelector(".fixture-row img") as HTMLImageElement | null;
+      if (!img) return null;
+      const match = img.style.filter.match(/url\(['"]?#([^'")]+)['"]?\)/);
+      if (!match) return null;
+      const root = img.getRootNode() as Document | ShadowRoot;
+      return {
+        fragmentId: match[1],
+        rootIsDocument: root === document,
+        resolvesFromImageRoot: !!root.getElementById(match[1]),
+      };
+    });
+  }
+
+  await expect.poll(async () => await readPageFilterState(), { timeout: 5000 }).not.toBeNull();
+  const state = await readPageFilterState();
+  expect(state).not.toBeNull();
+  expect(state!.rootIsDocument).toBe(true);
+  expect(state!.resolvesFromImageRoot).toBe(true);
+
+  // Every key press calls injectFilters(); one defs container per tree is enough.
+  for (let i = 0; i < 4; i++) {
+    await page.keyboard.press("KeyF");
+  }
+  const defsCounts = await page.evaluate(() => ({
+    document: document.querySelectorAll("svg#_scf_defs_").length,
+    shadow: document.getElementById("_scf_root_")?.shadowRoot
+      ?.querySelectorAll("svg#_scf_defs_").length ?? 0,
+  }));
+  expect(defsCounts).toEqual({ document: 1, shadow: 1 });
+});
+
 test("SVG filter defs live in the same tree as the comp images", async ({
   page,
 }) => {

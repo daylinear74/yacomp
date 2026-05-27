@@ -19,13 +19,7 @@ function gammaMismatchCheckFilterDefs(): string {
   }).join("");
 }
 
-export function injectFilters(): void {
-  // CSS `filter: url(#fragment)` is scoped to the element's tree. The
-  // viewer's <img> elements live inside the shadow root (src/ui/shadow.ts),
-  // so the SVG <defs> must live in the same root or the references silently
-  // resolve to nothing and the filter has no visual effect.
-  const root = getShadowRoot();
-  if (root.getElementById("_scf_defs_")) return;
+function createFilterDefs(): SVGSVGElement {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.id = "_scf_defs_";
   svg.style.cssText =
@@ -72,5 +66,18 @@ export function injectFilters(): void {
     </filter>
     ${gammaMismatchCheckFilterDefs()}
   </defs>`;
-  root.appendChild(svg);
+  return svg;
+}
+
+function injectFiltersInto(root: Document | ShadowRoot): void {
+  if (root.getElementById("_scf_defs_")) return;
+  const container = root === document ? document.body : root;
+  container.appendChild(createFilterDefs());
+}
+
+export function injectFilters(): void {
+  // Fragment URLs resolve inside the filtered image's own tree. Page images
+  // and shadow viewer images need identical mode and gamma-mismatch defs.
+  injectFiltersInto(document);
+  injectFiltersInto(getShadowRoot());
 }
