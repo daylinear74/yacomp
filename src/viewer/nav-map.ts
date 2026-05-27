@@ -2,7 +2,7 @@
 // ║  Thumbnail navigation minimap                                             ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
-import { navMapEnabled } from "../filters/zoom";
+import { navMapEnabled, fillCanvasEnabled } from "../filters/zoom";
 import { getShadowRoot } from "../ui/shadow";
 import type { RowData, Comp } from "./types";
 
@@ -108,6 +108,7 @@ export function createNavMap(
     const img = rd.imgs[comp.currentCol];
     const src = img && (img.src || img.dataset.src);
     if (src && navMapImg.src !== src) navMapImg.src = src;
+    navMapImg.style.objectFit = fillCanvasEnabled ? "cover" : "contain";
     const row = rd.rowDiv;
     const rw = row.offsetWidth || 1;
     const rh = row.offsetHeight || 1;

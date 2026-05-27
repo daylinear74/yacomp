@@ -23,6 +23,7 @@ export function setNavMap(v: boolean): void { navMapEnabled = v; }
 export function applyFillCanvas(): void {
   for (const comp of activeComps) {
     comp.compDiv.classList.toggle("_scf_fill_canvas", fillCanvasEnabled);
+    if (comp.updateNavMap) comp.updateNavMap();
   }
 }
 
