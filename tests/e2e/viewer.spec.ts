@@ -199,7 +199,14 @@ async function installFilterMutationLogger(
   await page.evaluate((substring) => {
     type LogEntry = { rowIdx: number; colIdx: number; t: number };
     const log: LogEntry[] = [];
-    const rows = Array.from(document.querySelectorAll("._scf_comp_row"));
+    // The viewer renders inside a shadow root (see src/ui/shadow.ts), so
+    // document.querySelectorAll can't see the comp rows. Resolve the open
+    // shadow root first; fall back to document so future refactors that
+    // move the viewer back to the light DOM don't silently break the test.
+    const shadow =
+      (document.getElementById("_scf_root_") as HTMLElement | null)?.shadowRoot;
+    const scope: ParentNode = shadow ?? document;
+    const rows = Array.from(scope.querySelectorAll("._scf_comp_row"));
     const observer = new MutationObserver((records) => {
       for (const r of records) {
         if (r.attributeName !== "style") continue;
