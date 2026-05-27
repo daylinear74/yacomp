@@ -446,3 +446,106 @@ test("gamma mismatch filter defs live in the same tree as the comp images", asyn
   expect(fragmentId).not.toBeNull();
   await expectFilterIdResolvesFromImageRoot(page, fragmentId!);
 });
+
+// ─── Settings-driven runtime behavior ──────────────────────────────────────
+//
+// These tests verify that user-configurable settings actually change runtime
+// behavior. The fixture exposes saveConfig/openSettings on window.__yacomp
+// so Playwright can mutate config without rendering the GM menu or driving
+// the slider widget by hand (the slider's CSS-styled <input type="range">
+// is awkward to grab via keyboard from a headless browser).
+
+interface YacompTestHooks {
+  saveConfig: (partial: Record<string, unknown>) => void;
+  resetConfig: () => void;
+  openSettings: () => void;
+}
+
+async function setConfig(
+  page: Page,
+  partial: Record<string, unknown>,
+): Promise<void> {
+  await page.evaluate((p) => {
+    (window as unknown as { __yacomp: YacompTestHooks }).__yacomp.saveConfig(p);
+  }, partial);
+}
+
+async function readActiveBrightnessFilter(page: Page): Promise<string> {
+  return await page.evaluate(() => {
+    const shadow = (document.getElementById("_scf_root_") as HTMLElement | null)
+      ?.shadowRoot;
+    if (!shadow) return "";
+    const img = shadow.querySelector("._scf_comp_img") as HTMLImageElement | null;
+    return img?.style.filter ?? "";
+  });
+}
+
+test("settings: bcStep change propagates to bracket-key brightness adjustment", async ({
+  page,
+}) => {
+  await openViewer(page);
+  // Default bcStep is 0.05 → one `]` press moves brightness from 1.00 → 1.05.
+  // Bump it to 0.20 first; one `]` should now jump to 1.20 instead.
+  await setConfig(page, { bcStep: 0.20 });
+  await page.keyboard.press("BracketRight");
+  // The browser normalizes the CSS function value when re-reading
+  // style.filter, so "brightness(1.20)" comes back as "brightness(1.2)".
+  await expect.poll(() => readActiveBrightnessFilter(page), { timeout: 5000 })
+    .toMatch(/brightness\(1\.2\b/);
+});
+
+test("settings: openSettings renders the modal in the shadow root with config controls", async ({
+  page,
+}) => {
+  await openViewer(page);
+  await page.evaluate(() => {
+    (window as unknown as { __yacomp: YacompTestHooks }).__yacomp.openSettings();
+  });
+
+  // The overlay lives in the shadow root, so locator queries must pierce.
+  // Playwright locators pierce open shadow roots automatically.
+  await expect(page.locator("._scf_settings_overlay")).toBeVisible();
+  await expect(page.locator("._scf_settings_title")).toHaveText("yacomp Settings");
+
+  // Verify a representative slider (Brightness step) actually rendered.
+  // We don't drive the slider here — the assertion above (`bcStep change
+  // propagates`) covers the runtime effect through the saveConfig path,
+  // which is what the slider invokes on input.
+  const sliders = page.locator("._scf_settings_range");
+  await expect.poll(() => sliders.count(), { timeout: 5000 }).toBeGreaterThanOrEqual(3);
+});
+
+test("settings: mouseSwitch=false suppresses pointer-driven column switching", async ({
+  page,
+}) => {
+  await openViewer(page);
+
+  const label = page.locator("._scf_comp_label");
+  const row = page.locator("._scf_comp_row").first();
+
+  // Sanity baseline: with mouseSwitch enabled (the default), moving the
+  // pointer over the right portion of the row should switch the active
+  // source from col 0 → col 2 (3 visible columns, split into thirds).
+  const rowBox = await row.boundingBox();
+  if (!rowBox) throw new Error("row not laid out");
+  const rightX = rowBox.x + (rowBox.width * 5) / 6;
+  const midY = rowBox.y + rowBox.height / 2;
+  await page.mouse.move(rightX, midY);
+  await expect(label.locator("span", { hasText: "3." })).toHaveCSS("opacity", "1");
+
+  // Move back to col 1, then disable mouseSwitch and try the same motion.
+  await page.keyboard.press("1");
+  await expect(label.locator("span", { hasText: "1." })).toHaveCSS("opacity", "1");
+
+  await setConfig(page, { mouseSwitch: false });
+  // Wiggle the pointer (browsers ignore mousemove with identical coords).
+  await page.mouse.move(rowBox.x + rowBox.width / 6, midY);
+  await page.mouse.move(rightX, midY);
+
+  // Give any spurious switch a chance to fire; col 1 must still be active.
+  await page.waitForTimeout(150);
+  await expect(label.locator("span", { hasText: "1." })).toHaveCSS("opacity", "1");
+
+  // Cleanup: restore default for any subsequent test that might share this page.
+  await setConfig(page, { mouseSwitch: true });
+});
