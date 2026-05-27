@@ -203,6 +203,120 @@ test("mixed-resolution rows keep max canvas aspect ratio", async ({ page }) => {
   await expectRowCanvasAspectRatio(page, 1, "1920 / 1080", 1920 / 1080);
 });
 
+// ─── lazy load: defer src until a row enters or a user switches col ────────
+//
+// The viewer's lazy-load contract: a row's `<img>` cells start with
+// `dataset.src` and only get `src` set when (a) the row enters the IO
+// buffer (loadRow promotes the active column), (b) the user switches
+// to a new column on a row that's already been loaded (switchColumn
+// promotes that one cell), or (c) the user toggles bg-load (fillRow
+// promotes everything). Without this contract, opening a 3×6 grid
+// fired ~15 simultaneous image requests at viewer-open and defeated
+// the IO-based lazy load.
+//
+// Counting `src` vs `dataset.src` on the actual <img> elements is more
+// reliable than counting `page.on("request")` events, because the
+// fixture page renders a contact sheet outside the viewer that uses
+// the same URLs — the browser serves the viewer's <img> elements from
+// the memory cache and the request event may or may not fire.
+
+async function countPromotedCells(page: Page): Promise<{
+  promoted: number;
+  deferred: number;
+  total: number;
+}> {
+  return await page.evaluate(() => {
+    const root = (document.getElementById("_scf_root_") as HTMLElement | null)?.shadowRoot;
+    if (!root) throw new Error("yacomp shadow root missing");
+    const imgs = Array.from(root.querySelectorAll("._scf_comp_img")) as HTMLImageElement[];
+    return {
+      promoted: imgs.filter((img) => !!img.src && !img.dataset.src).length,
+      deferred: imgs.filter((img) => !!img.dataset.src).length,
+      total: imgs.length,
+    };
+  });
+}
+
+test("lazy load: opening the viewer promotes only a handful of cells", async ({ page }) => {
+  await openViewer(page);
+  // Let the IO's initial intersection check + post-paint loads settle.
+  await page.waitForTimeout(300);
+
+  const stats = await countPromotedCells(page);
+  // 6 rows × 3 cols = 18 — the fixture sanity check.
+  expect(stats.total).toBe(18);
+  // Under the lazy contract:
+  // - row 0 col 0: eager via buildRow
+  // - one or two follow-on rows are pulled into the IO buffer by the
+  //   200px rootMargin and have their active column (col 0) promoted
+  // - everything else stays deferred
+  // ≤4 absorbs viewport-size variance. Pre-fix the count was 6+ at
+  // open, then exploded past 15 after the first mousemove (which fired
+  // switchColumn, which cross-loaded across every row).
+  expect(stats.promoted).toBeLessThanOrEqual(4);
+  expect(stats.promoted).toBeGreaterThanOrEqual(1);
+});
+
+test("lazy load: scrolling the viewport promotes one cell per revealed row", async ({ page }) => {
+  await openViewer(page);
+  await page.waitForTimeout(300);
+
+  // Step the scroll position one half-viewport at a time so the IO
+  // fires for each row as it passes through the visible area.
+  // `scrollTo({behavior: "auto"})` would jump straight to the bottom
+  // and the IO would only see the destination's rows — not the rows
+  // passed through. No mouse movement is involved, so the mouseSwitch
+  // mousemove handler can't fire and inflate the promoted count.
+  await page.evaluate(() => {
+    return new Promise<void>((resolve) => {
+      const root = (document.getElementById("_scf_root_") as HTMLElement | null)?.shadowRoot;
+      const comp = root?.querySelector("._scf_comp") as HTMLElement | null;
+      if (!comp) { resolve(); return; }
+      const scrollHeight = comp.scrollHeight;
+      const step = Math.max(100, comp.clientHeight / 2);
+      let pos = 0;
+      const tick = () => {
+        comp.scrollTop = pos;
+        if (pos >= scrollHeight) { resolve(); return; }
+        pos += step;
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+  });
+  await page.waitForTimeout(500);
+
+  const stats = await countPromotedCells(page);
+  // Every row should now have its active column (col 0) promoted:
+  // 6 rows × 1 promoted col = 6 cells. Cols 1 and 2 stay deferred —
+  // they only load on column switch or bg-load.
+  expect(stats.promoted).toBeGreaterThanOrEqual(6);
+  expect(stats.deferred).toBeGreaterThanOrEqual(12); // 18 - 6 = 12 remaining
+});
+
+test("lazy load: switching columns doesn't cross-load across unloaded rows", async ({ page }) => {
+  await openViewer(page);
+  await page.waitForTimeout(300);
+
+  const before = (await countPromotedCells(page)).promoted;
+
+  // Switch the active source to col 2 (number keys are 1-indexed).
+  await page.keyboard.press("3");
+  await page.waitForTimeout(300);
+
+  const after = (await countPromotedCells(page)).promoted;
+
+  // switchColumn now gates src promotion by `rd.loaded`. The 1-2 rows
+  // the IO has loaded each promote col 2; the remaining rows stay
+  // deferred. Net new promotions: bounded by (loaded rows). A bound of
+  // <6 proves we no longer cross-load every row in the grid (the
+  // pre-fix behavior would have been exactly +6).
+  expect(after - before).toBeLessThan(6);
+  // Sanity: at least row 0's col 2 promoted, since row 0 is always
+  // loaded.
+  expect(after).toBeGreaterThan(before);
+});
+
 // ─── filter ordering: the chroma/luma anchor-first contract ─────────────────
 
 interface FilterLogEntry {
