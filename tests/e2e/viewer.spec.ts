@@ -321,3 +321,111 @@ test("switching the active source re-anchors the next chroma sync to the new col
   const secondSync = await readFilterLog(page);
   expect(secondSync[0]).toMatchObject({ rowIdx: 0, colIdx: 2 });
 });
+
+// ─── SVG filter scope: defs and images must share a tree ───────────────────
+//
+// CSS `filter: url(#fragment)` is resolved within the element's containing
+// tree scope. When the viewer was moved into a shadow root but the SVG
+// `<defs>` were left on document.body, every SVG filter (Solar / Residual /
+// Luma / Chroma / Gamma mismatch) silently rendered with no visual effect —
+// `style.filter` was set, but the URL pointed at an id the shadow tree
+// couldn't see. This test pins the invariant: for every filter URL the app
+// sets, the referenced <filter> element must be findable from the image's
+// own root node.
+
+async function readActiveFilterUrl(
+  page: Page,
+): Promise<{ filter: string; fragmentId: string } | null> {
+  return await page.evaluate(() => {
+    const shadow = (document.getElementById("_scf_root_") as HTMLElement | null)
+      ?.shadowRoot;
+    if (!shadow) return null;
+    const img = shadow.querySelector("._scf_comp_img") as HTMLImageElement | null;
+    if (!img) return null;
+    const filter = img.style.filter;
+    // The browser may serialize `url(#id)` as `url("#id")` (with quotes) —
+    // accept both forms so the assertion isn't tied to the engine's choice.
+    const match = filter.match(/url\(['"]?#([^'")]+)['"]?\)/);
+    return match ? { filter, fragmentId: match[1] } : null;
+  });
+}
+
+async function pollActiveFilterUrl(
+  page: Page,
+): Promise<{ filter: string; fragmentId: string }> {
+  // syncAll() schedules filter writes through awaited promises (detectCS for
+  // chroma/luma can defer a tick), so each F press takes at least a microtask
+  // to land. Poll instead of reading once and racing the queue.
+  await expect.poll(async () => (await readActiveFilterUrl(page)) !== null, {
+    timeout: 5000,
+  }).toBe(true);
+  const result = await readActiveFilterUrl(page);
+  if (!result) throw new Error("filter URL never appeared");
+  return result;
+}
+
+async function expectFilterIdResolvesFromImageRoot(
+  page: Page,
+  fragmentId: string,
+): Promise<void> {
+  const found = await page.evaluate((id) => {
+    const shadow = (document.getElementById("_scf_root_") as HTMLElement | null)
+      ?.shadowRoot;
+    if (!shadow) return false;
+    const img = shadow.querySelector("._scf_comp_img") as HTMLImageElement | null;
+    if (!img) return false;
+    // Mirror what the browser does to resolve `filter: url(#id)`: look up
+    // the fragment in the image's own containing tree.
+    const root = img.getRootNode() as Document | ShadowRoot;
+    return !!root.getElementById(id);
+  }, fragmentId);
+  expect(found).toBe(true);
+}
+
+test("SVG filter defs live in the same tree as the comp images", async ({
+  page,
+}) => {
+  await openViewer(page);
+
+  // Cycle forward through every mode that uses an SVG `url(#…)` reference
+  // (the off mode sets `filter: ""` and has no URL to verify). Pressing F
+  // 5 times walks Off → Solar1 → Solar2 → Residual → Luma → Chroma.
+  for (let i = 0; i < 5; i++) {
+    await page.keyboard.press("KeyF");
+    const { filter, fragmentId } = await pollActiveFilterUrl(page);
+    await expectFilterIdResolvesFromImageRoot(page, fragmentId);
+    // Defensive: the filter string we matched against must be the one the
+    // app actually set, not some stale value from a previous iteration.
+    expect(filter).toContain(fragmentId);
+  }
+});
+
+test("gamma mismatch filter defs live in the same tree as the comp images", async ({
+  page,
+}) => {
+  await openViewer(page);
+
+  // G cycles forward through the gamma presets (Off → first preset → …).
+  // One press from the default Off state should land on a preset whose
+  // filter URL ends up on the active column's image. syncAll() runs an
+  // awaited chain inside the key handler, so poll for the URL to surface
+  // instead of reading once and racing the microtask queue.
+  await page.keyboard.press("KeyG");
+
+  async function readGammaFragmentId(): Promise<string | null> {
+    return await page.evaluate(() => {
+      const shadow = (document.getElementById("_scf_root_") as HTMLElement | null)
+        ?.shadowRoot;
+      if (!shadow) return null;
+      const img = shadow.querySelector("._scf_comp_img") as HTMLImageElement | null;
+      if (!img) return null;
+      const match = img.style.filter.match(/url\(['"]?#(scf-gamma-mismatch-[^'")]+)['"]?\)/);
+      return match ? match[1] : null;
+    });
+  }
+
+  await expect.poll(readGammaFragmentId, { timeout: 5000 }).not.toBeNull();
+  const fragmentId = await readGammaFragmentId();
+  expect(fragmentId).not.toBeNull();
+  await expectFilterIdResolvesFromImageRoot(page, fragmentId!);
+});

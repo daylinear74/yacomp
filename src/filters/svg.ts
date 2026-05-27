@@ -4,6 +4,7 @@
 
 import { lut } from "./lut";
 import { GAMMA_MISMATCH_CHECK_PRESETS, gammaMismatchCheckExponent } from "./gamma-check";
+import { getShadowRoot } from "../ui/shadow";
 
 function gammaMismatchCheckFilterDefs(): string {
   return GAMMA_MISMATCH_CHECK_PRESETS.map((preset) => {
@@ -19,7 +20,12 @@ function gammaMismatchCheckFilterDefs(): string {
 }
 
 export function injectFilters(): void {
-  if (document.getElementById("_scf_defs_")) return;
+  // CSS `filter: url(#fragment)` is scoped to the element's tree. The
+  // viewer's <img> elements live inside the shadow root (src/ui/shadow.ts),
+  // so the SVG <defs> must live in the same root or the references silently
+  // resolve to nothing and the filter has no visual effect.
+  const root = getShadowRoot();
+  if (root.getElementById("_scf_defs_")) return;
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.id = "_scf_defs_";
   svg.style.cssText =
@@ -66,5 +72,5 @@ export function injectFilters(): void {
     </filter>
     ${gammaMismatchCheckFilterDefs()}
   </defs>`;
-  document.body.appendChild(svg);
+  root.appendChild(svg);
 }
