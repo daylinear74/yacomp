@@ -2,8 +2,8 @@
 // ║  Zoom state                                                               ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
-import { zoomScaleFactor, zoomPercentBase } from "../config";
-import { showToast } from "../ui/toast";
+import { zoomScaleFactor, zoomPercentBase, verboseZoom } from "../config";
+import { showToast, type ToastLine } from "../ui/toast";
 import { getShadowRoot } from "../ui/shadow";
 import type { Comp } from "../viewer/types";
 
@@ -216,11 +216,39 @@ function getReferenceWidth(): number {
   return sizer?.naturalWidth || window.innerWidth;
 }
 
-export function zoomToast(): string {
-  if (zoomMode === "fit") return "🔍 Fit";
-  if (zoomMode === "1:1") return "🔍 1:1";
-  const ref = getReferenceWidth();
-  return "🔍 " + Math.round((zoomWidth / ref) * 100) + "%";
+function getSizerNaturalWidth(): number {
+  const sizer = getShadowRoot().querySelector("._scf_comp_sizer") as HTMLImageElement | null;
+  return sizer?.naturalWidth || 0;
+}
+
+export function zoomToast(): string | ToastLine[] {
+  const briefLabel = zoomMode === "fit"
+    ? "🔍 Fit"
+    : zoomMode === "1:1"
+      ? "🔍 1:1"
+      : "🔍 " + Math.round((zoomWidth / getReferenceWidth()) * 100) + "%";
+
+  if (!verboseZoom()) return briefLabel;
+
+  const vw = window.innerWidth;
+  const ow = getSizerNaturalWidth();
+  const ew = zoomMode === "fit" ? vw : zoomWidth;
+
+  const lines: ToastLine[] = [
+    { text: briefLabel, size: "large" },
+    { text: ew + "px", size: "normal" },
+  ];
+
+  if (ow && ow === vw) {
+    lines.push({ text: "Viewport · Original " + vw + "px (" + Math.round((ew / vw) * 100) + "%)", size: "small", muted: true });
+  } else {
+    lines.push({ text: "Viewport " + vw + "px (" + Math.round((ew / vw) * 100) + "%)", size: "small", muted: true });
+    if (ow) {
+      lines.push({ text: "Original " + ow + "px (" + Math.round((ew / ow) * 100) + "%)", size: "small", muted: true });
+    }
+  }
+
+  return lines;
 }
 
 export function calcZoom(base: number, direction: number): number {

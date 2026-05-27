@@ -11,6 +11,8 @@ import {
 } from "../config";
 import { injectCSS } from "./css";
 import { getShadowRoot } from "./shadow";
+import { showToast } from "./toast";
+import { activeComps, zoomToast } from "../filters/zoom";
 
 type Renderer = () => void;
 
@@ -19,12 +21,14 @@ interface RadioDef {
   key: keyof YacompConfig;
   label: string;
   options: { label: string; value: string | boolean }[];
+  onSave?: () => void;
 }
 
 interface ToggleDef {
   type: "toggle";
   key: keyof YacompConfig;
   label: string;
+  onSave?: () => void;
 }
 
 interface SliderDef {
@@ -35,6 +39,7 @@ interface SliderDef {
   max: number;
   step: number;
   format: (v: number) => string;
+  onSave?: () => void;
 }
 
 type SettingDef = RadioDef | ToggleDef | SliderDef;
@@ -65,6 +70,17 @@ const GROUPS: SettingGroup[] = [
           { label: "Original", value: "original" },
           { label: "Fit", value: "fit" },
         ],
+        onSave: () => { if (activeComps.length) showToast(zoomToast()); },
+      },
+      {
+        type: "radio",
+        key: "verboseZoom",
+        label: "Zoom info",
+        options: [
+          { label: "Brief", value: false },
+          { label: "Verbose", value: true },
+        ],
+        onSave: () => { if (activeComps.length) showToast(zoomToast()); },
       },
       {
         type: "radio",
@@ -146,6 +162,7 @@ function buildRadio(def: RadioDef, renderers: Renderer[]): HTMLElement {
     btn.addEventListener("click", () => {
       saveConfig({ [def.key]: opt.value });
       sync();
+      def.onSave?.();
     });
     buttons.push(btn);
     group.appendChild(btn);
@@ -177,6 +194,7 @@ function buildToggle(def: ToggleDef, renderers: Renderer[]): HTMLElement {
   toggle.addEventListener("click", () => {
     saveConfig({ [def.key]: !getConfig()[def.key] });
     sync();
+    def.onSave?.();
   });
 
   function sync() {
@@ -213,6 +231,7 @@ function buildSlider(def: SliderDef, renderers: Renderer[]): HTMLElement {
     const v = parseFloat(range.value);
     saveConfig({ [def.key]: v });
     valueEl.textContent = def.format(v);
+    def.onSave?.();
   });
 
   function sync() {
