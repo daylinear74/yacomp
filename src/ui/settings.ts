@@ -20,6 +20,7 @@ interface RadioDef {
   type: "radio";
   key: keyof YacompConfig;
   label: string;
+  tooltip?: string;
   options: { label: string; value: string | boolean }[];
   onSave?: () => void;
 }
@@ -28,6 +29,7 @@ interface ToggleDef {
   type: "toggle";
   key: keyof YacompConfig;
   label: string;
+  tooltip?: string;
   onSave?: () => void;
 }
 
@@ -35,6 +37,7 @@ interface SliderDef {
   type: "slider";
   key: keyof YacompConfig;
   label: string;
+  tooltip?: string;
   min: number;
   max: number;
   step: number;
@@ -46,6 +49,7 @@ type SettingDef = RadioDef | ToggleDef | SliderDef;
 
 interface SettingGroup {
   label: string;
+  tooltip?: string;
   items: SettingDef[];
 }
 
@@ -57,6 +61,7 @@ const GROUPS: SettingGroup[] = [
         type: "radio",
         key: "defaultZoomMode",
         label: "Zoom mode",
+        tooltip: "Initial zoom when the viewer opens. 1:1 shows source pixels at native size; Fit scales the row to the viewport.",
         options: [
           { label: "Fit", value: "fit" },
           { label: "1:1", value: "1:1" },
@@ -66,6 +71,7 @@ const GROUPS: SettingGroup[] = [
         type: "radio",
         key: "zoomPercentBase",
         label: "Zoom 100%",
+        tooltip: "What the zoom HUD's percentage refers to. Original = source's native pixels; Fit = scaled-to-viewport.",
         options: [
           { label: "Original", value: "original" },
           { label: "Fit", value: "fit" },
@@ -76,6 +82,7 @@ const GROUPS: SettingGroup[] = [
         type: "radio",
         key: "verboseZoom",
         label: "Zoom info",
+        tooltip: "Brief shows a single-line percentage toast. Verbose adds pixel counts and viewport callouts.",
         options: [
           { label: "Brief", value: false },
           { label: "Verbose", value: true },
@@ -86,18 +93,35 @@ const GROUPS: SettingGroup[] = [
         type: "radio",
         key: "fillCanvasDefault",
         label: "Canvas",
+        tooltip: "Whether each row canvas fills the viewport (cropping) or fits inside it (letterbox) at open. Toggle later with C.",
         options: [
           { label: "Fill", value: true },
           { label: "Fit", value: false },
         ],
       },
-      { type: "toggle", key: "navMapDefault", label: "Minimap" },
-      { type: "toggle", key: "bgLoadDefault", label: "Background loading" },
-      { type: "toggle", key: "mouseSwitch", label: "Mouse switch" },
+      {
+        type: "toggle",
+        key: "navMapDefault",
+        label: "Minimap",
+        tooltip: "Whether the thumbnail navigation minimap is on at viewer open. Toggle later with M.",
+      },
+      {
+        type: "toggle",
+        key: "bgLoadDefault",
+        label: "Background loading",
+        tooltip: "When on, all rows download immediately at open instead of waiting for lazy-load. Toggle later with B.",
+      },
+      {
+        type: "toggle",
+        key: "mouseSwitch",
+        label: "Mouse switch",
+        tooltip: "When on, moving the cursor across a row switches the visible source by horizontal position.",
+      },
       {
         type: "radio",
         key: "closeBtnPosition",
         label: "Close button",
+        tooltip: "Where the viewer's close button sits. Auto picks left on macOS and right elsewhere.",
         options: [
           { label: "Auto", value: "auto" },
           { label: "Left", value: "left" },
@@ -114,6 +138,7 @@ const GROUPS: SettingGroup[] = [
         type: "slider",
         key: "bcStep",
         label: "Brightness step",
+        tooltip: "Increment applied per [ ] and { } press. 5% means each step shifts brightness or contrast by 0.05.",
         min: 0.01,
         max: 0.25,
         step: 0.01,
@@ -123,6 +148,7 @@ const GROUPS: SettingGroup[] = [
         type: "slider",
         key: "toastDuration",
         label: "Toast duration",
+        tooltip: "How long a HUD toast stays visible before fading out.",
         min: 500,
         max: 10000,
         step: 100,
@@ -132,6 +158,7 @@ const GROUPS: SettingGroup[] = [
         type: "slider",
         key: "zoomScaleFactor",
         label: "Zoom scale factor",
+        tooltip: "Multiplier applied per + / − press. 1.25× means each step grows or shrinks the image by 25%.",
         min: 1.05,
         max: 2.0,
         step: 0.05,
@@ -141,6 +168,7 @@ const GROUPS: SettingGroup[] = [
         type: "slider",
         key: "lazyLoadMargin",
         label: "Lazy load margin",
+        tooltip: "How far outside the visible area, in CSS pixels, deferred rows start downloading. Not relative to image size — zoom level changes how many rows fit in the margin.",
         min: 0,
         max: 2000,
         step: 50,
@@ -150,15 +178,60 @@ const GROUPS: SettingGroup[] = [
   },
 ];
 
+const SITES_TOOLTIP =
+  "Per-site toggle. Disabling stops yacomp from injecting on that site without uninstalling.";
+const FILTER_CYCLE_TOOLTIP =
+  "Visual filters reachable via F / Shift+F. Uncheck to skip; drag enabled rows to reorder.";
+const GAMMA_CYCLE_TOOLTIP =
+  "Gamma-mismatch presets reachable via G / Shift+G. Uncheck to skip; drag enabled rows to reorder.";
+
 let overlay: HTMLDivElement | null = null;
+
+// Tooltip controller is set when the settings overlay opens and cleared on
+// close. buildHelpIcon captures the icon -> tooltip wiring via this closure
+// so row-building helpers don't have to thread the tooltip element through.
+let tooltipController: {
+  show: (anchor: HTMLElement, text: string) => void;
+  hide: () => void;
+} | null = null;
+
+function buildHelpIcon(text: string): HTMLElement {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "_scf_settings_help";
+  btn.textContent = "?";
+  btn.setAttribute("aria-label", "More info");
+  btn.tabIndex = 0;
+  btn.addEventListener("mouseenter", () => tooltipController?.show(btn, text));
+  btn.addEventListener("mouseleave", () => tooltipController?.hide());
+  btn.addEventListener("focus", () => tooltipController?.show(btn, text));
+  btn.addEventListener("blur", () => tooltipController?.hide());
+  // Don't let clicks bubble into nearby controls (e.g. radio buttons).
+  btn.addEventListener("click", (e) => e.preventDefault());
+  return btn;
+}
+
+function buildGroupLabel(text: string, tooltip?: string): HTMLElement {
+  const el = document.createElement("div");
+  el.className = "_scf_settings_group_label";
+  el.textContent = text;
+  if (tooltip) el.appendChild(buildHelpIcon(tooltip));
+  return el;
+}
+
+function buildSettingLabel(text: string, tooltip?: string): HTMLElement {
+  const el = document.createElement("span");
+  el.className = "_scf_settings_label";
+  el.textContent = text;
+  if (tooltip) el.appendChild(buildHelpIcon(tooltip));
+  return el;
+}
 
 function buildRadio(def: RadioDef, renderers: Renderer[]): HTMLElement {
   const row = document.createElement("div");
   row.className = "_scf_settings_row";
 
-  const label = document.createElement("span");
-  label.className = "_scf_settings_label";
-  label.textContent = def.label;
+  const label = buildSettingLabel(def.label, def.tooltip);
 
   const group = document.createElement("div");
   group.className = "_scf_settings_radios";
@@ -195,9 +268,7 @@ function buildToggle(def: ToggleDef, renderers: Renderer[]): HTMLElement {
   const row = document.createElement("div");
   row.className = "_scf_settings_row";
 
-  const label = document.createElement("span");
-  label.className = "_scf_settings_label";
-  label.textContent = def.label;
+  const label = buildSettingLabel(def.label, def.tooltip);
 
   const toggle = document.createElement("button");
   toggle.type = "button";
@@ -221,9 +292,7 @@ function buildSlider(def: SliderDef, renderers: Renderer[]): HTMLElement {
   const row = document.createElement("div");
   row.className = "_scf_settings_row";
 
-  const label = document.createElement("span");
-  label.className = "_scf_settings_label";
-  label.textContent = def.label;
+  const label = buildSettingLabel(def.label, def.tooltip);
 
   const controls = document.createElement("div");
   controls.className = "_scf_settings_slider_row";
@@ -439,7 +508,27 @@ function close(): void {
   if (overlay) {
     overlay.remove();
     overlay = null;
+    tooltipController = null;
   }
+}
+
+const TOOLTIP_GAP = 6;
+const TOOLTIP_EDGE_MARGIN = 8;
+
+function positionTooltip(tooltipEl: HTMLElement, anchor: HTMLElement): void {
+  const a = anchor.getBoundingClientRect();
+  const t = tooltipEl.getBoundingClientRect();
+  let left = a.left + a.width / 2 - t.width / 2;
+  let top = a.bottom + TOOLTIP_GAP;
+  if (top + t.height > window.innerHeight - TOOLTIP_EDGE_MARGIN) {
+    top = a.top - t.height - TOOLTIP_GAP;
+  }
+  left = Math.max(
+    TOOLTIP_EDGE_MARGIN,
+    Math.min(window.innerWidth - t.width - TOOLTIP_EDGE_MARGIN, left),
+  );
+  tooltipEl.style.left = left + "px";
+  tooltipEl.style.top = Math.max(TOOLTIP_EDGE_MARGIN, top) + "px";
 }
 
 export function openSettings(): void {
@@ -455,6 +544,24 @@ export function openSettings(): void {
 
   const panel = document.createElement("div");
   panel.className = "_scf_settings_panel";
+
+  // Shared tooltip element — appended to the overlay so it isn't clipped by
+  // the body's overflow:auto. Positioned via JS on icon hover/focus.
+  const tooltipEl = document.createElement("div");
+  tooltipEl.className = "_scf_settings_tooltip";
+  tooltipEl.style.display = "none";
+  tooltipController = {
+    show: (anchor, text) => {
+      tooltipEl.textContent = text;
+      tooltipEl.style.display = "block";
+      tooltipEl.style.left = "0";
+      tooltipEl.style.top = "0";
+      positionTooltip(tooltipEl, anchor);
+    },
+    hide: () => {
+      tooltipEl.style.display = "none";
+    },
+  };
 
   // Header
   const header = document.createElement("div");
@@ -479,10 +586,7 @@ export function openSettings(): void {
   const renderers: Renderer[] = [];
 
   for (const group of GROUPS) {
-    const groupLabel = document.createElement("div");
-    groupLabel.className = "_scf_settings_group_label";
-    groupLabel.textContent = group.label;
-    body.appendChild(groupLabel);
+    body.appendChild(buildGroupLabel(group.label, group.tooltip));
 
     for (const item of group.items) {
       let el: HTMLElement;
@@ -496,24 +600,15 @@ export function openSettings(): void {
   }
 
   // Sites group
-  const sitesLabel = document.createElement("div");
-  sitesLabel.className = "_scf_settings_group_label";
-  sitesLabel.textContent = "Sites";
-  body.appendChild(sitesLabel);
+  body.appendChild(buildGroupLabel("Sites", SITES_TOOLTIP));
   body.appendChild(buildSiteChips(renderers));
 
   // Filter Cycle group
-  const filterLabel = document.createElement("div");
-  filterLabel.className = "_scf_settings_group_label";
-  filterLabel.textContent = "Filter Cycle";
-  body.appendChild(filterLabel);
+  body.appendChild(buildGroupLabel("Filter Cycle", FILTER_CYCLE_TOOLTIP));
   body.appendChild(buildOrderedList(FILTER_MODE_IDS, FILTER_MODE_LABELS, "filterCycle", renderers));
 
   // Gamma Check Cycle group
-  const gammaLabel = document.createElement("div");
-  gammaLabel.className = "_scf_settings_group_label";
-  gammaLabel.textContent = "Gamma Check Cycle";
-  body.appendChild(gammaLabel);
+  body.appendChild(buildGroupLabel("Gamma Check Cycle", GAMMA_CYCLE_TOOLTIP));
   body.appendChild(buildOrderedList(GAMMA_PRESET_IDS, GAMMA_PRESET_LABELS, "gammaCycle", renderers));
 
   // Footer
@@ -539,6 +634,7 @@ export function openSettings(): void {
 
   panel.append(header, body, footer);
   overlay.appendChild(panel);
+  overlay.appendChild(tooltipEl);
   getShadowRoot().appendChild(overlay);
 
   // Initial render
