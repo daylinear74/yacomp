@@ -109,7 +109,7 @@ function validateOrderedIdList<T extends string>(
   return result;
 }
 
-function validate(raw: Record<string, unknown>): YacompConfig {
+export function validate(raw: Record<string, unknown>): YacompConfig {
   return {
     v: CURRENT_VERSION,
     defaultZoomMode:
@@ -154,7 +154,7 @@ function validate(raw: Record<string, unknown>): YacompConfig {
   };
 }
 
-function migrate(raw: Record<string, unknown>): Record<string, unknown> {
+export function migrate(raw: Record<string, unknown>): Record<string, unknown> {
   const v = typeof raw.v === "number" ? raw.v : 0;
   if (v < 2) {
     raw.enabledSites ??= DEFAULTS.enabledSites;
@@ -196,14 +196,26 @@ export function filterCycle(): readonly FilterModeId[] { return config.filterCyc
 export function gammaCycle(): readonly GammaPresetId[] { return config.gammaCycle; }
 export function getConfig(): Readonly<YacompConfig> { return config; }
 
+// GM_setValue is provided by the userscript host. In unit tests and dev
+// fixtures it may be undefined — fall back silently so the in-memory
+// config can still be mutated without crashing the caller.
+function persist(): void {
+  try {
+    GM_setValue(STORAGE_KEY, config);
+  } catch {
+    // no-op: GM_setValue unavailable (tests, fixture); in-memory state is
+    // still authoritative for the current session.
+  }
+}
+
 export function saveConfig(partial: Partial<YacompConfig>): void {
   Object.assign(config, partial);
   config.v = CURRENT_VERSION;
   config = validate(config as unknown as Record<string, unknown>);
-  GM_setValue(STORAGE_KEY, config);
+  persist();
 }
 
 export function resetConfig(): void {
   config = { ...DEFAULTS };
-  GM_setValue(STORAGE_KEY, config);
+  persist();
 }

@@ -1,12 +1,23 @@
 import { closeBtnPosition } from "../config";
 import { getShadowRoot } from "../ui/shadow";
 
-const isMac = /Mac|iPhone|iPad/.test(navigator.userAgent);
-
-function resolvePosition(): "left" | "right" {
-  const pref = closeBtnPosition();
+// Exported as a pure function so the platform fallback can be exercised
+// in unit tests without poking at `navigator.userAgent` (which the real
+// module-level constant resolves once at import time).
+export function resolveCloseBtnPosition(
+  pref: "auto" | "left" | "right",
+  isMac: boolean,
+): "left" | "right" {
   if (pref === "left" || pref === "right") return pref;
   return isMac ? "left" : "right";
+}
+
+const isMac =
+  typeof navigator !== "undefined" &&
+  /Mac|iPhone|iPad/.test(navigator.userAgent);
+
+function resolvePosition(): "left" | "right" {
+  return resolveCloseBtnPosition(closeBtnPosition(), isMac);
 }
 
 export interface CloseBtn {

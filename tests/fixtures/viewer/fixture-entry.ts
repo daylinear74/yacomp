@@ -1,5 +1,7 @@
 import { setupKeyboard } from "../../../src/keyboard";
 import { openSlowPicsViewer } from "../../../src/sites/slowpics";
+import { saveConfig, resetConfig, getConfig } from "../../../src/config";
+import { openSettings } from "../../../src/ui/settings";
 
 type SlowPicsCollection = NonNullable<Window["collection"]>;
 
@@ -96,6 +98,15 @@ function boot(): void {
 
   const openButton = document.getElementById("open-viewer");
   openButton?.addEventListener("click", () => openSlowPicsViewer());
+
+  // Test hooks: Playwright drives these via page.evaluate. They're scoped
+  // to the fixture so the production userscript doesn't expose anything.
+  (window as unknown as { __yacomp: unknown }).__yacomp = {
+    saveConfig,
+    resetConfig,
+    getConfig,
+    openSettings,
+  };
 }
 
 if (document.readyState === "loading") {
