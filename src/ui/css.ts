@@ -2,8 +2,11 @@
 // ║  CSS for inline comparison viewer                                         ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
+import { getShadowRoot } from "./shadow";
+
 export function injectCSS(): void {
-  if (document.getElementById("_scf_css_")) return;
+  const root = getShadowRoot();
+  if (root.getElementById("_scf_css_")) return;
   const style = document.createElement("style");
   style.id = "_scf_css_";
   style.textContent = `
@@ -732,5 +735,5 @@ export function injectCSS(): void {
       margin: 4px 0;
     }
   `;
-  document.head.appendChild(style);
+  root.appendChild(style);
 }

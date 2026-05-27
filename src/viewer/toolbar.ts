@@ -1,3 +1,5 @@
+import { getShadowRoot } from "../ui/shadow";
+
 export interface ToolbarSlot {
   notifyOpen: () => void;
 }
@@ -30,7 +32,7 @@ export function createToolbar(): Toolbar {
     toolbarEl.addEventListener(eventName, stop);
   }
 
-  document.body.appendChild(toolbarEl);
+  getShadowRoot().appendChild(toolbarEl);
 
   function cleanup() {
     toolbarEl.remove();

@@ -4,6 +4,7 @@
 
 import { zoomScaleFactor } from "../config";
 import { showToast } from "../ui/toast";
+import { getShadowRoot } from "../ui/shadow";
 import type { Comp } from "../viewer/types";
 
 export let zoomMode: "fit" | "1:1" | "custom" = "fit";
@@ -245,7 +246,7 @@ export function doZoomFit(): void {
 }
 
 export function doZoom1to1(): void {
-  const sizer = document.querySelector("._scf_comp_sizer") as HTMLImageElement | null;
+  const sizer = getShadowRoot().querySelector("._scf_comp_sizer") as HTMLImageElement | null;
   if (!sizer) return;
   const anchors = captureActiveZoomAnchors();
   function apply() {

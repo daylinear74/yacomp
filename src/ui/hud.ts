@@ -6,9 +6,10 @@ import { cur } from "../filters/modes";
 import { isDefault } from "../filters/brightness";
 import { gammaMismatchCheckHudLabel } from "../filters/gamma-check";
 import { activeComps } from "../filters/zoom";
+import { getShadowRoot } from "./shadow";
 
 export function updateHUD(): void {
-  let el = document.getElementById("_scf_hud_");
+  let el = getShadowRoot().getElementById("_scf_hud_");
   if (!el) {
     el = document.createElement("div");
     el.id = "_scf_hud_";
@@ -32,7 +33,7 @@ export function updateHUD(): void {
       transition: "opacity .25s ease",
       opacity: "0",
     });
-    document.body.appendChild(el);
+    getShadowRoot().appendChild(el);
   }
 
   let text = cur().label || "";

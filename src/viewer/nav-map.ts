@@ -3,6 +3,7 @@
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
 import { navMapEnabled } from "../filters/zoom";
+import { getShadowRoot } from "../ui/shadow";
 import type { RowData, Comp } from "./types";
 
 const NAV_MAX = 200;
@@ -92,7 +93,7 @@ export function createNavMap(
   const navMapRect = document.createElement("div");
   navMapRect.className = "_scf_nav_map_rect";
   navMapEl.appendChild(navMapRect);
-  document.body.appendChild(navMapEl);
+  getShadowRoot().appendChild(navMapEl);
 
   function updateNavMap() {
     const zoomed = compDiv.classList.contains("_scf_zoomed");

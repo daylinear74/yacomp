@@ -3,6 +3,7 @@
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
 import { toastDuration as toastDur } from "../config";
+import { getShadowRoot } from "./shadow";
 
 let toastTimer: ReturnType<typeof setTimeout>;
 
@@ -13,7 +14,7 @@ export interface ToastLine {
 }
 
 export function showToast(msg: string | ToastLine[]): void {
-  let el = document.getElementById("_scf_toast_");
+  let el = getShadowRoot().getElementById("_scf_toast_");
   if (!el) {
     el = document.createElement("div");
     el.id = "_scf_toast_";
@@ -38,7 +39,7 @@ export function showToast(msg: string | ToastLine[]): void {
       whiteSpace: "nowrap",
       textAlign: "center",
     });
-    document.body.appendChild(el);
+    getShadowRoot().appendChild(el);
   }
   if (typeof msg === "string") {
     el.textContent = msg;

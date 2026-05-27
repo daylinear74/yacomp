@@ -3,6 +3,7 @@
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
 import { injectCSS } from "../ui/css";
+import { getShadowRoot } from "../ui/shadow";
 import { injectFilters } from "../filters/svg";
 import { applyFilterToImg } from "../filters/imaging";
 import { showToast } from "../ui/toast";
@@ -115,12 +116,13 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     setZoomWidth(initialZoom.width);
   }
 
-  let labelEl = document.getElementById("_scf_comp_label_");
+  const shadowRoot = getShadowRoot();
+  let labelEl = shadowRoot.getElementById("_scf_comp_label_");
   if (!labelEl) {
     labelEl = document.createElement("div");
     labelEl.id = "_scf_comp_label_";
     labelEl.className = "_scf_comp_label";
-    document.body.appendChild(labelEl);
+    shadowRoot.appendChild(labelEl);
   }
   labelEl.innerHTML = "";
   labelEl.style.opacity = "0";
@@ -416,7 +418,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   container.style.display = "none";
   btn.style.display = "none";
   document.body.style.overflow = "hidden";
-  document.body.appendChild(compDiv);
+  shadowRoot.appendChild(compDiv);
   comp.updateScrollSpacers();
 
   addComp(comp);
@@ -471,13 +473,14 @@ export function openWithDummyWrapper(grid: Grid, extraCleanup?: () => void): voi
   injectCSS();
   injectFilters();
 
+  const sr = getShadowRoot();
   const wrapper = document.createElement("div");
   wrapper.style.display = "none";
-  document.body.appendChild(wrapper);
+  sr.appendChild(wrapper);
 
   const dummyBtn = document.createElement("span");
   dummyBtn.style.display = "none";
-  document.body.appendChild(dummyBtn);
+  sr.appendChild(dummyBtn);
 
   buildComparison(grid, wrapper, dummyBtn);
 

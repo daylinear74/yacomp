@@ -23,6 +23,7 @@ import {
 } from "./filters/zoom";
 import { openSlowPicsViewer } from "./sites/slowpics";
 import { visibleColumnOffset } from "./viewer/source-visibility";
+import { getShadowRoot } from "./ui/shadow";
 import type { Comp } from "./viewer/types";
 
 export function sourceNameForColumn(
@@ -58,7 +59,10 @@ export function applyBracketAdjustment(
 }
 
 function isEditing(): boolean {
-  const el = document.activeElement;
+  let el: Element | null = document.activeElement;
+  while (el?.shadowRoot?.activeElement) {
+    el = el.shadowRoot.activeElement;
+  }
   const tag = el?.tagName;
   return (
     tag === "INPUT" ||
@@ -264,7 +268,7 @@ export function setupKeyboard(): void {
 
       // R: toggle row nav sidebar
       if (e.code === "KeyR" && activeComps.length > 0) {
-        const nav = document.querySelector("._scf_row_nav") as HTMLElement | null;
+        const nav = getShadowRoot().querySelector("._scf_row_nav") as HTMLElement | null;
         if (nav) {
           const visible = nav.style.opacity !== "0";
           nav.style.opacity = visible ? "0" : "1";

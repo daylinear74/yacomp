@@ -10,6 +10,7 @@ import {
   GAMMA_PRESET_IDS, type GammaPresetId,
 } from "../config";
 import { injectCSS } from "./css";
+import { getShadowRoot } from "./shadow";
 
 type Renderer = () => void;
 
@@ -499,7 +500,7 @@ export function openSettings(): void {
 
   panel.append(header, body, footer);
   overlay.appendChild(panel);
-  document.body.appendChild(overlay);
+  getShadowRoot().appendChild(overlay);
 
   // Initial render
   for (const r of renderers) r();
