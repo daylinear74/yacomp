@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{TORRENT_TITLE}} :: HDBits</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+</head>
+<body>
+  <!--
+    Sanitized HDBits torrent-detail chrome.
+
+    Only the markup the parser actually traverses (#header, .menu, #details,
+    td.text, td.comment, the torrent-title h1) is kept. No usernames, no
+    passkey, no user IDs, no donor badges, no inbox state. Two placeholders:
+
+      {{TORRENT_TITLE}}   — fills the H1 (used by namesFromHeadings fallback)
+      {{DESCRIPTION}}     — case content for slot: torrent.description
+      {{COMMENTS}}        — case content (wrapped in a comment row) for
+                            slot: torrent.comment
+  -->
+
+  <table id="header" class="main" style="margin-bottom: 5px">
+    <tbody>
+      <tr>
+        <td class="embedded"><a href="/"><div id="logo"></div></a></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <table align="center" class="menu" width="100%" cellspacing="0" cellpadding="0">
+    <tbody>
+      <tr>
+        <td align="center" class="menunavigation"><a class="normal" href="/browse.php">Browse</a></td>
+        <td align="center" class="menunavigation"><a class="normal" href="/forums">Forums</a></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <table width="100%" class="main">
+    <tbody>
+      <tr>
+        <td class="bottom" align="center" valign="top">
+
+          <div class="torrent-title">
+            <h1 style="display:inline-block;">{{TORRENT_TITLE}}</h1>
+          </div>
+
+          <table id="details" width="930" border="1" cellspacing="0" cellpadding="5">
+            <tbody>
+              <tr><td><a class="index" href="#">torrent download</a></td></tr>
+              <tr><td><div class="label">Technical Information</div></td></tr>
+              <tr><td><div class="label">Tags</div></td></tr>
+              <tr>
+                <td>
+                  {{DESCRIPTION}}
+                </td>
+              </tr>
+              <tr><td><div class="label">Other copies of this film</div></td></tr>
+              <tr><td><div class="label">Seeders</div></td></tr>
+            </tbody>
+          </table>
+
+          <p><a name="startcomments"></a></p>
+          <p align="center"><a class="index" href="#">Add a comment</a></p>
+          <table class="main" border="0" cellspacing="0" cellpadding="0">
+            <tbody>
+              <tr>
+                <td class="embedded">
+                  <table width="100%" border="1" cellspacing="0" cellpadding="10">
+                    <tbody>
+                      {{COMMENTS}}
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>

@@ -15,8 +15,14 @@ export function findComparisonLinkAnchor(container: Element): Node | null {
   return null;
 }
 
-export function setupHDBits(): void {
-  if (!/(?:^|\.)hdbits\.org$/.test(location.hostname)) return;
+export function isHDBitsHost(hostname: string = location.hostname): boolean {
+  return /(?:^|\.)hdbits\.org$/.test(hostname);
+}
+
+// The setup body without the host guard, so test fixtures can drive the
+// detector from any origin (e.g. http://127.0.0.1:4173). Production goes
+// through `setupHDBits` below, which keeps the host check intact.
+export function setupHDBitsCore(): void {
   injectCSS();
 
   for (const { grid, container } of getGrids()) {
@@ -48,4 +54,9 @@ export function setupHDBits(): void {
       container.insertBefore(link, container.firstChild);
     }
   }
+}
+
+export function setupHDBits(): void {
+  if (!isHDBitsHost()) return;
+  setupHDBitsCore();
 }

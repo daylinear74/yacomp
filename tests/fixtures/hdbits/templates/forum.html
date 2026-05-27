@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{THREAD_TITLE}} :: HDBits</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+</head>
+<body>
+  <!--
+    Sanitized HDBits forum-thread chrome.
+
+    Mirrors the structural selectors the parser sees on a real
+    /forums/viewtopic page: top-level chrome, the "Comparisons > <thread>"
+    H1, and the std-content table that wraps every post. No user IDs,
+    no passkey, no signatures.
+
+      {{THREAD_TITLE}}    — fills the H1 (used by namesFromHeadings fallback)
+      {{POSTS}}           — case content (wrapped in a post row) for
+                            slot: forum.post
+  -->
+
+  <table id="header" class="main" style="margin-bottom: 5px">
+    <tbody>
+      <tr>
+        <td class="embedded"><a href="/"><div id="logo"></div></a></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <table align="center" class="menu" width="100%" cellspacing="0" cellpadding="0">
+    <tbody>
+      <tr>
+        <td align="center" class="menunavigation"><a class="normal" href="/browse.php">Browse</a></td>
+        <td align="center" class="menunavigation"><a class="normal" href="/forums">Forums</a></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <table width="100%" class="main">
+    <tbody>
+      <tr>
+        <td class="bottom" align="center" valign="top">
+
+          <h1>
+            <a name="top"></a>
+            <a href="/forums/viewforum?forumid=40">Comparisons</a> &gt; {{THREAD_TITLE}}
+          </h1>
+
+          <table width="100%" border="1" cellspacing="0" cellpadding="10" class="std-content">
+            <tbody>
+              <tr>
+                <td>
+                  {{POSTS}}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>
