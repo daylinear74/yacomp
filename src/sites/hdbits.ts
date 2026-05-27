@@ -2,7 +2,7 @@
 // ║  HDBits setup                                                             ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
-import { injectCSS } from "../ui/css";
+import { injectCSS, injectTriggerLinkCSS } from "../ui/css";
 import { getGrids } from "../grid";
 import { hasVsOrPipe } from "../grid/names";
 import { buildComparison, insertLinkAfter } from "../viewer";
@@ -24,6 +24,7 @@ export function isHDBitsHost(hostname: string = location.hostname): boolean {
 // through `setupHDBits` below, which keeps the host check intact.
 export function setupHDBitsCore(): void {
   injectCSS();
+  injectTriggerLinkCSS();
 
   for (const { grid, container } of getGrids()) {
     const link = document.createElement("a");

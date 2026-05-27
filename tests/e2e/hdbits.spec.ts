@@ -110,6 +110,43 @@ if (cases.length === 0) {
   });
 }
 
+test("hdbits: host trigger link inherits page color and opens the viewer", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/001-torrent-desc-simple-grid");
+  await page.waitForFunction(
+    () => (window as unknown as { __yacomp_test_ready?: boolean }).__yacomp_test_ready === true,
+    undefined,
+    { timeout: 5000 },
+  );
+
+  const link = page.locator("._scf_comp_link").first();
+  await expect(link).toHaveCount(1);
+  expect(await link.evaluate((element) => element.getRootNode() === document)).toBe(true);
+  expect(
+    await page.evaluate(() => {
+      const shadow = document.getElementById("_scf_root_")?.shadowRoot;
+      return {
+        hostTriggerCss: Boolean(document.getElementById("_scf_comp_link_css_")),
+        hostViewerCss: Boolean(document.getElementById("_scf_css_")),
+        shadowViewerCss: Boolean(shadow?.getElementById("_scf_css_")),
+      };
+    }),
+  ).toEqual({
+    hostTriggerCss: true,
+    hostViewerCss: false,
+    shadowViewerCss: true,
+  });
+  await link.evaluate((element) => {
+    const parent = element.parentElement;
+    if (!parent) throw new Error("HDBits trigger link has no host parent");
+    parent.style.color = "rgb(19, 37, 73)";
+  });
+  await expect(link).toHaveCSS("color", "rgb(19, 37, 73)");
+
+  await link.click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+});
+
 for (const { file, meta } of cases) {
   test(`hdbits: ${file}`, async ({ page }) => {
     await stubHdbitsImages(page);

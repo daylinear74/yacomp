@@ -4,11 +4,11 @@
 
 import { getShadowRoot } from "./shadow";
 
-export function injectCSS(): void {
-  const root = getShadowRoot();
-  if (root.getElementById("_scf_css_")) return;
+// The HDBits opener stays in the host page, outside the isolated viewer root.
+export function injectTriggerLinkCSS(): void {
+  if (document.getElementById("_scf_comp_link_css_")) return;
   const style = document.createElement("style");
-  style.id = "_scf_css_";
+  style.id = "_scf_comp_link_css_";
   style.textContent = `
     ._scf_comp_link {
       color: inherit;
@@ -18,7 +18,16 @@ export function injectCSS(): void {
       line-height: inherit;
     }
     ._scf_comp_link:hover { opacity: .7; }
+  `;
+  document.head.appendChild(style);
+}
 
+export function injectCSS(): void {
+  const root = getShadowRoot();
+  if (root.getElementById("_scf_css_")) return;
+  const style = document.createElement("style");
+  style.id = "_scf_css_";
+  style.textContent = `
     ._scf_comp {
       position: fixed;
       top: 0;
