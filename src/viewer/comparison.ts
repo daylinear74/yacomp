@@ -28,6 +28,7 @@ import { createSourceMenu } from "./source-menu";
 import { createFillCanvasBtn } from "./fill-canvas-btn";
 import { createToolbar } from "./toolbar";
 import { normalizeGridInitialPosition, normalizeGridInitialZoom } from "./initial-state";
+import { createCloseBtn } from "./close-btn";
 import {
   createDefaultVisibleColumns,
   pointerVisibleColumn,
@@ -356,6 +357,11 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   // Source visibility menu (added last → appears at bottom)
   const sourceMenu = createSourceMenu(comp, toolbar);
   comp.updateSourceMenu = sourceMenu.updateSourceMenu;
+
+  // Close button (top-left on Mac, top-right on Windows)
+  const closeBtn = createCloseBtn(() => comp.close());
+  comp.updateCloseBtn = closeBtn.updatePosition;
+
   if (initialPosition.col !== 0) switchColumn(initialPosition.col);
 
   comp.setRow = (rowIdx: number) => {
@@ -399,6 +405,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     navMap.cleanup();
     sourceMenu.cleanup();
     fillCanvasBtn.cleanup();
+    closeBtn.cleanup();
     toolbar.cleanup();
     document.body.style.overflow = "";
     container.style.display = origContainerDisplay;

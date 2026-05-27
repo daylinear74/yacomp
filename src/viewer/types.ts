@@ -35,6 +35,7 @@ export interface Comp {
   setRow: (rowIdx: number) => void;
   updateSourceMenu?: () => void;
   updateFillCanvasBtn?: () => void;
+  updateCloseBtn?: () => void;
   updateRowNav?: (idx: number) => void;
   updateScrollSpacers?: () => void;
   updateNavMap: () => void;

@@ -94,6 +94,17 @@ const GROUPS: SettingGroup[] = [
       { type: "toggle", key: "navMapDefault", label: "Minimap" },
       { type: "toggle", key: "bgLoadDefault", label: "Background loading" },
       { type: "toggle", key: "mouseSwitch", label: "Mouse switch" },
+      {
+        type: "radio",
+        key: "closeBtnPosition",
+        label: "Close button",
+        options: [
+          { label: "Auto", value: "auto" },
+          { label: "Left", value: "left" },
+          { label: "Right", value: "right" },
+        ],
+        onSave: () => { for (const c of activeComps) c.updateCloseBtn?.(); },
+      },
     ],
   },
   {

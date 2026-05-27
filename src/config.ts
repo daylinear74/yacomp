@@ -44,6 +44,7 @@ export interface YacompConfig {
   mouseSwitch: boolean;
   zoomPercentBase: "original" | "fit";
   verboseZoom: boolean;
+  closeBtnPosition: "auto" | "left" | "right";
   enabledSites: Record<SiteKey, boolean>;
   filterCycle: FilterModeId[];
   gammaCycle: GammaPresetId[];
@@ -69,6 +70,7 @@ export const DEFAULTS: Readonly<YacompConfig> = {
   mouseSwitch: true,
   zoomPercentBase: "original",
   verboseZoom: false,
+  closeBtnPosition: "auto" as const,
   enabledSites: ALL_SITES_ENABLED,
   filterCycle: [...FILTER_MODE_IDS],
   gammaCycle: [...GAMMA_PRESET_IDS],
@@ -142,6 +144,10 @@ function validate(raw: Record<string, unknown>): YacompConfig {
       typeof raw.verboseZoom === "boolean"
         ? raw.verboseZoom
         : DEFAULTS.verboseZoom,
+    closeBtnPosition:
+      raw.closeBtnPosition === "auto" || raw.closeBtnPosition === "left" || raw.closeBtnPosition === "right"
+        ? raw.closeBtnPosition
+        : DEFAULTS.closeBtnPosition,
     enabledSites: validateEnabledSites(raw.enabledSites),
     filterCycle: validateOrderedIdList(raw.filterCycle, FILTER_MODE_IDS, DEFAULTS.filterCycle),
     gammaCycle: validateOrderedIdList(raw.gammaCycle, GAMMA_PRESET_IDS, DEFAULTS.gammaCycle),
@@ -183,6 +189,7 @@ export function lazyLoadMargin(): number { return config.lazyLoadMargin; }
 export function mouseSwitch(): boolean { return config.mouseSwitch; }
 export function zoomPercentBase(): "original" | "fit" { return config.zoomPercentBase; }
 export function verboseZoom(): boolean { return config.verboseZoom; }
+export function closeBtnPosition(): "auto" | "left" | "right" { return config.closeBtnPosition; }
 
 export function siteEnabled(key: SiteKey): boolean { return config.enabledSites[key]; }
 export function filterCycle(): readonly FilterModeId[] { return config.filterCycle; }

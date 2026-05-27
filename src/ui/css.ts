@@ -76,7 +76,7 @@ export function injectCSS(): void {
       top: 50%;
       transform: translateY(-50%);
       box-sizing: border-box;
-      max-height: calc(100vh - 24px);
+      max-height: calc(100vh - 72px);
       overflow-y: auto;
       scrollbar-width: none;
       display: flex;
@@ -215,6 +215,59 @@ export function injectCSS(): void {
       pointer-events: none;
       border-radius: 1px;
     }
+    ._scf_close_btn {
+      position: fixed;
+      top: max(16px, calc(env(safe-area-inset-top) + 16px));
+      z-index: 2147483647;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      min-width: 44px;
+      min-height: 44px;
+      height: 44px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 999px;
+      background: rgba(12,12,12,.82);
+      color: #fff;
+      cursor: pointer;
+      padding: 0;
+      opacity: .48;
+      box-shadow: 0 2px 10px rgba(0,0,0,.4);
+      backdrop-filter: blur(8px);
+      transition: opacity .15s ease, background .15s ease, border-color .15s ease;
+    }
+    ._scf_close_btn:hover,
+    ._scf_close_btn:focus-visible {
+      opacity: 1;
+      border-color: rgba(255,255,255,.32);
+      background: rgba(24,24,24,.9);
+    }
+    ._scf_close_btn:focus-visible {
+      outline: 2px solid rgba(255,255,255,.72);
+      outline-offset: 2px;
+    }
+    ._scf_close_btn._scf_left { left: max(16px, calc(env(safe-area-inset-left) + 16px)); }
+    ._scf_close_btn._scf_right { right: max(56px, calc(env(safe-area-inset-right) + 56px)); }
+    ._scf_close_icon {
+      position: relative;
+      display: block;
+      width: 14px;
+      height: 14px;
+    }
+    ._scf_close_icon::before,
+    ._scf_close_icon::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 14px;
+      height: 2px;
+      border-radius: 1px;
+      background: currentColor;
+    }
+    ._scf_close_icon::before { transform: translate(-50%, -50%) rotate(45deg); }
+    ._scf_close_icon::after { transform: translate(-50%, -50%) rotate(-45deg); }
     ._scf_toolbar {
       position: fixed;
       left: max(6px, calc(env(safe-area-inset-left) + 6px));
