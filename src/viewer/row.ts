@@ -3,6 +3,7 @@
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
 import { applyFilterToImg } from "../filters/imaging";
+import { mouseSwitch } from "../config";
 import type { DragState } from "./drag";
 import type { RowData, Comp } from "./types";
 
@@ -94,7 +95,7 @@ export function buildRow(
   }
 
   rowDiv.addEventListener("mousemove", (e) => {
-    if (drag.active) return;
+    if (drag.active || !mouseSwitch()) return;
     const newCol = pointerColumnForEvent(e);
     const prevCol = parseInt(rowDiv.dataset.col!, 10);
     if (newCol !== prevCol) {
