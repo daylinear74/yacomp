@@ -2,7 +2,7 @@
 // ║  Keyboard — window capture phase                                          ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
-import { MODES, modeIndex, setModeIndex, cur } from "./filters/modes";
+import { cycleMode, cur } from "./filters/modes";
 import {
   BC_MIN, BC_MAX, isDefault, adjustBrightness, brightnessAdjustmentLabel,
   hasAdjustments, resetAdjustments,
@@ -237,11 +237,7 @@ export function setupKeyboard(): void {
 
       // F / Shift+F: cycle filter modes
       if (e.code === "KeyF") {
-        if (e.shiftKey) {
-          setModeIndex((modeIndex - 1 + MODES.length) % MODES.length);
-        } else {
-          setModeIndex((modeIndex + 1) % MODES.length);
-        }
+        cycleMode(e.shiftKey ? -1 : 1);
         syncAll();
         showToast(cur().toast);
         return;

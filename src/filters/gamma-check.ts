@@ -2,6 +2,8 @@
 // ║  Gamma mismatch check                                                     ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
+import { gammaCycle } from "../config";
+
 export type GammaMismatchCheckId =
   | "srgb-bt1886"
   | "aeqt-0p88"
@@ -45,14 +47,13 @@ export function cycleGammaMismatchCheck(
   current: GammaMismatchCheckId | null,
   direction: number,
 ): GammaMismatchCheckId | null {
-  const idx = current
-    ? GAMMA_MISMATCH_CHECK_PRESETS.findIndex((preset) => preset.id === current)
-    : -1;
-  const count = GAMMA_MISMATCH_CHECK_PRESETS.length + 1;
+  const enabledIds = gammaCycle();
+  const idx = current ? enabledIds.indexOf(current as typeof enabledIds[number]) : -1;
+  const count = enabledIds.length + 1;
   const nextIdx = (idx + (direction > 0 ? 1 : -1) + count) % count;
-  return nextIdx === GAMMA_MISMATCH_CHECK_PRESETS.length
+  return nextIdx === enabledIds.length
     ? null
-    : GAMMA_MISMATCH_CHECK_PRESETS[nextIdx].id;
+    : enabledIds[nextIdx] as GammaMismatchCheckId;
 }
 
 export function gammaMismatchCheckExponent(id: GammaMismatchCheckId): number {

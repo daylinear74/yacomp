@@ -464,7 +464,7 @@ export function injectCSS(): void {
     }
     ._scf_settings_panel {
       width: min(420px, calc(100vw - 32px));
-      max-height: min(600px, calc(100vh - 64px));
+      max-height: min(720px, calc(100vh - 48px));
       display: flex;
       flex-direction: column;
       border: 1px solid rgba(255,255,255,.18);
@@ -643,6 +643,94 @@ export function injectCSS(): void {
       cursor: pointer;
     }
     ._scf_settings_done:hover { background: rgba(255,255,255,.18); }
+    ._scf_settings_chip_grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 8px 0;
+    }
+    ._scf_settings_chip {
+      padding: 5px 12px;
+      border: 1px solid rgba(255,255,255,.15);
+      border-radius: 6px;
+      background: transparent;
+      color: rgba(255,255,255,.35);
+      font: 600 12px/1 system-ui, sans-serif;
+      cursor: pointer;
+      transition: background .12s, color .12s, border-color .12s;
+    }
+    ._scf_settings_chip:hover {
+      border-color: rgba(255,255,255,.3);
+      color: rgba(255,255,255,.6);
+    }
+    ._scf_settings_chip._scf_on {
+      background: rgba(255,255,255,.1);
+      border-color: rgba(255,255,255,.35);
+      color: rgba(255,255,255,.88);
+    }
+    ._scf_settings_ordered_list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin: 4px 0 8px;
+    }
+    ._scf_settings_ordered_item {
+      display: grid;
+      grid-template-columns: 22px 16px minmax(0, 1fr);
+      align-items: center;
+      min-height: 34px;
+      gap: 6px;
+      padding: 2px 4px;
+      border-radius: 6px;
+      transition: background .12s;
+    }
+    ._scf_settings_ordered_item._scf_enabled {
+      background: rgba(255,255,255,.05);
+      cursor: grab;
+    }
+    ._scf_settings_ordered_item._scf_enabled:active { cursor: grabbing; }
+    ._scf_settings_ordered_item:hover {
+      background: rgba(255,255,255,.08);
+    }
+    ._scf_settings_ordered_item._scf_dragging {
+      opacity: .35;
+    }
+    ._scf_settings_ordered_item._scf_drag_above {
+      box-shadow: 0 -2px 0 0 rgba(100,200,120,.6);
+    }
+    ._scf_settings_ordered_item._scf_drag_below {
+      box-shadow: 0 2px 0 0 rgba(100,200,120,.6);
+    }
+    ._scf_settings_ordered_check {
+      margin: 0;
+      accent-color: rgba(100,200,120,.8);
+      cursor: pointer;
+    }
+    ._scf_settings_ordered_handle {
+      color: rgba(255,255,255,.25);
+      font-size: 14px;
+      line-height: 1;
+      user-select: none;
+    }
+    ._scf_settings_ordered_item._scf_enabled ._scf_settings_ordered_handle {
+      color: rgba(255,255,255,.4);
+    }
+    ._scf_settings_ordered_label {
+      color: rgba(255,255,255,.88);
+      font-weight: 600;
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    ._scf_settings_ordered_item:not(._scf_enabled) ._scf_settings_ordered_label {
+      color: rgba(255,255,255,.4);
+    }
+    ._scf_settings_ordered_sep {
+      height: 1px;
+      background: rgba(255,255,255,.1);
+      margin: 4px 0;
+    }
   `;
   document.head.appendChild(style);
 }

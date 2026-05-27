@@ -2,7 +2,7 @@
 // ║  Yet Another Comparison Viewer — Entry point                              ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
-import "./config";
+import { siteEnabled } from "./config";
 import { hasAdjustments } from "./filters/brightness";
 import { applyToImg, syncAll } from "./filters/imaging";
 import { setupKeyboard } from "./keyboard";
@@ -48,15 +48,15 @@ import { setupUnit3D } from "./sites/unit3d";
       }),
     );
     setupKeyboard();
-    setupBHD();
-    setupComppics();
-    setupFRDS();
-    setupGPW();
-    setupHDBits();
-    setupPTP();
-    setupSlowPics();
-    setupSSD();
-    setupUnit3D();
+    if (siteEnabled("bhd")) setupBHD();
+    if (siteEnabled("comppics")) setupComppics();
+    if (siteEnabled("frds")) setupFRDS();
+    if (siteEnabled("gpw")) setupGPW();
+    if (siteEnabled("hdbits")) setupHDBits();
+    if (siteEnabled("ptp")) setupPTP();
+    if (siteEnabled("slowpics")) setupSlowPics();
+    if (siteEnabled("ssd")) setupSSD();
+    if (siteEnabled("blutopia") || siteEnabled("aither")) setupUnit3D();
   }
 
   if (document.body) init();

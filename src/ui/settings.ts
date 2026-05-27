@@ -5,6 +5,9 @@
 import {
   getConfig, saveConfig, resetConfig, DEFAULTS,
   type YacompConfig,
+  SITE_KEYS, SITE_LABELS, type SiteKey,
+  FILTER_MODE_IDS, type FilterModeId,
+  GAMMA_PRESET_IDS, type GammaPresetId,
 } from "../config";
 import { injectCSS } from "./css";
 
@@ -64,6 +67,7 @@ const GROUPS: SettingGroup[] = [
       },
       { type: "toggle", key: "navMapDefault", label: "Minimap" },
       { type: "toggle", key: "bgLoadDefault", label: "Background loading" },
+      { type: "toggle", key: "mouseSwitch", label: "Mouse switch" },
     ],
   },
   {
@@ -213,6 +217,184 @@ function buildSlider(def: SliderDef, renderers: Renderer[]): HTMLElement {
   return row;
 }
 
+const FILTER_MODE_LABELS: Record<FilterModeId, string> = {
+  solar1: "Solar x1",
+  solar2: "Solar x2",
+  residual: "Residual",
+  luma: "Luma",
+  chroma: "Chroma",
+};
+
+const GAMMA_PRESET_LABELS: Record<GammaPresetId, string> = {
+  "srgb-bt1886": "0.92",
+  "aeqt-0p88": "0.88",
+  "legacy-mac": "0.82",
+};
+
+function buildSiteChips(renderers: Renderer[]): HTMLElement {
+  const grid = document.createElement("div");
+  grid.className = "_scf_settings_chip_grid";
+
+  const chips: { key: SiteKey; btn: HTMLButtonElement }[] = [];
+
+  for (const key of SITE_KEYS) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "_scf_settings_chip";
+    btn.textContent = SITE_LABELS[key];
+    btn.addEventListener("click", () => {
+      const current = getConfig().enabledSites;
+      saveConfig({ enabledSites: { ...current, [key]: !current[key] } });
+      sync();
+    });
+    chips.push({ key, btn });
+    grid.appendChild(btn);
+  }
+
+  function sync() {
+    const sites = getConfig().enabledSites;
+    for (const { key, btn } of chips) {
+      btn.classList.toggle("_scf_on", !!sites[key]);
+    }
+  }
+
+  renderers.push(sync);
+  return grid;
+}
+
+function buildOrderedList<T extends string>(
+  allIds: readonly T[],
+  labels: Record<T, string>,
+  configKey: "filterCycle" | "gammaCycle",
+  renderers: Renderer[],
+): HTMLElement {
+  const container = document.createElement("div");
+  container.className = "_scf_settings_ordered_list";
+
+  let dragSrcIdx = -1;
+
+  function commitReorder(fromIdx: number, toIdx: number, above: boolean): void {
+    if (fromIdx === toIdx) return;
+    const current = [...(getConfig()[configKey] as string[])];
+    const [moved] = current.splice(fromIdx, 1);
+    let insertAt = toIdx > fromIdx ? toIdx - 1 : toIdx;
+    if (!above) insertAt++;
+    current.splice(insertAt, 0, moved);
+    saveConfig({ [configKey]: current });
+    rebuild();
+  }
+
+  function buildEnabledItem(id: T, label: string, index: number): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "_scf_settings_ordered_item _scf_enabled";
+    row.draggable = true;
+
+    row.addEventListener("dragstart", (e) => {
+      dragSrcIdx = index;
+      row.classList.add("_scf_dragging");
+      e.dataTransfer!.effectAllowed = "move";
+    });
+    row.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.dataTransfer!.dropEffect = "move";
+      const rect = row.getBoundingClientRect();
+      const above = e.clientY < rect.top + rect.height / 2;
+      row.classList.toggle("_scf_drag_above", above);
+      row.classList.toggle("_scf_drag_below", !above);
+    });
+    row.addEventListener("dragleave", () => {
+      row.classList.remove("_scf_drag_above", "_scf_drag_below");
+    });
+    row.addEventListener("drop", (e) => {
+      e.preventDefault();
+      row.classList.remove("_scf_drag_above", "_scf_drag_below");
+      const rect = row.getBoundingClientRect();
+      commitReorder(dragSrcIdx, index, e.clientY < rect.top + rect.height / 2);
+    });
+    row.addEventListener("dragend", () => {
+      row.classList.remove("_scf_dragging");
+      container.querySelectorAll("._scf_drag_above, ._scf_drag_below").forEach((el) => {
+        el.classList.remove("_scf_drag_above", "_scf_drag_below");
+      });
+      dragSrcIdx = -1;
+    });
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = true;
+    checkbox.className = "_scf_settings_ordered_check";
+    checkbox.addEventListener("change", (e) => {
+      e.stopPropagation();
+      const current = [...(getConfig()[configKey] as string[])];
+      const idx = current.indexOf(id);
+      if (idx !== -1) current.splice(idx, 1);
+      saveConfig({ [configKey]: current });
+      rebuild();
+    });
+
+    const handle = document.createElement("span");
+    handle.className = "_scf_settings_ordered_handle";
+    handle.textContent = "⡇";
+
+    const labelEl = document.createElement("span");
+    labelEl.className = "_scf_settings_ordered_label";
+    labelEl.textContent = label;
+
+    row.append(checkbox, handle, labelEl);
+    return row;
+  }
+
+  function buildDisabledItem(id: T, label: string): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "_scf_settings_ordered_item";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = false;
+    checkbox.className = "_scf_settings_ordered_check";
+    checkbox.addEventListener("change", () => {
+      const current = [...(getConfig()[configKey] as string[])];
+      current.push(id);
+      saveConfig({ [configKey]: current });
+      rebuild();
+    });
+
+    const handle = document.createElement("span");
+    handle.className = "_scf_settings_ordered_handle";
+
+    const labelEl = document.createElement("span");
+    labelEl.className = "_scf_settings_ordered_label";
+    labelEl.textContent = label;
+
+    row.append(checkbox, handle, labelEl);
+    return row;
+  }
+
+  function rebuild(): void {
+    container.replaceChildren();
+    const enabled = getConfig()[configKey] as T[];
+    const enabledSet = new Set<string>(enabled);
+    const disabled = allIds.filter((id) => !enabledSet.has(id));
+
+    for (let i = 0; i < enabled.length; i++) {
+      container.appendChild(buildEnabledItem(enabled[i], labels[enabled[i]], i));
+    }
+
+    if (enabled.length > 0 && disabled.length > 0) {
+      const sep = document.createElement("div");
+      sep.className = "_scf_settings_ordered_sep";
+      container.appendChild(sep);
+    }
+
+    for (const id of disabled) {
+      container.appendChild(buildDisabledItem(id, labels[id]));
+    }
+  }
+
+  renderers.push(rebuild);
+  return container;
+}
+
 function close(): void {
   if (overlay) {
     overlay.remove();
@@ -272,6 +454,27 @@ export function openSettings(): void {
       body.appendChild(el);
     }
   }
+
+  // Sites group
+  const sitesLabel = document.createElement("div");
+  sitesLabel.className = "_scf_settings_group_label";
+  sitesLabel.textContent = "Sites";
+  body.appendChild(sitesLabel);
+  body.appendChild(buildSiteChips(renderers));
+
+  // Filter Cycle group
+  const filterLabel = document.createElement("div");
+  filterLabel.className = "_scf_settings_group_label";
+  filterLabel.textContent = "Filter Cycle";
+  body.appendChild(filterLabel);
+  body.appendChild(buildOrderedList(FILTER_MODE_IDS, FILTER_MODE_LABELS, "filterCycle", renderers));
+
+  // Gamma Check Cycle group
+  const gammaLabel = document.createElement("div");
+  gammaLabel.className = "_scf_settings_group_label";
+  gammaLabel.textContent = "Gamma Check Cycle";
+  body.appendChild(gammaLabel);
+  body.appendChild(buildOrderedList(GAMMA_PRESET_IDS, GAMMA_PRESET_LABELS, "gammaCycle", renderers));
 
   // Footer
   const footer = document.createElement("div");

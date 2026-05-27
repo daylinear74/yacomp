@@ -10,6 +10,7 @@ import { updateHUD } from "../ui/hud";
 import {
   defaultZoomMode as cfgZoomMode,
   fillCanvasDefault, navMapDefault, bgLoadDefault, lazyLoadMargin,
+  mouseSwitch as cfgMouseSwitch,
 } from "../config";
 import {
   zoomMode, zoomWidth, setZoomMode, setZoomWidth,
@@ -299,7 +300,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   };
 
   compDiv.addEventListener("mousemove", (e) => {
-    if (drag.active) return;
+    if (drag.active || !cfgMouseSwitch()) return;
     const newCol = pointerColumnForEvent(e);
     if (newCol !== comp.currentCol) switchColumn(newCol);
   });
