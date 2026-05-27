@@ -66,6 +66,7 @@ install the latest release](https://github.com/daylinear74/yacomp/releases/lates
 | `Ctrl` + wheel | Cursor-centered zoom |
 | `0` | Fit to window |
 | `O` | Show image at 1:1 |
+| `C` | Toggle canvas fill / fit |
 | `H` / `L` or `Left` / `Right` | Previous / next source |
 | `K` / `J` or `Up` / `Down` | Previous / next row |
 | `1`-`9` | Jump to source number |
@@ -73,6 +74,27 @@ install the latest release](https://github.com/daylinear74/yacomp/releases/lates
 | `R` | Toggle row navigation |
 | `B` | Toggle background loading |
 | `Esc` | Reset active adjustments, or close the viewer |
+
+## Configuration
+
+Open the settings panel from the userscript manager menu (**yacomp Settings**).
+Settings persist via `GM_setValue` and are scoped per userscript manager.
+
+- **Viewer defaults** — initial zoom mode (`Fit` / `1:1`), the meaning of
+  100% in the zoom indicator (`Original` native pixels vs `Fit` to viewport),
+  brief/verbose zoom info, canvas fill vs fit, minimap, background loading,
+  hover-to-switch source, and close-button position (auto / left / right).
+- **Adjustments** — brightness/contrast step size, toast duration, zoom scale
+  factor, and lazy-load margin.
+- **Sites** — enable or disable yacomp per supported site without uninstalling.
+- **Filter cycle** — pick which visual filters are reachable via `F` /
+  `Shift+F`, and drag to reorder them.
+- **Gamma cycle** — pick which gamma-mismatch presets are reachable via `G` /
+  `Shift+G`, and drag to reorder them.
+
+A schema version is stored alongside the config; older payloads are migrated
+forward on first load, and unknown or out-of-range values fall back to the
+built-in defaults.
 
 ## Development
 
