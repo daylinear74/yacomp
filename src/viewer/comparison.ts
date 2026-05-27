@@ -15,7 +15,7 @@ import {
 } from "../config";
 import {
   zoomMode, zoomWidth, setZoomMode, setZoomWidth,
-  applyZoom, calcZoom, captureZoomAnchor, zoomToast, navMapEnabled,
+  applyZoom, calcZoom, snapZoom, captureZoomAnchor, zoomToast, navMapEnabled,
   fillCanvasEnabled, applyFillCanvas, setFillCanvas, setNavMap,
   activeComps, addComp, removeComp,
   type CapturedZoomAnchor,
@@ -139,7 +139,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     e.preventDefault();
     const oldW = zoomMode === "fit" ? window.innerWidth : zoomWidth;
     const anchor = getWheelZoomGestureAnchor(wheelZoomGesture, comp, e);
-    setZoomWidth(calcZoom(oldW, e.deltaY < 0 ? 1 : -1));
+    setZoomWidth(snapZoom(oldW, calcZoom(oldW, e.deltaY < 0 ? 1 : -1)));
     setZoomMode("custom");
     applyZoom(anchor ? [anchor] : []);
     showToast(zoomToast());

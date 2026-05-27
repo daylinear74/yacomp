@@ -42,6 +42,7 @@ export interface YacompConfig {
   zoomScaleFactor: number;
   lazyLoadMargin: number;
   mouseSwitch: boolean;
+  zoomPercentBase: "original" | "fit";
   enabledSites: Record<SiteKey, boolean>;
   filterCycle: FilterModeId[];
   gammaCycle: GammaPresetId[];
@@ -65,6 +66,7 @@ export const DEFAULTS: Readonly<YacompConfig> = {
   zoomScaleFactor: 1.25,
   lazyLoadMargin: 200,
   mouseSwitch: true,
+  zoomPercentBase: "original",
   enabledSites: ALL_SITES_ENABLED,
   filterCycle: [...FILTER_MODE_IDS],
   gammaCycle: [...GAMMA_PRESET_IDS],
@@ -130,6 +132,10 @@ function validate(raw: Record<string, unknown>): YacompConfig {
       typeof raw.mouseSwitch === "boolean"
         ? raw.mouseSwitch
         : DEFAULTS.mouseSwitch,
+    zoomPercentBase:
+      raw.zoomPercentBase === "original" || raw.zoomPercentBase === "fit"
+        ? raw.zoomPercentBase
+        : DEFAULTS.zoomPercentBase,
     enabledSites: validateEnabledSites(raw.enabledSites),
     filterCycle: validateOrderedIdList(raw.filterCycle, FILTER_MODE_IDS, DEFAULTS.filterCycle),
     gammaCycle: validateOrderedIdList(raw.gammaCycle, GAMMA_PRESET_IDS, DEFAULTS.gammaCycle),
@@ -169,6 +175,7 @@ export function toastDuration(): number { return config.toastDuration; }
 export function zoomScaleFactor(): number { return config.zoomScaleFactor; }
 export function lazyLoadMargin(): number { return config.lazyLoadMargin; }
 export function mouseSwitch(): boolean { return config.mouseSwitch; }
+export function zoomPercentBase(): "original" | "fit" { return config.zoomPercentBase; }
 
 export function siteEnabled(key: SiteKey): boolean { return config.enabledSites[key]; }
 export function filterCycle(): readonly FilterModeId[] { return config.filterCycle; }

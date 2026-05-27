@@ -59,6 +59,15 @@ const GROUPS: SettingGroup[] = [
       },
       {
         type: "radio",
+        key: "zoomPercentBase",
+        label: "Zoom 100%",
+        options: [
+          { label: "Original", value: "original" },
+          { label: "Fit", value: "fit" },
+        ],
+      },
+      {
+        type: "radio",
         key: "fillCanvasDefault",
         label: "Canvas",
         options: [

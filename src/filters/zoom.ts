@@ -2,7 +2,7 @@
 // ║  Zoom state                                                               ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
-import { zoomScaleFactor } from "../config";
+import { zoomScaleFactor, zoomPercentBase } from "../config";
 import { showToast } from "../ui/toast";
 import { getShadowRoot } from "../ui/shadow";
 import type { Comp } from "../viewer/types";
@@ -210,12 +210,17 @@ export function applyZoom(anchors: CapturedZoomAnchor[] = []): void {
   }
 }
 
+function getReferenceWidth(): number {
+  if (zoomPercentBase() === "fit") return window.innerWidth;
+  const sizer = getShadowRoot().querySelector("._scf_comp_sizer") as HTMLImageElement | null;
+  return sizer?.naturalWidth || window.innerWidth;
+}
+
 export function zoomToast(): string {
   if (zoomMode === "fit") return "🔍 Fit";
   if (zoomMode === "1:1") return "🔍 1:1";
-  return (
-    "🔍 " + Math.round((zoomWidth / window.innerWidth) * 100) + "%"
-  );
+  const ref = getReferenceWidth();
+  return "🔍 " + Math.round((zoomWidth / ref) * 100) + "%";
 }
 
 export function calcZoom(base: number, direction: number): number {
@@ -225,10 +230,21 @@ export function calcZoom(base: number, direction: number): number {
     : Math.max(Math.round(base / scale), Math.round(window.innerWidth * 0.1));
 }
 
+export function snapZoom(base: number, next: number): number {
+  const ref = getReferenceWidth();
+  if (ref > 0 && base !== ref) {
+    if ((next > base && base < ref && next > ref) ||
+        (next < base && base > ref && next < ref)) {
+      return ref;
+    }
+  }
+  return next;
+}
+
 export function doZoomStep(dir: number): void {
   const anchors = captureActiveZoomAnchors();
   const base = zoomMode === "fit" ? window.innerWidth : zoomWidth;
-  zoomWidth = calcZoom(base, dir);
+  zoomWidth = snapZoom(base, calcZoom(base, dir));
   zoomMode = "custom";
   applyZoom(anchors);
   showToast(zoomToast());
