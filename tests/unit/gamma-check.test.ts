@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect, beforeEach } from "bun:test";
 import {
   cycleGammaMismatchCheck,
   gammaMismatchCheckExponent,
@@ -8,8 +8,13 @@ import {
   gammaMismatchCheckName,
   gammaMismatchCheckHudLabel,
 } from "../../src/filters/gamma-check";
+import { resetConfig, saveConfig } from "../../src/config";
 
-describe("cycleGammaMismatchCheck", () => {
+beforeEach(() => {
+  resetConfig();
+});
+
+describe("cycleGammaMismatchCheck — default cycle (all presets enabled)", () => {
   test("forward from off enters the first preset", () => {
     expect(cycleGammaMismatchCheck(null, 1)).toBe("srgb-bt1886");
   });
@@ -25,6 +30,40 @@ describe("cycleGammaMismatchCheck", () => {
   });
   test("backward from the first preset returns to off", () => {
     expect(cycleGammaMismatchCheck("srgb-bt1886", -1)).toBeNull();
+  });
+});
+
+describe("cycleGammaMismatchCheck — honors configurable gammaCycle", () => {
+  // The function reads gammaCycle() at every call. These tests pin down the
+  // configurable-subset behavior: changing the user's enabled set in
+  // settings must actually narrow the cycle.
+
+  test("single-preset cycle toggles between that preset and off", () => {
+    saveConfig({ gammaCycle: ["aeqt-0p88"] });
+    expect(cycleGammaMismatchCheck(null, 1)).toBe("aeqt-0p88");
+    expect(cycleGammaMismatchCheck("aeqt-0p88", 1)).toBeNull();
+    expect(cycleGammaMismatchCheck(null, -1)).toBe("aeqt-0p88");
+  });
+  test("two-preset cycle in custom order is honored", () => {
+    saveConfig({ gammaCycle: ["legacy-mac", "srgb-bt1886"] });
+    expect(cycleGammaMismatchCheck(null, 1)).toBe("legacy-mac");
+    expect(cycleGammaMismatchCheck("legacy-mac", 1)).toBe("srgb-bt1886");
+    expect(cycleGammaMismatchCheck("srgb-bt1886", 1)).toBeNull();
+  });
+  test("empty cycle keeps the user at off", () => {
+    saveConfig({ gammaCycle: [] });
+    expect(cycleGammaMismatchCheck(null, 1)).toBeNull();
+    expect(cycleGammaMismatchCheck(null, -1)).toBeNull();
+  });
+  test("active preset removed from the cycle: forward skips to start, backward to last", () => {
+    // User was on aeqt-0p88, then removed it from settings. The function
+    // treats the no-longer-present id as idx -1 and the modular arithmetic
+    // (count = enabled.length + 1) wraps it to the cycle's bookends.
+    saveConfig({ gammaCycle: ["srgb-bt1886", "legacy-mac"] });
+    // (idx=-1) + 1 + 3 = 3, 3 % 3 = 0 → first remaining preset.
+    expect(cycleGammaMismatchCheck("aeqt-0p88", 1)).toBe("srgb-bt1886");
+    // (idx=-1) + -1 + 3 = 1, 1 % 3 = 1 → enabledIds[1] (last enabled).
+    expect(cycleGammaMismatchCheck("aeqt-0p88", -1)).toBe("legacy-mac");
   });
 });
 
