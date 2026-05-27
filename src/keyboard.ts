@@ -8,6 +8,7 @@ import {
   hasAdjustments, resetAdjustments,
 } from "./filters/brightness";
 import { bcStep } from "./config";
+import { siteBehaviorEnabled } from "./sites/current-site";
 import {
   cycleGammaMismatchCheck,
   gammaMismatchCheckName,
@@ -81,12 +82,13 @@ function hasCompAdjustments(): boolean {
   return false;
 }
 
-export function setupKeyboard(): void {
+export function setupKeyboard(hostname?: string): void {
   window.addEventListener(
     "keydown",
     (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (isEditing()) return;
+      if (activeComps.length === 0 && !siteBehaviorEnabled(hostname)) return;
 
       // V: open viewer on slow.pics / comp.pics (before comp-only guard)
       if (e.code === "KeyV" && activeComps.length === 0) {
@@ -231,6 +233,7 @@ export function setupKeyboard(): void {
     (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (isEditing()) return;
+      if (activeComps.length === 0 && !siteBehaviorEnabled(hostname)) return;
 
       if (e.key === "Escape" && activeComps.length === 0 && hasAdjustments()) {
         resetAdjustments();

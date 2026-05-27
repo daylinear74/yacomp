@@ -665,6 +665,42 @@ async function readActiveBrightnessFilter(page: Page): Promise<string> {
   });
 }
 
+async function readFirstPageImageFilter(page: Page): Promise<string> {
+  return await page.locator(".fixture-row img").first().evaluate(
+    (img: HTMLImageElement) => img.style.filter,
+  );
+}
+
+test("settings: disabled slow.pics prevents V shortcut and re-enabling restores it", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await setConfig(page, { enabledSites: { slowpics: false } });
+
+  await page.keyboard.press("KeyV");
+  await expect(page.locator("._scf_comp")).toHaveCount(0);
+
+  await setConfig(page, { enabledSites: { slowpics: true } });
+  await page.keyboard.press("KeyV");
+  await expect(page.locator("._scf_comp")).toBeVisible();
+});
+
+test("settings: disabled slow.pics prevents page-level F filters and re-enabling restores them", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await setConfig(page, { enabledSites: { slowpics: false } });
+
+  await page.keyboard.press("KeyF");
+  await page.waitForTimeout(100);
+  expect(await readFirstPageImageFilter(page)).toBe("");
+
+  await setConfig(page, { enabledSites: { slowpics: true } });
+  await page.keyboard.press("KeyF");
+  await expect.poll(() => readFirstPageImageFilter(page), { timeout: 5000 })
+    .toContain("url(");
+});
+
 test("settings: bcStep change propagates to bracket-key brightness adjustment", async ({
   page,
 }) => {

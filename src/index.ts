@@ -16,6 +16,7 @@ import { setupPTP } from "./sites/ptp";
 import { setupSlowPics } from "./sites/slowpics";
 import { setupSSD } from "./sites/ssd";
 import { setupUnit3D } from "./sites/unit3d";
+import { siteBehaviorEnabled } from "./sites/current-site";
 
 (function () {
   "use strict";
@@ -25,7 +26,7 @@ import { setupUnit3D } from "./sites/unit3d";
   // ╚═══════════════════════════════════════════════════════════════════════════╝
 
   const mo = new MutationObserver((mutations) => {
-    if (!hasAdjustments()) return;
+    if (!siteBehaviorEnabled() || !hasAdjustments()) return;
     for (const { addedNodes } of mutations) {
       for (const node of addedNodes) {
         if (node.nodeName === "IMG") applyToImg(node as HTMLImageElement);
@@ -44,7 +45,11 @@ import { setupUnit3D } from "./sites/unit3d";
     mo.observe(document.body, { childList: true, subtree: true });
     (["popstate", "hashchange"] as const).forEach((ev) =>
       window.addEventListener(ev, () => {
-        if (hasAdjustments()) setTimeout(syncAll, 300);
+        if (siteBehaviorEnabled() && hasAdjustments()) {
+          setTimeout(() => {
+            if (siteBehaviorEnabled()) syncAll();
+          }, 300);
+        }
       }),
     );
     setupKeyboard();

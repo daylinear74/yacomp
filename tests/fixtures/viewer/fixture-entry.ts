@@ -91,7 +91,7 @@ function renderFixture(): void {
 }
 
 function boot(): void {
-  setupKeyboard();
+  setupKeyboard("slow.pics");
 
   window.collection = collection;
   renderFixture();
