@@ -52,6 +52,10 @@ function labelTextFromNode(node: ChildNode): string | null {
   return t ? t.replace(/:$/, "").trim() : null;
 }
 
+function isExternalTextLink(anchor: HTMLAnchorElement): boolean {
+  return !anchor.querySelector("img") && anchor.origin !== location.origin;
+}
+
 /** Walk container's childNodes, collecting BR-separated image groups with labels */
 function collectGroups(container: Element): GroupsResult | null {
   const groups: GridCell[][] = [];
@@ -72,19 +76,27 @@ function collectGroups(container: Element): GroupsResult | null {
         pendingLabelEl = null;
       }
     } else if (node.nodeName === "A") {
-      const img = (node as Element).querySelector("img") as HTMLImageElement | null;
+      const anchor = node as HTMLAnchorElement;
+      const img = anchor.querySelector("img") as HTMLImageElement | null;
       if (img) {
         const isHdb = /\/\/t\.hdbits\.org\//i.test(img.src);
         const full = isHdb
           ? hdbFull(img.src)
-          : /\.(jpe?g|png|webp|gif|avif|bmp)(\?|$)/i.test((node as HTMLAnchorElement).href)
-            ? (node as HTMLAnchorElement).href
+          : /\.(jpe?g|png|webp|gif|avif|bmp)(\?|$)/i.test(anchor.href)
+            ? anchor.href
             : img.src;
-        group.push({ thumb: img.src, full, a: node as HTMLAnchorElement, img });
+        group.push({ thumb: img.src, full, a: anchor, img });
+      } else if (!group.length && isExternalTextLink(anchor)) {
+        // A heading followed by an external comparison URL describes that
+        // linked comparison, not arbitrary inline screenshots that follow it.
+        pendingLabel = null;
+        pendingLabelEl = null;
       }
     } else if (node.nodeType === 1 && (node as Element).querySelector("img")) {
       for (const child of node.childNodes) visit(child);
-    } else if (!group.length) {
+    } else if (!group.length && node.nodeName !== "TABLE") {
+      // Technical-information tables such as BDInfo contain slash-delimited
+      // codec metadata; their last line is not a label for later screenshots.
       const t = labelTextFromNode(node);
       if (t) {
         pendingLabel = t;
