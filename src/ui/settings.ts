@@ -121,11 +121,12 @@ const GROUPS: SettingGroup[] = [
         type: "radio",
         key: "closeBtnPosition",
         label: "Close button",
-        tooltip: "Where the viewer's close button sits. Auto picks left on macOS and right elsewhere.",
+        tooltip: "Where the viewer's close button sits. Auto picks left on macOS and right elsewhere. Hide removes the button — close via Esc.",
         options: [
           { label: "Auto", value: "auto" },
           { label: "Left", value: "left" },
           { label: "Right", value: "right" },
+          { label: "Hide", value: "hide" },
         ],
         onSave: () => { for (const c of activeComps) c.updateCloseBtn?.(); },
       },

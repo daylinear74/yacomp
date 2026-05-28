@@ -22,4 +22,8 @@ describe("resolveCloseBtnPosition", () => {
   test("auto off mac falls back to right", () => {
     expect(resolveCloseBtnPosition("auto", false)).toBe("right");
   });
+  test("explicit 'hide' wins regardless of platform", () => {
+    expect(resolveCloseBtnPosition("hide", true)).toBe("hide");
+    expect(resolveCloseBtnPosition("hide", false)).toBe("hide");
+  });
 });

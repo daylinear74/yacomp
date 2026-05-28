@@ -5,10 +5,10 @@ import { getShadowRoot } from "../ui/shadow";
 // in unit tests without poking at `navigator.userAgent` (which the real
 // module-level constant resolves once at import time).
 export function resolveCloseBtnPosition(
-  pref: "auto" | "left" | "right",
+  pref: "auto" | "left" | "right" | "hide",
   isMac: boolean,
-): "left" | "right" {
-  if (pref === "left" || pref === "right") return pref;
+): "left" | "right" | "hide" {
+  if (pref === "left" || pref === "right" || pref === "hide") return pref;
   return isMac ? "left" : "right";
 }
 
@@ -16,7 +16,7 @@ const isMac =
   typeof navigator !== "undefined" &&
   /Mac|iPhone|iPad/.test(navigator.userAgent);
 
-function resolvePosition(): "left" | "right" {
+function resolvePosition(): "left" | "right" | "hide" {
   return resolveCloseBtnPosition(closeBtnPosition(), isMac);
 }
 
@@ -45,7 +45,8 @@ export function createCloseBtn(onClose: () => void): CloseBtn {
 
   function updatePosition() {
     const pos = resolvePosition();
-    closeBtnEl.className = "_scf_close_btn" + (pos === "left" ? " _scf_left" : " _scf_right");
+    const sideClass = pos === "left" ? " _scf_left" : " _scf_right";
+    closeBtnEl.className = "_scf_close_btn" + sideClass + (pos === "hide" ? " _scf_hidden" : "");
   }
 
   updatePosition();
