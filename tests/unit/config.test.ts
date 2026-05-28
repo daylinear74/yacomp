@@ -62,8 +62,9 @@ describe("validate — discriminated unions", () => {
       DEFAULTS.defaultZoomMode,
     );
   });
-  test("closeBtnPosition only accepts auto/left/right", () => {
+  test("closeBtnPosition only accepts auto/left/right/hide", () => {
     expect(validate({ closeBtnPosition: "left" }).closeBtnPosition).toBe("left");
+    expect(validate({ closeBtnPosition: "hide" }).closeBtnPosition).toBe("hide");
     expect(validate({ closeBtnPosition: "center" }).closeBtnPosition).toBe("auto");
   });
   test("zoomPercentBase only accepts 'original' or 'fit'", () => {

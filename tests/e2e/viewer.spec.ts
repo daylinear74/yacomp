@@ -643,7 +643,7 @@ test("gamma mismatch filter defs live in the same tree as the comp images", asyn
 interface YacompTestHooks {
   saveConfig: (partial: Record<string, unknown>) => void;
   resetConfig: () => void;
-  getConfig: () => { closeBtnPosition: "auto" | "left" | "right" };
+  getConfig: () => { closeBtnPosition: "auto" | "left" | "right" | "hide" };
   openSettings: () => void;
 }
 

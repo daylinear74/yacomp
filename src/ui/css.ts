@@ -258,6 +258,7 @@ export function injectCSS(): void {
     }
     ._scf_close_btn._scf_left { left: max(16px, calc(env(safe-area-inset-left) + 16px)); }
     ._scf_close_btn._scf_right { right: max(56px, calc(env(safe-area-inset-right) + 56px)); }
+    ._scf_close_btn._scf_hidden { display: none; }
     ._scf_close_icon {
       position: relative;
       display: block;
