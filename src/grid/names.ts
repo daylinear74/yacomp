@@ -25,31 +25,94 @@ function cleanNameCandidate(text: string): string {
   return text.replace(GENERIC_HEADING_PREFIX_RE, "").trim();
 }
 
+// Strip a leading bbcode/bracket thread-tag such as "[Comparisons] " that
+// leaks into the first source label when names are derived from a thread
+// title or leading post text. Per project decision we strip ONLY the bracket
+// tag — the rest of the label (movie name, year, etc.) is kept verbatim.
+const LEADING_TAG_RE = /^\s*\[[^\]]*\]\s*/;
+
+// A forum quote attribution ("Username wrote:") — not a source label.
+export function isQuoteAttribution(text: string): boolean {
+  return /\bwrote\s*:?\s*$/i.test(text.trim());
+}
+// A field-label heading ("Short description:", "Long description:") — not a
+// source label; the real comparison line usually follows it.
+export function isFieldLabel(text: string): boolean {
+  return /\bdescription\s*:?\s*$/i.test(text.trim());
+}
+/** Text that should never be used as a source label. */
+export function isNonSourceLabel(text: string): boolean {
+  return isQuoteAttribution(text) || isFieldLabel(text);
+}
+
 function cleanNamePart(text: string): string {
-  return text.replace(/^-+|-+$/g, "").trim();
+  // A source label is a single line; anything after a hard line break is
+  // spillover from the next element (most commonly the first screenshot's
+  // frame-row index, e.g. "…madVRhdrMeasure165 \n \n \n1").
+  let s = text.replace(/[\r\n][\s\S]*$/, "");
+  // Strip a leading bracket thread-tag ("[Comparisons] Movie" → "Movie"), but
+  // only when text survives — a fully-bracketed label such as "[NOR 35036 kbps]"
+  // is itself the source name and must be kept verbatim, brackets included.
+  const detagged = s.replace(LEADING_TAG_RE, "");
+  if (detagged.trim()) s = detagged;
+  return s.replace(/^-+|-+$/g, "").trim();
+}
+
+// A label part that is purely a file size, e.g. "2.46 GB", "5.25 GiB",
+// "(1.83 GB)". The size belongs to the source it sits next to — it is not a
+// separate comparison column — so it gets folded into the preceding label.
+const PURE_SIZE_RE = /^\(?\s*(\d+(?:\.\d+)?\s*[KMGT]i?B)\s*\)?$/i;
+
+function sizeOf(part: string): string | null {
+  const m = part.trim().match(PURE_SIZE_RE);
+  return m ? m[1].replace(/\s+/g, " ").trim() : null;
+}
+
+/** Fold any pure-file-size part into the preceding source label as a
+ *  parenthesized suffix:
+ *    ["WEBRip NTb … x264", "2.46 GB"] → ["WEBRip NTb … x264 (2.46 GB)"] */
+function foldFileSizeParts(parts: string[]): string[] {
+  const out: string[] = [];
+  for (const p of parts) {
+    const size = sizeOf(p);
+    if (size && out.length) {
+      out[out.length - 1] = `${out[out.length - 1]} (${size})`;
+    } else {
+      out.push(p);
+    }
+  }
+  return out;
+}
+
+/** Fold a trailing file size that is part of a single source label —
+ *  "WEBRip … x264 - 2.46 GB" / "WEBRip … x264 2.46 GB" → "WEBRip … x264 (2.46 GB)".
+ *  A size already in parentheses is left untouched. */
+export function foldTrailingSize(label: string): string {
+  const m = label.match(/^(.*\S)[\s-]+(\d+(?:\.\d+)?\s*[KMGT]i?B)\s*$/i);
+  if (!m) return label;
+  const base = m[1].replace(/\s*[-–]\s*$/, "").trim();
+  return base ? `${base} (${m[2].replace(/\s+/g, " ").trim()})` : label;
 }
 
 export function splitNames(text: string): string[] {
   const candidate = cleanNameCandidate(text);
+  let parts: string[];
   if (candidate.includes("|")) {
-    return candidate.split("|").map(cleanNamePart).filter(Boolean);
+    parts = candidate.split("|").map(cleanNamePart).filter(Boolean);
+  } else if (VS_TEST.test(candidate)) {
+    parts = candidate.split(VS_RE).map(cleanNamePart).filter(Boolean);
+  } else if (candidate.includes(",")) {
+    parts = candidate.split(",").map(cleanNamePart).filter(Boolean);
+  } else if (DASH_RE.test(candidate)) {
+    parts = candidate.split(DASH_RE).map(cleanNamePart).filter(Boolean);
+  } else if (SLASH_RE.test(candidate)) {
+    parts = candidate.split(SLASH_RE).map(cleanNamePart).filter(Boolean);
+  } else if (TIMES_RE.test(candidate)) {
+    parts = candidate.split(TIMES_RE).map(cleanNamePart).filter(Boolean);
+  } else {
+    parts = [cleanNamePart(candidate)].filter(Boolean);
   }
-  if (VS_TEST.test(candidate)) {
-    return candidate.split(VS_RE).map(cleanNamePart).filter(Boolean);
-  }
-  if (candidate.includes(",")) {
-    return candidate.split(",").map(cleanNamePart).filter(Boolean);
-  }
-  if (DASH_RE.test(candidate)) {
-    return candidate.split(DASH_RE).map(cleanNamePart).filter(Boolean);
-  }
-  if (SLASH_RE.test(candidate)) {
-    return candidate.split(SLASH_RE).map(cleanNamePart).filter(Boolean);
-  }
-  if (TIMES_RE.test(candidate)) {
-    return candidate.split(TIMES_RE).map(cleanNamePart).filter(Boolean);
-  }
-  return [cleanNamePart(candidate)].filter(Boolean);
+  return foldFileSizeParts(parts);
 }
 export function hasVsOrPipe(text: string): boolean {
   const candidate = cleanNameCandidate(text);
@@ -63,6 +126,7 @@ export function namesFromBoldTags(tags: Element[]): string[] | null {
   for (let i = tags.length - 1; i >= 0; i--) {
     if (tags[i].closest("a")) continue;
     const text = tags[i].textContent!.trim();
+    if (isNonSourceLabel(text)) continue;
     if (hasVsOrPipe(text)) {
       const p = splitNames(text);
       if (looksLikeNames(p)) return p;
@@ -128,12 +192,13 @@ function leadingStructuredLabelNodes(container: Element): Element[] {
     if (el.querySelector("a img, img")) break;
 
     if (el.matches(STRUCTURED_LABEL_SELECTOR)) {
-      labels.push(el);
+      if (!isNonSourceLabel(el.textContent!.trim())) labels.push(el);
       continue;
     }
 
     const nested = [...el.querySelectorAll(STRUCTURED_LABEL_SELECTOR)]
-      .filter((candidate) => !candidate.parentElement?.closest(STRUCTURED_LABEL_SELECTOR));
+      .filter((candidate) => !candidate.parentElement?.closest(STRUCTURED_LABEL_SELECTOR))
+      .filter((candidate) => !isNonSourceLabel(candidate.textContent!.trim()));
     labels.push(...nested);
   }
   return labels;
@@ -159,7 +224,7 @@ export function namesFromLeadingBoldTags(container: Element): string[] | null {
     if (node.nodeName === "A" && (node as Element).querySelector("img")) break;
     if (node.nodeName === "STRONG" || node.nodeName === "B") {
       const t = node.textContent!.trim();
-      if (t) bolds.push(t);
+      if (t && !isNonSourceLabel(t)) bolds.push(t);
     }
   }
   return bolds.length >= 2 ? bolds : null;
@@ -178,16 +243,19 @@ export function namesFromAncestors(container: Element): string[] | null {
   return null;
 }
 
-/** Strip movie title prefix from an H1 heading text */
+/** Strip movie title prefix from an H1 heading text. A leading bbcode/bracket
+ *  thread-tag ("[Comparisons] ") is always removed first; the remaining
+ *  movie-name/year prefix is left intact per project decision. */
 function stripTitlePrefix(text: string): string {
-  const dash = text.lastIndexOf(" - ");
-  if (dash >= 0) return text.substring(dash + 3).trim();
-  const ym = text.match(/\(\d{4}\)\s*/);
+  const tagless = text.replace(LEADING_TAG_RE, "");
+  const dash = tagless.lastIndexOf(" - ");
+  if (dash >= 0) return tagless.substring(dash + 3).trim();
+  const ym = tagless.match(/\(\d{4}\)\s*/);
   if (ym) {
-    const after = text.substring(ym.index! + ym[0].length).trim();
+    const after = tagless.substring(ym.index! + ym[0].length).trim();
     if (after) return after;
   }
-  return text;
+  return tagless.trim();
 }
 
 /** Strategy 4: H1 headings (forum comparison threads) */

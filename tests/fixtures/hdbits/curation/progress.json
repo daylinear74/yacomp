@@ -1,11 +1,30 @@
 {
   "version": 2,
-  "updatedAt": "2026-05-29T07:58:30.204Z",
+  "updatedAt": "2026-05-29T17:11:57.931331Z",
   "note": "Resumable HDBits fixture-curation tracker. The scrape dumps (yacomp-*-fixtures-*/) are gitignored/local-only; this file records, per structural cluster, the decision made so a future agent can resume without re-reading processed files. `files` maps every processed dump path to its cluster signature (presence = already reviewed). `clusters` holds the decision per signature: extracted (became cases/<file>), covered-by-existing (behavior already in a hand-written case), needs-review (parser output looked unreliable — revisit and curate manually), skipped (redundant shape, behavior already represented). To continue: cluster any new/unprocessed dump files, look up their signature here, and only act on signatures not yet decided.",
   "coverageVerification": {
-    "note": "Empirical comprehensiveness check: every one of the 3,685 dump files was run through the real parser (getGrids) headless, and each file's parser BEHAVIOR (slot × grid-count-class × name-strategy × clean/polluted) compared against the behaviors locked by the committed cases. This goes beyond the per-cluster structural dedup: it catches behaviors that only appear in non-representative cluster members. Result: all 28 distinct CLEAN behavior classes are covered by cases/. The remaining uncovered files (the 22 POL classes / 1173 files) are the documented needs-review backlog (parser extracts unreliable names); intentionally left as backlog, not yet locked as cases.",
-    "cleanBehaviorClasses": { "covered": 28, "uncovered": 0 },
-    "pollutedBacklog": { "classes": 22, "files": 1173, "decision": "left as documented needs-review backlog" }
+    "note": "Empirical check: every one of the 3,685 dump files is run through the real parser (getGrids) headless and its output compared against the committed-HEAD baseline. The earlier 'polluted backlog' framing is superseded: the column-title semantics for those files were adjudicated by explicit project rulings — (A) tech metadata such as '@ 28.6 Mbps' / kbps kept verbatim; (B) a trailing file size is folded into the preceding source name; (C) a leading [thread-tag] is stripped from titles only when text survives, so fully-bracketed labels like '[NOR 35036 kbps]' are kept verbatim; (D) prose/commentary labels kept verbatim; plus: 'X wrote:' quote attributions and 'Short/Long description:' field labels are not source labels; a single leading bold that itself carries a vs/pipe split is used as the comparison label; frame-index spillover after a hard line break is trimmed; and a single-source 'replenish' reply with no vs is intentionally not surfaced. After applying these rulings the full sweep vs HEAD shows grid-count up 20 / down 70 / ->0 1 / same 3551 and 507 name-set changes, ALL classified as intended (size-fold pseudo-grid collapses, [tag] strips, quote/description removals, frame-index newline cuts, and vs-line/bracket grid rescues) with zero unexplained regressions; the lone ->0 is the intentionally-ignored single-source replenish.",
+    "fullSweep": {
+      "files": 3685,
+      "gridUp": 20,
+      "gridDown": 70,
+      "gridToZeroIntentional": 1,
+      "same": 3551,
+      "nameSetChanged": 507,
+      "unexplainedRegressions": 0
+    },
+    "lockedBehaviorRulings": [
+      "A:metadata-verbatim",
+      "B:size-fold",
+      "C:tag-strip-when-text-survives",
+      "D:prose-verbatim",
+      "bracket-keep",
+      "quote-attribution-not-a-label",
+      "description-field-not-a-label",
+      "leading-vs-label",
+      "frame-index-newline-cut",
+      "single-source-replenish-ignored"
+    ]
   },
   "gapCases": {
     "note": "Cases added manually to close clean behavior-class gaps that the smallest-body-per-structural-cluster sampling missed. Each source file lives in a cluster whose representative exhibited a DIFFERENT behavior, so the structural pipeline never surfaced it. expected_names locked via the viewer-driving oracle (same path as e2e).",
@@ -13,12 +32,15 @@
       "077-forum-post-plain-vs-ger-usa.html": "0699-topic-65450-post-1-comparisons-the-hunter-2011 (forum.post, 2 grids, plain-vs)",
       "078-forum-post-showhide-it-ctrlhd-dsnp-ntb-it-ctrlhd-601-709.html": "2341-topic-78578-the-cleveland-show-s1-4 (forum.post, 4 grids, showhide)",
       "079-forum-post-strong-criterion-avc-studio-canal-vc-1.html": "0113-topic-53569-la-haine (forum.post, 8 grids, strong)",
-      "080-forum-post-plain-vs-unaltered-gbr-us.html": "2669-topic-80509-magic-crystal (forum.post, 4 grids, plain-vs)"
+      "080-forum-post-plain-vs-unaltered-gbr-us.html": "2669-topic-80509-magic-crystal (forum.post, 4 grids, plain-vs)",
+      "081-forum-post-bracket-keep-nor-vs-usa-kbps.html": "0673-topic-65041-looper-2012 (forum.post, 1 grid, bracket-label; fully-bracketed source labels kept verbatim)",
+      "082-forum-post-description-then-us-fre-jpn-vs.html": "0365-topic-59817-underworld (forum.post, 1 grid, leading-vs-label; description: field labels skipped, names from the vs-line)",
+      "083-forum-post-size-fold-webdl-hdtv-gb.html": "0553-topic-62860-better-call-saul-s01 (forum.post, 1 grid, size-fold; trailing file size folded into the source name)"
     }
   },
   "totalDumpFiles": 3685,
   "clusterCount": 614,
-  "emittedCases": 63,
+  "emittedCases": 66,
   "clusters": {
     "forum.post|tc:13-30|st:0|vs|pipe": {
       "status": "skipped",

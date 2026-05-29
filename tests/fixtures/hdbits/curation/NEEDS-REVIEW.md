@@ -11,19 +11,44 @@ grid, but the source names it extracted tripped the pollution heuristic**
 *not* turned into cases, because locking a messy name as `expected_names`
 would bake a bad assertion into the suite.
 
-As of the last full sweep:
+## Status update — 2026-05-29 (backlog largely adjudicated)
 
-- **Clean behavior classes: 28 / 28 covered** by `cases/`. There are **no
-  clean coverage gaps left** — every distinct clean parser code path
-  (slot × grid-count-class × name-strategy) is exercised by a committed case.
-- **`needs-review` backlog: 22 polluted behavior classes ≈ 1,173 dump files
-  (~32%).** This is the *only* remaining uncovered bucket. It is intentionally
-  unlocked. See `progress.json#coverageVerification`.
+The old "1,173 polluted / needs-review" framing is **superseded**. The column-title
+semantics for those files were decided by explicit project rulings, and the
+parser was fixed to match. `polluted()` is now only a *display* heuristic — it no
+longer equals "uncovered", because a flagged name may be the agreed-correct
+verbatim label.
 
-The pollution heuristic rejects a name set if any name is >45 chars, >7 words,
-or matches: bare 4-digit year, `kbps`, `GiB/MiB/KiB`, a URL, a known image
-host, bbcode `[tag]`, a newline, a timecode `H:MM`, an `@mention`, a leading
-`-`/`~`, or "video size".
+Rulings now baked into `src/grid/names.ts` / `parser.ts`:
+
+- **(A) metadata verbatim** — `@ 28.6 Mbps`, `kbps`, `@30Mb/s` etc. are kept as-is.
+- **(B) size-fold** — a trailing/standalone file size is folded into the
+  preceding source name (`… x264 (2.46 GB)`), not treated as its own column.
+- **(C) tag-strip when text survives** — a leading `[thread-tag]` is removed only
+  if text remains, so a fully-bracketed label like `[NOR 35036 kbps]` is kept
+  verbatim.
+- **(D) prose/commentary verbatim** — left exactly as written.
+- `X wrote:` quote attributions and `Short/Long description:` field labels are
+  **not** source labels (skipped).
+- A single leading bold that itself carries a `vs`/`|` split is used as the
+  comparison label (rescues posts where `description:` labels precede the real line).
+- Frame-index spillover after a hard line break is trimmed.
+- A single-source "replenish" reply with no `vs` is intentionally **not** surfaced.
+
+Full sweep vs committed HEAD after these changes: grid-count **up 20 / down 70 /
+→0 1 / same 3551**, **507** name-set changes — all classified as intended (size-fold
+pseudo-grid collapses, `[tag]` strips, quote/description removals, frame-index
+newline cuts, vs-line/bracket grid rescues); **zero unexplained regressions**; the
+lone →0 is the intentionally-ignored single-source replenish. New representative
+cases `081` (bracket-keep), `082` (description→vs-line), `083` (size-fold) lock the
+previously-uncovered behaviors. See `progress.json#coverageVerification`.
+
+---
+
+The pollution heuristic (historical, for triage only) flags a name set if any name
+is >45 chars, >7 words, or matches: bare 4-digit year, `kbps`, `GiB/MiB/KiB`, a URL,
+a known image host, bbcode `[tag]`, a newline, a timecode `H:MM`, an `@mention`, a
+leading `-`/`~`, or "video size".
 
 ## Two sub-categories — triage first
 
@@ -34,14 +59,16 @@ two, and they need opposite treatment:
 
 The parser pulled in something that is *not* a source name. Real examples:
 
-| Extracted "name" | What it actually is |
-|---|---|
-| `[Comparisons] Sully 2016 Blu-ray` | the **thread title** leaking in (bbcode + title) |
-| `[Comparisons] A Nightmare on Elm Street (CAN` | thread title, truncated mid-paren |
-| `2.46 GB`, `1.83 GB` | a **file-size column** misread as a source label |
+| Extracted "name" | What it actually is | Status |
+|---|---|---|
+| `[Comparisons] Sully 2016 Blu-ray` | the **thread title** leaking in (bbcode + title) | **fixed** (ruling C / `stripTitlePrefix`) |
+| `[Comparisons] A Nightmare on Elm Street (CAN` | thread title, truncated mid-paren | **fixed** (ruling C) |
+| `2.46 GB`, `1.83 GB` | a **file-size column** misread as a source label | **fixed** (ruling B / size-fold) |
 
-These are defects in `src/grid/names.ts` / `parser.ts`. The right action is to
-reproduce with a minimal case, fix the parser so it returns the *correct*
+These were defects in `src/grid/names.ts` / `parser.ts`; the three above are now
+fixed and locked (cases `083` size-fold; `081` bracket-keep; H1 tag-strip covered
+by `stripTitlePrefix`). For any *new* category-A leak, the right action is the
+same: reproduce with a minimal case, fix the parser so it returns the *correct*
 names (or `null`), then lock that as a normal case.
 
 ### B. Legitimate names that merely contain noisy tokens → lock as-is

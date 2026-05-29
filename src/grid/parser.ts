@@ -6,6 +6,7 @@ import type { GridCell, Grid } from "./types";
 import {
   hasVsOrPipe, splitNames, looksLikeNames,
   findComparisonNames, namesFromLeadingStructuredLabels,
+  foldTrailingSize, isNonSourceLabel,
 } from "./names";
 
 function hdbFull(src: string): string {
@@ -49,6 +50,8 @@ function labelTextFromNode(node: ChildNode): string | null {
   if (t && node.nodeType === 1 && (node as Element).matches("label.label_showhide")) {
     t = t.replace(/\s*\[(?:show|hide)\]\s*$/i, "");
   }
+  // A forum quote attribution ("Username wrote:") is not a source label.
+  if (t && isNonSourceLabel(t)) return null;
   return t ? t.replace(/:$/, "").trim() : null;
 }
 
@@ -166,13 +169,30 @@ function leadingBoldLabelInfo(container: Element): { names: string[]; anchorEl: 
     if (node.nodeName === "A" && (node as Element).querySelector("img")) break;
     if (node.nodeName === "STRONG" || node.nodeName === "B") {
       const t = node.textContent!.trim();
-      if (t) bolds.push(node as Element);
+      if (t && !isNonSourceLabel(t)) bolds.push(node as Element);
     }
   }
   if (bolds.length < 2) return null;
   const names = bolds.map((b) => b.textContent!.trim()).filter(Boolean);
   if (!looksLikeNames(names)) return null;
   return { names, anchorEl: bolds[bolds.length - 1] };
+}
+
+/** A single leading bold/strong label that itself carries a vs/pipe split,
+ *  e.g. "US (…) vs FRE (…) vs JPN (…)". This is a genuine local comparison
+ *  label even when it sits among non-source labels (e.g. "Short description:")
+ *  that suppressed the structured-label path. */
+function leadingVsLabelInfo(container: Element): { names: string[]; anchorEl: Element } | null {
+  for (const node of container.childNodes) {
+    if (node.nodeName === "A" && (node as Element).querySelector("img")) break;
+    if (node.nodeName !== "STRONG" && node.nodeName !== "B") continue;
+    const el = node as Element;
+    const t = el.textContent!.trim();
+    if (!t || isNonSourceLabel(t) || !hasVsOrPipe(t)) continue;
+    const names = splitNames(t);
+    if (looksLikeNames(names)) return { names, anchorEl: el };
+  }
+  return null;
 }
 
 function stableGridColumnCount(groups: GridCell[][]): number | null {
@@ -299,7 +319,7 @@ export function parseGrid(container: Element): Grid[] | null {
   let anchorEl: ChildNode | null = null;
   if (groupLabels.length >= 2 && groupLabels.every((l) => l)) {
     const allNumeric = groupLabels.every((l) => /^\d+$/.test(l!));
-    if (!allNumeric) names = groupLabels as string[];
+    if (!allNumeric) names = (groupLabels as string[]).map(foldTrailingSize);
   }
   if (!names) {
     const singleLabel = singleGroupLabelInfo(groupLabels, groupLabelEls);
@@ -320,6 +340,13 @@ export function parseGrid(container: Element): Grid[] | null {
     if (structured) {
       names = structured.names;
       anchorEl = structured.anchorEl;
+    }
+  }
+  if (!names) {
+    const leadingVs = leadingVsLabelInfo(container);
+    if (leadingVs) {
+      names = leadingVs.names;
+      anchorEl = leadingVs.anchorEl;
     }
   }
   if (!names && hasLocalNonNameHeading(groupLabels)) {
