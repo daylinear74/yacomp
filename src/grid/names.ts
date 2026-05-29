@@ -94,6 +94,20 @@ function sizeOf(part: string): string | null {
   return m ? m[1].replace(/\s+/g, " ").trim() : null;
 }
 
+/** Final tidy applied to EVERY source name, including those from paths that
+ *  bypass cleanNamePart (color spans, bold tags, group labels): strip leftover
+ *  BBCode, a trailing comparison URL, and a stray trailing colon, and collapse
+ *  whitespace runs. Never returns empty (falls back to the trimmed original). */
+export function tidyName(s: string): string {
+  const t = s
+    .replace(BBCODE_TAG_RE, " ")
+    .replace(/\s+https?:\/\/\S+\s*$/i, "")
+    .replace(/\s*:\s*$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return t || s.trim();
+}
+
 /** Fold any pure-file-size part into the preceding source label as a
  *  parenthesized suffix:
  *    ["WEBRip NTb … x264", "2.46 GB"] → ["WEBRip NTb … x264 (2.46 GB)"] */

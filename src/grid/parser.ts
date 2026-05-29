@@ -6,7 +6,7 @@ import type { GridCell, Grid } from "./types";
 import {
   hasVsOrPipe, hasExplicitComparison, splitNames, looksLikeNames,
   findComparisonNames, namesFromLeadingStructuredLabels,
-  foldTrailingSize, isNonSourceLabel,
+  foldTrailingSize, isNonSourceLabel, tidyName,
 } from "./names";
 
 function hdbFull(src: string): string {
@@ -178,7 +178,7 @@ function buildMultiCompGrids(groups: GridCell[][], groupLabels: (string | null)[
     results.push({
       rows: shaped.gridRows,
       numCols: shaped.numCols,
-      names,
+      names: names.map(tidyName),
       anchorEl: groupLabelEls[index],
     });
   }
@@ -415,7 +415,7 @@ export function parseGrid(container: Element): Grid[] | null {
     }
   }
 
-  return [{ rows: shaped.gridRows, numCols: shaped.numCols, names, anchorEl }];
+  return [{ rows: shaped.gridRows, numCols: shaped.numCols, names: names ? names.map(tidyName) : names, anchorEl }];
 }
 
 let _grids: { grid: Grid; container: Element }[] | null = null;
