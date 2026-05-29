@@ -138,6 +138,15 @@ export function foldTrailingSize(label: string): string {
   return base ? `${base} (${m[2].replace(/\s+/g, " ").trim()})` : label;
 }
 
+/** Strip a leading "Movie Title (YYYY) - " from the FIRST source of a split
+ *  label, e.g. "Blue City (1986) - USA (Vinegar Syndrome)" → "USA (Vinegar
+ *  Syndrome)". Only the high-confidence "(4-digit year) - " shape is removed, so
+ *  a genuine source like "GER (2009)" (no trailing " - ") is left untouched. */
+function stripLeadingMovieTitle(s: string): string {
+  const m = s.match(/^.*\(\d{4}\)\s*[-–]\s+(\S.*)$/);
+  return m ? m[1].trim() : s;
+}
+
 export function splitNames(text: string): string[] {
   const candidate = cleanNameCandidate(text);
   let parts: string[];
@@ -156,6 +165,9 @@ export function splitNames(text: string): string[] {
   } else {
     parts = [cleanNamePart(candidate)].filter(Boolean);
   }
+  // Strip a "Movie Title (YYYY) - " prefix that clings to the first source when
+  // the whole comparison line led with the film name.
+  if (parts.length >= 2) parts[0] = stripLeadingMovieTitle(parts[0]);
   // A bare-URL part is an external link, not a source column — drop it.
   parts = parts.filter((p) => !isUrlLabel(p));
   return foldFileSizeParts(parts);
