@@ -10,6 +10,29 @@ local-only** — they contain raw, lightly-sanitized HTML. This tooling
 turns them into the small, sanitized, deduplicated cases under
 `tests/fixtures/hdbits/cases/`.
 
+## Local setup (required to re-run the pipeline)
+
+The pipeline reads two dump folders that are **not** in the repo. To run
+it, obtain them and place **both at the repository root** (next to
+`package.json`), keeping their names intact:
+
+```
+<repo root>/
+├── yacomp-fixtures-2026-05-28/            # forum-post scrapes
+│   └── cases-bootstrapped/                # ← the HTML the pipeline reads
+├── yacomp-torrents-fixtures-2026-05-28/   # torrent-page scrapes
+│   └── cases-bootstrapped/
+└── tests/fixtures/hdbits/curation/        # this tooling
+```
+
+`01-cluster.ts` looks for `<folder>/cases-bootstrapped` at exactly these
+paths (see its `DUMPS` array). The `yacomp-*-fixtures-*/` glob is already
+in the root `.gitignore`, so these folders will never be committed. If you
+have a differently-dated dump, drop it at the root the same way and update
+the dates in `DUMPS`. Without these folders the committed cases and
+`progress.json` still work for the test suite — you only need them to mine
+new cases.
+
 ## What is committed
 
 - `progress.json` — the tracker. Every dump file that has been reviewed
