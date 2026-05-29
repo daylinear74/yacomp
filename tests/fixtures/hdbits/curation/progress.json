@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-05-29T19:28:59.687524Z",
+  "updatedAt": "2026-05-29T20:37:33.558276Z",
   "note": "Resumable HDBits fixture-curation tracker. The scrape dumps (yacomp-*-fixtures-*/) are gitignored/local-only; this file records, per structural cluster, the decision made so a future agent can resume without re-reading processed files. `files` maps every processed dump path to its cluster signature (presence = already reviewed). `clusters` holds the decision per signature: extracted (became cases/<file>), covered-by-existing (behavior already in a hand-written case), needs-review (parser output looked unreliable — revisit and curate manually), skipped (redundant shape, behavior already represented). To continue: cluster any new/unprocessed dump files, look up their signature here, and only act on signatures not yet decided.",
   "coverageVerification": {
     "note": "Empirical check: all 3,685 dump files run through the real parser (getGrids) headless, output diffed against committed HEAD. Column-title semantics adjudicated by explicit project rulings and the parser fixed to match. Rulings now in src/grid: (A) tech metadata (@28.6 Mbps/kbps) verbatim; (B) trailing file size folded into the source name; (C) leading [thread-tag] stripped only when text survives (so [NOR 35036 kbps] kept verbatim); (D) prose verbatim; 'X wrote:'/'Short|Long description:'/footer headings ('See also:','Slowpics:','Note:') and bare-URL columns are NOT source labels (skipped); a trailing URL or stray trailing colon or leftover BBCode tag ([/size]) is stripped from a name; a single leading element (incl. font/span-wrapped) whose text carries a vs/| split is used as the comparison label; a single comparison posted as one image group PER SOURCE (labels like 'release - AC3 5.1 - size', no explicit vs/|/ separator) is transposed into ONE N-column grid, never several; frame-index spillover after a hard line break trimmed; single-source 'replenish' replies not surfaced. Multi-comparison sectioning fires only on an explicit vs/|/ separator. Full sweep vs HEAD: grid up 109 / down 89 (bogus per-size pseudo-grid collapses) / ->0 11 / 645 name-set changes.",
@@ -9,7 +9,7 @@
       "gridUp": 109,
       "gridDown": 89,
       "gridToZero": 11,
-      "nameSetChanged": 645,
+      "nameSetChanged": 704,
       "oracleErrors": 34
     },
     "gridToZeroBreakdown": "8 correct (bogus Slowpics:/Note:/title-only or prose labels, plus the ruled-ignore single-source replenish 0623); 3 documented backlog regressions (2625 'strong vs strong vs strong' + BDInfo bold pollution; 0110/0120 color-span comparisons with Sources/Notes preamble + external blu-ray.com links).",
@@ -31,8 +31,11 @@
       "per-source-groups-transpose",
       "explicit-vs-only-multicomp",
       "frame-index-newline-cut",
-      "single-source-replenish-ignored"
-    ]
+      "single-source-replenish-ignored",
+      "name-tidy(colon/url/bbcode/arrows/whitespace)",
+      "movie-title-(YYYY)-prefix-strip"
+    ],
+    "nameCleanup": "tidyName applied to every name (all strategies): strips leftover BBCode, trailing comparison URL, stray trailing colon, decorative angle-bracket runs, and collapses whitespace (incl. nbsp). splitNames strips a leading 'Movie Title (YYYY) - ' prefix from the first source. Residual colon/url/bbcode/newline names ~= 0."
   },
   "gapCases": {
     "note": "Cases added manually to close clean behavior-class gaps that the smallest-body-per-structural-cluster sampling missed. Each source file lives in a cluster whose representative exhibited a DIFFERENT behavior, so the structural pipeline never surfaced it. expected_names locked via the viewer-driving oracle (same path as e2e).",
@@ -44,12 +47,13 @@
       "081-forum-post-bracket-keep-nor-vs-usa-kbps.html": "0673-topic-65041-looper-2012 (forum.post, 1 grid, bracket-label; fully-bracketed source labels kept verbatim)",
       "082-forum-post-description-then-us-fre-jpn-vs.html": "0365-topic-59817-underworld (forum.post, 1 grid, leading-vs-label; description: field labels skipped, names from the vs-line)",
       "083-forum-post-size-fold-webdl-hdtv-gb.html": "0553-topic-62860-better-call-saul-s01 (forum.post, 1 grid, size-fold; trailing file size folded into the source name)",
-      "084-forum-post-per-source-groups-the-missing.html": "0835-topic-67631-the-missing-s02e01 (forum.post, 1 grid, per-source-groups transpose; four sources each posted as its own image group collapse into one 4-column grid, NOT four grids)"
+      "084-forum-post-per-source-groups-the-missing.html": "0835-topic-67631-the-missing-s02e01 (forum.post, 1 grid, per-source-groups transpose; four sources each posted as its own image group collapse into one 4-column grid, NOT four grids)",
+      "085-forum-post-url-strip-bluray-vs-webrip.html": "1772-topic-74688-beverly-hills-cop-ii (forum.post, 1 grid, url-strip; trailing details URL removed from each source label)"
     }
   },
   "totalDumpFiles": 3685,
   "clusterCount": 614,
-  "emittedCases": 67,
+  "emittedCases": 68,
   "clusters": {
     "forum.post|tc:13-30|st:0|vs|pipe": {
       "status": "skipped",

@@ -45,6 +45,36 @@ looks like function args), not a blanket paren-aware split.
 First column is a prose NOTE sentence (mid-string URL not stripped — tidyName
 only strips a TRAILING URL). Open question: reject leading prose NOTE lines.
 
+### 6. Movie-title prefix leaks into the first column (non-H1 labels)
+When the comparison label is leading text / a bold like
+`Blue City (1986) - USA (Vinegar Syndrome) vs USA (Olive Films)` or
+`Let's Dance (no year) FRA vs GER`, the title prefix ends up on the FIRST source:
+- `3077`: `["Blue City (1986) - USA (Vinegar Syndrome)", "USA (Olive Films)"]`
+- `2690`: `["Let's Dance (no year) FRA", "GER"]` (viewer order)
+`stripTitlePrefix` already strips a leading "Title (year) - " / "Title - " but is
+only applied to H1 headings (`namesFromHeadings`), not to leading-text / bold /
+structured labels. Open question: apply title-prefix stripping to the first split
+part of those labels too? Risk: a legitimate first source containing
+"(year) - "/" - " could be over-stripped — needs a ruling + careful sweep.
+(Common pattern — this is the main reason a couple of footer/url cases couldn't be
+locked as clean fixtures.)
+
+### 7. Field-label prefixes on columns (`Video:` / `Audio:` / `Subtitle:`)
+~22 names carry a metadata field prefix:
+- `2221`: `["Video: GER (1080p AVC 19999 kbps...)", "USA (...)"]` then a 2nd grid `["Audio: GER (...)", "USA (...)"]`
+- `0436`/`2061`/`1527`: `"Subtitle: English"` / `"Subtitle: German"` / `"Subtitle: French"` as columns
+Open question: strip a leading `Video:`/`Audio:` field prefix from the first
+column (like the title-prefix fix)? And are `Subtitle:`-labelled grids real
+screenshot comparisons at all, or metadata tables that should be 0 grids?
+
+### 8. Numeric-only / single-char column names (likely frame indices)
+~53 numeric-only names (`"2"`,`"3"`,`"11"`…) and ~41 single-char (`"A"`,`"B"`,`"C"`).
+- `1161`: names are bare frame numbers (2,3,6,7,8,…) — frame indices mis-read as sources.
+- `0640`: `["A","B","C"]` — could be legitimate short source letters OR generic.
+There is already `allNumeric` group-label skipping; these slip through via another
+path. Open question: reject all-numeric / all-single-char name sets (risk: a few
+posts genuinely label sources A/B/C)?
+
 ## Resolved (for reference)
 - 0623 single-source replenish → intentionally 0 grids (ruled: ignore).
 - 015 / 064 → upgraded to correct multi-grid output.
