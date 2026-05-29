@@ -15,6 +15,30 @@ Body: `<strong>GBR Blu-ray (Gamma bug corrected)</strong> vs <strong>GER Blu-ray
 torrent.description "Cool as Ice"; HEAD `["Source","MacP Turbine Encode","WATCHABLE","MacP Kino Encode","ABM WEB-DL Comparison"]`. Now 0 grids. Preamble has `<strong>Sources</strong>` / `<strong>Notes</strong>` + external blu-ray.com links.
 - Question: confirm desired names, and whether the external-link / preamble handling should be relaxed for color-span comparisons.
 
+### 3. Prose-as-names — grids labelled with sentence fragments
+Some grids extract commentary prose as the source names, e.g.
+- `1167`: `["35mm grindhouse scan is in the wild already","so all waxed out teal crap can go spit"]`
+- `1900`: `["Here's some of the shots with madVR latest beta","disabled HSTM because my settings were reset."]`
+- `1202`: `["nb JP & KR share the same encode","UK & FR are the exact same disc."]`
+- `2326`: `["Audio is certainly better on ROKU","but can't decide about video..."]`
+Earlier ruling D was "prose verbatim", so these are currently kept as-is. Open
+question: should a grid whose names are clearly prose (no real source labels
+present) instead fall back to a generic label or 0 grids? Needs a ruling — a
+rough scan flags on the order of a few dozen such grids (the heuristic also
+catches many *legitimate* long release names, so the true count is lower).
+
+### 4. AviSynth / resize-note false grids
+A processing note gets split on a comma into bogus columns:
+- `0288` / `0282`: `["*Spline36Resize(1920","1080)"]`
+- `1807`: `["* 4k webrip resized to (1920","804)"]`
+These are not comparisons (single source + a resize script line). Open question:
+detect and reject function-call/script lines as grid labels?
+
+### 5. Prose NOTE with mid-string URL
+- `0478` (torrent.desc): `["NOTE: the SNTN torrent https://… is dead, that's why I did this new encode…","Source vs encode…"]`
+First column is a prose NOTE sentence (mid-string URL not stripped — tidyName
+only strips a TRAILING URL). Open question: reject leading prose NOTE lines.
+
 ## Resolved (for reference)
 - 0623 single-source replenish → intentionally 0 grids (ruled: ignore).
 - 015 / 064 → upgraded to correct multi-grid output.
