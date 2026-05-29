@@ -75,6 +75,16 @@ There is already `allNumeric` group-label skipping; these slip through via anoth
 path. Open question: reject all-numeric / all-single-char name sets (risk: a few
 posts genuinely label sources A/B/C)?
 
+### 9. `2927` — quote-footer skip broke a real 5-source grid (regression, kept net-positive)
+Adding `Quote`/`Hidden text`/`Spoiler` to the footer-skip rescued **22** grids
+(e.g. AUS/GER, USA/GER/AUS) where a `<b>Quote</b>`/spoiler block had suppressed
+detection — a big net win. But it regressed ONE case, `2927`
+(`GER(Filmjuwelen) vs FRA(Potemkine) vs NLD(Lumiére) vs RUS(Close-up) vs
+USA(Criterion)` → 0 grids). 2927 has 120 images + a trailing showhide block; the
+`Quote` filtering interacts with showhide container selection in a way that's hard
+to trace. Kept the change (+22 / −1). Open question: worth root-causing the
+showhide+quote interaction to recover 2927?
+
 ## Resolved (for reference)
 - 0623 single-source replenish → intentionally 0 grids (ruled: ignore).
 - 015 / 064 → upgraded to correct multi-grid output.

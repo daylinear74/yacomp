@@ -40,9 +40,9 @@ export function isQuoteAttribution(text: string): boolean {
 export function isFieldLabel(text: string): boolean {
   return /\bdescription\s*:?\s*$/i.test(text.trim());
 }
-// A section/footer heading ("See also:", "Slowpics:", "Comparison:", "Note:")
-// — a structural heading, never a source label.
-const FOOTER_LABEL_RE = /^(?:see\s+also|slow\s?pics?|comparisons?|screenshots?|notes?|edit|update|p\.?\s?s\.?)\s*:?\s*$/i;
+// A section/footer/structural heading ("See also:", "Slowpics:", "Note:",
+// "Quote", "Hidden text", "Spoiler") — never a source label.
+const FOOTER_LABEL_RE = /^(?:see\s+also|slow\s?pics?|comparisons?|screenshots?|notes?|edit|update|p\.?\s?s\.?|quote|hidden\s+text|spoilers?|click\s+to\s+\w+)\s*:?\s*$/i;
 export function isFooterLabel(text: string): boolean {
   return FOOTER_LABEL_RE.test(text.trim());
 }
