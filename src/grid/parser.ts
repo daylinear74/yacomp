@@ -178,7 +178,7 @@ function buildMultiCompGrids(groups: GridCell[][], groupLabels: (string | null)[
     results.push({
       rows: shaped.gridRows,
       numCols: shaped.numCols,
-      names: names.map(tidyName),
+      names: finalizeNames(names),
       anchorEl: groupLabelEls[index],
     });
   }
@@ -192,6 +192,15 @@ function singleGroupLabelInfo(groupLabels: (string | null)[], groupLabelEls: (Ch
   if (labels.length !== 1) return null;
   const names = splitNames(labels[0].label);
   return looksLikeNames(names) ? { names, anchorEl: groupLabelEls[labels[0].index] } : null;
+}
+
+/** Final pass on a grid's names: drop a name set that is entirely bare numbers
+ *  (frame/set indices like ["2","3","6"…] mis-read as sources — show the grid
+ *  with no labels instead), otherwise tidy each name. */
+function finalizeNames(names: string[] | null): string[] | null {
+  if (!names || !names.length) return names;
+  if (names.every((n) => /^\d+$/.test(n.trim()))) return null;
+  return names.map(tidyName);
 }
 
 function leadingBoldLabelInfo(container: Element): { names: string[]; anchorEl: Element } | null {
@@ -415,7 +424,7 @@ export function parseGrid(container: Element): Grid[] | null {
     }
   }
 
-  return [{ rows: shaped.gridRows, numCols: shaped.numCols, names: names ? names.map(tidyName) : names, anchorEl }];
+  return [{ rows: shaped.gridRows, numCols: shaped.numCols, names: finalizeNames(names), anchorEl }];
 }
 
 let _grids: { grid: Grid; container: Element }[] | null = null;
