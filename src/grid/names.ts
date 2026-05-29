@@ -103,6 +103,10 @@ export function tidyName(s: string): string {
     .replace(BBCODE_TAG_RE, " ")
     .replace(/\s+https?:\/\/\S+\s*$/i, "")
     .replace(/\s*:\s*$/, "")
+    // Decorative arrow runs (2+ angle brackets) around a label: "BD <<<<<",
+    // ">>>>> AMZN" → "BD" / "AMZN".
+    .replace(/^\s*[<>]{2,}\s*/, "")
+    .replace(/\s*[<>]{2,}\s*$/, "")
     .replace(/\s+/g, " ")
     .trim();
   return t || s.trim();
