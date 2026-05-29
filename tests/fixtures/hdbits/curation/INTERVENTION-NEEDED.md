@@ -3,6 +3,27 @@
 Running list of judgment calls the autonomous pass deliberately did NOT decide.
 Each entry: the case(s), what the parser does now, and the open question.
 
+## Overnight session summary
+
+Landed (all committed on `test/hdbits-fixture-curation`, 86 e2e + 189 unit green,
+`bun run check` clean each commit):
+- per-source-group transpose (0835) + narrow explicit-vs/|// multi-comp guard
+- footer-label skip (See also/Slowpics/Note/Quote/Hidden text/Spoiler), bare-URL
+  column drop, trailing-URL / trailing-colon / BBCode strip, decorative arrow strip
+- `tidyName` centralizes the above across ALL name strategies
+- "Movie Title (YYYY) - " prefix stripped from the first source
+- all-numeric name sets (frame indices) → no labels
+- leadingVsLabelInfo matches font/span-wrapped vs-labels
+- cases locked: 084 (per-source-groups), 085 (url-strip); upgraded 015, 021, 064
+
+Net vs shipped baseline: ~+110 grid rescues, ~700 name improvements, name-quality
+residuals (colon/url/bbcode/newline) ≈ 0.
+
+Tried & reverted (don't retry blindly): blanket paren-aware comma split (§4);
+"Screens" footer word (exposed NFO-block junk in torrent.desc).
+
+Everything below needs a ruling or a careful (risky) detector — left for you.
+
 ## Open
 
 ### 1. `2625` — "strong vs strong vs strong" → currently 0 grids (regression)
