@@ -33,6 +33,12 @@ A processing note gets split on a comma into bogus columns:
 - `1807`: `["* 4k webrip resized to (1920","804)"]`
 These are not comparisons (single source + a resize script line). Open question:
 detect and reject function-call/script lines as grid labels?
+**Tried & rejected:** a paren-aware comma split (don't split commas inside
+`()`/`[]`) fixes these 3 but REGRESSES 10 real comparisons whose source list is
+enclosed in parens, e.g. `E01 (DE 18Mb/s, ES 18Mb/s, FR 20Mb/s, UK 27Mb/s,
+US 25Mb/s)` (case 2026). So a smarter detector is needed (e.g. only reject when a
+part has an unbalanced `(` AND the next part the matching `)` AND the inner text
+looks like function args), not a blanket paren-aware split.
 
 ### 5. Prose NOTE with mid-string URL
 - `0478` (torrent.desc): `["NOTE: the SNTN torrent https://… is dead, that's why I did this new encode…","Source vs encode…"]`
