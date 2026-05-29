@@ -40,9 +40,29 @@ export function isQuoteAttribution(text: string): boolean {
 export function isFieldLabel(text: string): boolean {
   return /\bdescription\s*:?\s*$/i.test(text.trim());
 }
+// A section/footer heading ("See also:", "Slowpics:", "Comparison:", "Note:")
+// — a structural heading, never a source label.
+const FOOTER_LABEL_RE = /^(?:see\s+also|slow\s?pics?|comparisons?|screenshots?|notes?|edit|update|p\.?\s?s\.?)\s*:?\s*$/i;
+export function isFooterLabel(text: string): boolean {
+  return FOOTER_LABEL_RE.test(text.trim());
+}
+// A leftover BBCode tag ("[/size]", "[color=red]", "[b]") — never part of a
+// source name. Matched by a known tag whitelist so a real fully-bracketed
+// label like "[NOR 35036 kbps]" is left untouched.
+const BBCODE_TAG_RE = /\s*\[\/?(?:size|colou?r|b|i|u|s|url|quote|spoiler|cent(?:er|re)|left|right|img|font|list|code|hr)(?:=[^\]]*)?\]\s*/gi;
+// A bare URL — an external comparison/film link, not a source label.
+const PURE_URL_RE = /^https?:\/\/\S+$/i;
+export function isUrlLabel(text: string): boolean {
+  return PURE_URL_RE.test(text.trim());
+}
 /** Text that should never be used as a source label. */
 export function isNonSourceLabel(text: string): boolean {
-  return isQuoteAttribution(text) || isFieldLabel(text);
+  return (
+    isQuoteAttribution(text) ||
+    isFieldLabel(text) ||
+    isFooterLabel(text) ||
+    isUrlLabel(text)
+  );
 }
 
 function cleanNamePart(text: string): string {
@@ -55,6 +75,12 @@ function cleanNamePart(text: string): string {
   // is itself the source name and must be kept verbatim, brackets included.
   const detagged = s.replace(LEADING_TAG_RE, "");
   if (detagged.trim()) s = detagged;
+  // Strip leftover BBCode tags ("PCOK [/size]" → "PCOK").
+  s = s.replace(BBCODE_TAG_RE, " ").trim();
+  // Drop a trailing link appended to a real label ("Blu-ray https://…" → "Blu-ray")
+  // and a stray trailing colon ("Amazon 1080p (8.4Mbps):" → "Amazon 1080p (8.4Mbps)").
+  s = s.replace(/\s+https?:\/\/\S+\s*$/i, "");
+  s = s.replace(/\s*:\s*$/, "");
   return s.replace(/^-+|-+$/g, "").trim();
 }
 
@@ -112,11 +138,24 @@ export function splitNames(text: string): string[] {
   } else {
     parts = [cleanNamePart(candidate)].filter(Boolean);
   }
+  // A bare-URL part is an external link, not a source column — drop it.
+  parts = parts.filter((p) => !isUrlLabel(p));
   return foldFileSizeParts(parts);
 }
 export function hasVsOrPipe(text: string): boolean {
   const candidate = cleanNameCandidate(text);
   return candidate.includes("|") || VS_TEST.test(candidate) || candidate.includes(",") || DASH_RE.test(candidate) || SLASH_RE.test(candidate) || TIMES_RE.test(candidate);
+}
+
+/** An UNAMBIGUOUS multi-source separator ("X vs Y", "X | Y", "X / Y", "X × Y").
+ *  Unlike {@link hasVsOrPipe} this excludes DASH and COMMA, which routinely
+ *  appear inside a single source name (e.g. "release - AC3 5.1 - 1.06 GiB",
+ *  "Disc Title: X, The" / "45,862 bytes"). Used to decide when a per-group
+ *  label introduces a *separate* comparison vs. is itself one source column of
+ *  a single transposed grid. */
+export function hasExplicitComparison(text: string): boolean {
+  const candidate = cleanNameCandidate(text);
+  return candidate.includes("|") || VS_TEST.test(candidate) || SLASH_RE.test(candidate) || TIMES_RE.test(candidate);
 }
 
 // ── Name-finding sub-strategies ──

@@ -4,7 +4,7 @@
 
 import type { GridCell, Grid } from "./types";
 import {
-  hasVsOrPipe, splitNames, looksLikeNames,
+  hasVsOrPipe, hasExplicitComparison, splitNames, looksLikeNames,
   findComparisonNames, namesFromLeadingStructuredLabels,
   foldTrailingSize, isNonSourceLabel,
 } from "./names";
@@ -67,6 +67,11 @@ function collectGroups(container: Element): GroupsResult | null {
   let group: GridCell[] = [];
   let pendingLabel: string | null = null;
   let pendingLabelEl: ChildNode | null = null;
+  // A source label can be split across sibling nodes on one line — most often a
+  // release name in <strong> followed by " - AC3 5.1 - 1.06 GiB" as plain text.
+  // Accumulate consecutive label nodes on the same line; a <br> ends the line so
+  // the next line REPLACES the label (last line before the images wins).
+  let lineBroken = true;
 
   const visit = (node: ChildNode): void => {
     if (node.nodeName === "BR") {
@@ -78,6 +83,7 @@ function collectGroups(container: Element): GroupsResult | null {
         pendingLabel = null;
         pendingLabelEl = null;
       }
+      lineBroken = true;
     } else if (node.nodeName === "A") {
       const anchor = node as HTMLAnchorElement;
       const img = anchor.querySelector("img") as HTMLImageElement | null;
@@ -102,8 +108,18 @@ function collectGroups(container: Element): GroupsResult | null {
       // codec metadata; their last line is not a label for later screenshots.
       const t = labelTextFromNode(node);
       if (t) {
-        pendingLabel = t;
-        pendingLabelEl = node;
+        // Accumulate ONLY the "<strong>release</strong> - AC3 5.1 - size" shape:
+        // inline text immediately following a BOLD element on the same line.
+        const prevBold = pendingLabelEl?.nodeName === "STRONG" || pendingLabelEl?.nodeName === "B";
+        const accumulate =
+          !!pendingLabel && !lineBroken && node.nodeType === 3 && prevBold;
+        if (accumulate) {
+          pendingLabel = `${pendingLabel} ${t}`;
+        } else {
+          pendingLabel = t;
+          pendingLabelEl = node;
+        }
+        lineBroken = false;
       }
     }
   };
@@ -122,13 +138,28 @@ function collectGroups(container: Element): GroupsResult | null {
   return { groups, groupLabels, groupLabelEls };
 }
 
-/** When groups carry their own vs/| labels, each becomes its own grid */
+/** When groups carry their own "X vs Y" / "X | Y" labels, each becomes its own
+ *  grid. Only an explicit vs/pipe separator counts — a dash/comma in a label is
+ *  treated as part of one source name (e.g. "release - AC3 5.1 - 1.06 GiB"),
+ *  so such per-group labels stay as single columns of one transposed grid. */
 function buildMultiCompGrids(groups: GridCell[][], groupLabels: (string | null)[], groupLabelEls: (ChildNode | null)[]): Grid[] | null {
   const labeledGroups = groupLabels
     .map((label, index) => ({ label, index }))
     .filter((g): g is { label: string; index: number } => !!g.label && hasVsOrPipe(g.label));
   if (!labeledGroups.length) return null;
   if (groups.length > 1 && labeledGroups.length === 1) return null;
+  // Single-comparison-as-per-source-groups shape: EVERY group has its own
+  // label and NONE uses an explicit vs/|/ ÷ separator (the labels are single
+  // source names, often "release - AC3 5.1 - size"). That is one comparison
+  // with a group per source, not several comparisons — defer to the transpose
+  // path so the per-group labels become the columns of a single grid.
+  if (
+    groups.length >= 2 &&
+    labeledGroups.length === groups.length &&
+    !labeledGroups.some((g) => hasExplicitComparison(g.label))
+  ) {
+    return null;
+  }
 
   const results: Grid[] = [];
   for (let i = 0; i < labeledGroups.length; i++) {
@@ -178,15 +209,24 @@ function leadingBoldLabelInfo(container: Element): { names: string[]; anchorEl: 
   return { names, anchorEl: bolds[bolds.length - 1] };
 }
 
-/** A single leading bold/strong label that itself carries a vs/pipe split,
+/** A single leading element whose text itself carries a vs/pipe split,
  *  e.g. "US (…) vs FRE (…) vs JPN (…)". This is a genuine local comparison
- *  label even when it sits among non-source labels (e.g. "Short description:")
- *  that suppressed the structured-label path. */
+ *  label even when it sits among non-source labels (e.g. "Short description:"
+ *  or a trailing comparison URL) that suppressed the structured-label path.
+ *  The label is matched on any wrapping element (strong, font, span, div…),
+ *  not just a bare <strong>, so font/span-wrapped headings are still caught. */
+const VS_LABEL_WRAPPER = new Set(["STRONG", "B", "FONT", "SPAN", "U", "I", "EM"]);
 function leadingVsLabelInfo(container: Element): { names: string[]; anchorEl: Element } | null {
   for (const node of container.childNodes) {
     if (node.nodeName === "A" && (node as Element).querySelector("img")) break;
-    if (node.nodeName !== "STRONG" && node.nodeName !== "B") continue;
+    if (node.nodeType !== 1) continue;
     const el = node as Element;
+    if (el.querySelector("img")) break;
+    // Only a bold-ish inline heading qualifies — never a TABLE/P/DIV block
+    // (e.g. a comma-laden BDInfo table would otherwise split into junk).
+    if (!VS_LABEL_WRAPPER.has(el.nodeName)) continue;
+    const isBold = el.nodeName === "STRONG" || el.nodeName === "B" || !!el.querySelector("strong, b");
+    if (!isBold) continue;
     const t = el.textContent!.trim();
     if (!t || isNonSourceLabel(t) || !hasVsOrPipe(t)) continue;
     const names = splitNames(t);

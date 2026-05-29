@@ -30,18 +30,37 @@ Rulings now baked into `src/grid/names.ts` / `parser.ts`:
 - **(D) prose/commentary verbatim** — left exactly as written.
 - `X wrote:` quote attributions and `Short/Long description:` field labels are
   **not** source labels (skipped).
-- A single leading bold that itself carries a `vs`/`|` split is used as the
-  comparison label (rescues posts where `description:` labels precede the real line).
+- A single leading element (incl. a `font`/`span`-wrapped bold) that itself carries
+  a `vs`/`|` split is used as the comparison label (rescues posts where
+  `description:` labels precede the real line).
+- Footer headings (`See also:`, `Slowpics:`, `Note:`) and **bare-URL columns** are
+  not source labels (skipped). A **trailing URL**, a **stray trailing colon**, and
+  leftover **BBCode** (`[/size]`) are stripped from a name.
+- A single comparison posted as **one image group per source** (per-group labels
+  like `release - AC3 5.1 - size`, no explicit `vs`/`|`/`/` separator) is transposed
+  into **one N-column grid**, never several. Multi-comparison sectioning fires only
+  on an explicit `vs`/`|`/`/` separator.
 - Frame-index spillover after a hard line break is trimmed.
 - A single-source "replenish" reply with no `vs` is intentionally **not** surfaced.
 
-Full sweep vs committed HEAD after these changes: grid-count **up 20 / down 70 /
-→0 1 / same 3551**, **507** name-set changes — all classified as intended (size-fold
-pseudo-grid collapses, `[tag]` strips, quote/description removals, frame-index
-newline cuts, vs-line/bracket grid rescues); **zero unexplained regressions**; the
-lone →0 is the intentionally-ignored single-source replenish. New representative
-cases `081` (bracket-keep), `082` (description→vs-line), `083` (size-fold) lock the
-previously-uncovered behaviors. See `progress.json#coverageVerification`.
+Latest full sweep vs committed HEAD: grid-count **up 109 / down 89 (bogus per-size
+pseudo-grid collapses) / →0 11**, **645** name-set changes. Of the 11 →0, **8 are
+correct** (bogus `Slowpics:`/`Note:`/title-only or prose labels, plus the
+ruled-ignore single-source replenish). Representative cases `081` (bracket-keep),
+`082` (description→vs-line), `083` (size-fold), `084` (per-source-groups transpose)
+lock the new behaviors; `015` and `064` were upgraded to their now-correct outputs.
+See `progress.json#coverageVerification`.
+
+### Documented backlog (not yet fixed)
+
+- **3 real →0 regressions**: `2625` (`<strong>A</strong> vs <strong>B</strong> vs
+  <strong>C</strong>` joined by `vs` text nodes, with a `<b>Quote</b>` BDInfo block
+  polluting the bold collection); `0110`/`0120` (color-span comparisons whose
+  preamble carries `Sources`/`Notes` bolds + external `blu-ray.com` links). Both are
+  pre-existing quote/preamble fragilities.
+- **Name-quality residuals** from non-`cleanNamePart` paths (color-span / bold /
+  group-label): ~27 trailing-colon, ~2 URL-in-name, ~1 BBCode-in-name. Fixable via a
+  centralized final name-normalization pass applied to every grid's names.
 
 ---
 

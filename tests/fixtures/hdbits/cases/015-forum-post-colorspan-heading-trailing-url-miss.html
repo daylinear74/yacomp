@@ -1,8 +1,9 @@
 <!--
 slot: forum.post
 thread_title: "[Comparisons] Geomijip (2023) HKG vs FRA vs NFWeb"
-expected_grids: 0
-notes: KNOWN LIMITATION (pins current behavior, not the desired outcome). The "HKG Vs FRA Vs NFWeb" heading shares one color <span> with a trailing slow.pics URL, so that URL becomes the group's label, is treated as a non-name heading, and suppresses detection (0 grids) even though a three-column grid is present. A future fix should flip this to 1 grid named [HKG, FRA, NFWeb].
+expected_grids: 1
+expected_names: [["HKG","FRA","NFWeb"]]
+notes: colorspan heading "HKG Vs FRA Vs NFWeb" shares one color <span> with a trailing slow.pics URL on the next line. The trailing URL is stripped and the post-newline spillover trimmed, so the heading splits cleanly into a three-column grid [HKG, FRA, NFWeb]. (Previously a documented 0-grid limitation; fixed by the trailing-URL strip.)
 -->
 
 <div align="center" width="100%"><font size="4"><strong><span style="color: Blue">HKG Vs FRA Vs NFWeb<br>

@@ -1,27 +1,35 @@
 {
   "version": 2,
-  "updatedAt": "2026-05-29T17:11:57.931331Z",
+  "updatedAt": "2026-05-29T19:28:59.687524Z",
   "note": "Resumable HDBits fixture-curation tracker. The scrape dumps (yacomp-*-fixtures-*/) are gitignored/local-only; this file records, per structural cluster, the decision made so a future agent can resume without re-reading processed files. `files` maps every processed dump path to its cluster signature (presence = already reviewed). `clusters` holds the decision per signature: extracted (became cases/<file>), covered-by-existing (behavior already in a hand-written case), needs-review (parser output looked unreliable — revisit and curate manually), skipped (redundant shape, behavior already represented). To continue: cluster any new/unprocessed dump files, look up their signature here, and only act on signatures not yet decided.",
   "coverageVerification": {
-    "note": "Empirical check: every one of the 3,685 dump files is run through the real parser (getGrids) headless and its output compared against the committed-HEAD baseline. The earlier 'polluted backlog' framing is superseded: the column-title semantics for those files were adjudicated by explicit project rulings — (A) tech metadata such as '@ 28.6 Mbps' / kbps kept verbatim; (B) a trailing file size is folded into the preceding source name; (C) a leading [thread-tag] is stripped from titles only when text survives, so fully-bracketed labels like '[NOR 35036 kbps]' are kept verbatim; (D) prose/commentary labels kept verbatim; plus: 'X wrote:' quote attributions and 'Short/Long description:' field labels are not source labels; a single leading bold that itself carries a vs/pipe split is used as the comparison label; frame-index spillover after a hard line break is trimmed; and a single-source 'replenish' reply with no vs is intentionally not surfaced. After applying these rulings the full sweep vs HEAD shows grid-count up 20 / down 70 / ->0 1 / same 3551 and 507 name-set changes, ALL classified as intended (size-fold pseudo-grid collapses, [tag] strips, quote/description removals, frame-index newline cuts, and vs-line/bracket grid rescues) with zero unexplained regressions; the lone ->0 is the intentionally-ignored single-source replenish.",
+    "note": "Empirical check: all 3,685 dump files run through the real parser (getGrids) headless, output diffed against committed HEAD. Column-title semantics adjudicated by explicit project rulings and the parser fixed to match. Rulings now in src/grid: (A) tech metadata (@28.6 Mbps/kbps) verbatim; (B) trailing file size folded into the source name; (C) leading [thread-tag] stripped only when text survives (so [NOR 35036 kbps] kept verbatim); (D) prose verbatim; 'X wrote:'/'Short|Long description:'/footer headings ('See also:','Slowpics:','Note:') and bare-URL columns are NOT source labels (skipped); a trailing URL or stray trailing colon or leftover BBCode tag ([/size]) is stripped from a name; a single leading element (incl. font/span-wrapped) whose text carries a vs/| split is used as the comparison label; a single comparison posted as one image group PER SOURCE (labels like 'release - AC3 5.1 - size', no explicit vs/|/ separator) is transposed into ONE N-column grid, never several; frame-index spillover after a hard line break trimmed; single-source 'replenish' replies not surfaced. Multi-comparison sectioning fires only on an explicit vs/|/ separator. Full sweep vs HEAD: grid up 109 / down 89 (bogus per-size pseudo-grid collapses) / ->0 11 / 645 name-set changes.",
     "fullSweep": {
       "files": 3685,
-      "gridUp": 20,
-      "gridDown": 70,
-      "gridToZeroIntentional": 1,
-      "same": 3551,
-      "nameSetChanged": 507,
-      "unexplainedRegressions": 0
+      "gridUp": 109,
+      "gridDown": 89,
+      "gridToZero": 11,
+      "nameSetChanged": 645,
+      "oracleErrors": 34
     },
+    "gridToZeroBreakdown": "8 correct (bogus Slowpics:/Note:/title-only or prose labels, plus the ruled-ignore single-source replenish 0623); 3 documented backlog regressions (2625 'strong vs strong vs strong' + BDInfo bold pollution; 0110/0120 color-span comparisons with Sources/Notes preamble + external blu-ray.com links).",
+    "residualBacklog": "Name-quality residuals from non-cleanNamePart paths (color-span / bold / group-label): ~27 trailing-colon, ~2 URL-in-name, ~1 BBCode-in-name. Fixable later via a centralized final name-normalization pass. Left as documented backlog.",
     "lockedBehaviorRulings": [
       "A:metadata-verbatim",
       "B:size-fold",
       "C:tag-strip-when-text-survives",
       "D:prose-verbatim",
       "bracket-keep",
-      "quote-attribution-not-a-label",
-      "description-field-not-a-label",
+      "quote-attribution-skip",
+      "description-field-skip",
+      "footer-label-skip",
+      "bare-url-column-drop",
+      "trailing-url-strip",
+      "trailing-colon-strip",
+      "bbcode-tag-strip",
       "leading-vs-label",
+      "per-source-groups-transpose",
+      "explicit-vs-only-multicomp",
       "frame-index-newline-cut",
       "single-source-replenish-ignored"
     ]
@@ -35,12 +43,13 @@
       "080-forum-post-plain-vs-unaltered-gbr-us.html": "2669-topic-80509-magic-crystal (forum.post, 4 grids, plain-vs)",
       "081-forum-post-bracket-keep-nor-vs-usa-kbps.html": "0673-topic-65041-looper-2012 (forum.post, 1 grid, bracket-label; fully-bracketed source labels kept verbatim)",
       "082-forum-post-description-then-us-fre-jpn-vs.html": "0365-topic-59817-underworld (forum.post, 1 grid, leading-vs-label; description: field labels skipped, names from the vs-line)",
-      "083-forum-post-size-fold-webdl-hdtv-gb.html": "0553-topic-62860-better-call-saul-s01 (forum.post, 1 grid, size-fold; trailing file size folded into the source name)"
+      "083-forum-post-size-fold-webdl-hdtv-gb.html": "0553-topic-62860-better-call-saul-s01 (forum.post, 1 grid, size-fold; trailing file size folded into the source name)",
+      "084-forum-post-per-source-groups-the-missing.html": "0835-topic-67631-the-missing-s02e01 (forum.post, 1 grid, per-source-groups transpose; four sources each posted as its own image group collapse into one 4-column grid, NOT four grids)"
     }
   },
   "totalDumpFiles": 3685,
   "clusterCount": 614,
-  "emittedCases": 66,
+  "emittedCases": 67,
   "clusters": {
     "forum.post|tc:13-30|st:0|vs|pipe": {
       "status": "skipped",
