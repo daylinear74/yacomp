@@ -1,0 +1,98 @@
+<!--
+slot: torrent.description
+expected_grids: 3
+expected_names: [["Source","Filtered","Encode"],["Source","Filtered","Encode","JKP(GBR)","IDE(Kino Lorber)"],["Source","Filtered(Deband and Deblock)","Encode"]]
+torrent_title: "Salaam Bombay! 1988 1080p BluRay FLAC1.0 x264-RO"
+notes: color name strategy, 3 grid(s). Derived from a real HDBits torrent.description shape; images genericized, identifiers scrubbed. Auto-curated from dump cluster (1 similar shapes).
+-->
+
+<p class="sub"><b>Release info wrote:</b></p><table class="main" border="1" cellspacing="0" cellpadding="10"><tbody><tr><td style="border: 1px black dashed"><strong>Source:</strong><br>
+• Source: Salaam Bombay! 1988 1080p Remux AVC FLAC1.0-CiNEPHiLES (Thanks!)<div><label class="label_showhide" onclick="showHideBB(this);">Remux release info <span>[show]</span></label><div class="div_showhide"><div style="text-align: left;"><strong>Source #1:</strong> Criterion Blu-ray (video, audio, commentary, subtitles, chapters) - <em>thanks TMT!</em><br>
+<strong>Source #2:</strong> BFI Blu-ray (commentary, subtitles) - <em>thanks anonymous!</em><br>
+<br>
+<span style="color: #FFBE98"><strong>Video</strong></span><br>
+Criterion is a new 4K restoration from the original negative, with improved detail and color grading, falling somewhere between BFI's colder and Kino's warmer tints.<br>
+<br>
+<strong>Criterion (2025)</strong> vs <strong>BFI (2021)</strong> vs <strong>Kino Lorber (2015)</strong>: <a href="/redir.php?url=">https://example.invalid/link</a><br>
+<br>
+<span style="color: #FFBE98"><strong>Audio</strong></span><br>
+Criterion and Kino Lorber appear to be from the same master, but Kino Lorber's first third is strangely quieter than the rest. BFI has different EQ and some noise reduction in the highest frequencies. All in all, nothing audible.<br>
+<br>
+<strong>Audio comparisons:</strong> Spectrograms, Waveforms<br>
+<br>
+<span style="color: #FFBE98"><strong>Subtitles</strong></span><br>
+Included two different translations from Criterion and BFI. Kino Lorber's was excluded as it's quite similar to Criterion.</div></div></div><strong>Video:</strong><br>
+• Criterion has better details than both BFI and Kino Lorber. All releases have different colors and Criterion claims that its new restoration was supervised and approved by director Mira Nair.<br>
+• Fixed dirtylines on top and bottom. Fixed blurred margins caused by x264 partition.<br>
+• Debanded intro and zoned.<br>
+<strong>Subtitles:</strong><br>
+• Chinese(Simplified &amp; Traditional &amp; Commentary #1) were translated from English subs via Gemini 3 pro and GPT-5, checked and fixed some common errors. Retail R3 Chinese subs were poorly translated so not included. <br>
+• All other subtitles from Source, please check mediainfo for more.<br>
+<strong>Others:</strong><br>
+• Chapters included and named from Source.<br>
+• Greetings to Miralia and all my friends@User.</td></tr></tbody></table><br><p class="sub"><b>x264 info wrote:</b></p><table class="main" border="1" cellspacing="0" cellpadding="10"><tbody><tr><td style="border: 1px black dashed">x264 [info]: frame I:819 Avg QP:20.81 size:270206<br>
+x264 [info]: frame P:26695 Avg QP:22.10 size:173039<br>
+x264 [info]: frame B:137562 Avg QP:24.03 size:108459<br>
+x264 [info]: consecutive B-frames: 0.7% 0.9% 2.8% 6.9% 9.3% 41.4% 8.6% 4.6% 4.4% 5.4% 5.4% 3.5% 2.8% 1.9% 0.6% 0.3% 0.3%</td></tr></tbody></table><br><div><label class="label_showhide" onclick="showHideBB(this);">Script <span>[show]</span></label><div class="div_showhide"><div style="text-align: left;">import vapoursynth as vs<br>
+import awsmfunc as awf<br>
+import havsfunc as haf<br>
+import mvsfunc as mvf<br>
+from rekt import rektlvls<br>
+import kagefunc as kgf<br>
+import adptvgrnMod as agm<br>
+core = vs.core<br>
+<br>
+##Source In<br>
+src = core.lsmas.LWLibavSource(r"Video.mkv")<br>
+src = core.std.Crop(src,top=22,bottom=22)<br>
+src16 = mvf.Depth(src,16)<br>
+<br>
+##Dirtylines<br>
+fix = rektlvls(src16,rownum=[0,1],rowval=[-4,1])<br>
+fix = awf.bbmod(fix,bottom=2,blur=100)<br>
+<br>
+top = core.std.Crop(fix,bottom=1026)<br>
+bot = core.std.Crop(fix,top=10)<br>
+gtop = agm.adptvgrnMod(top,strength=[0.55,0.35], size=1.5, sharp=190, static=False, luma_scaling=-1, seed=-1)<br>
+y = core.std.ShufflePlanes(top, 0, vs.GRAY)<br>
+mask = core.std.Binarize(y, 7000)<br>
+gtop = core.std.MaskedMerge(top, gtop, mask)<br>
+gfix = core.std.StackVertical([gtop,bot])<br>
+<br>
+mappings_gf = "[1366 160340]"<br>
+gfix = core.remap.Rfs(fix,gfix, mappings=mappings_gf)<br>
+<br>
+##Deband<br>
+#Intro [314 668]<br>
+deband = core.neo_f3kdb.Deband(gfix, range = 15, y = 65, cb = 60, cr = 60, grainy = 0, grainc = 0, dynamic_grain = True, output_depth = 16)<br>
+gf = agm.adptvgrnMod(deband,strength=[0.5,0], size=1.5, sharp=80, static=False, luma_scaling=5, seed=-1, show_mask=False)<br>
+mappings_db = "[314 668]"<br>
+db = core.remap.Rfs(gfix,gf, mappings=mappings_db)<br>
+<br>
+y = core.std.ShufflePlanes(gfix, 0, vs.GRAY)<br>
+mask = core.std.Binarize(y, 4100)<br>
+db = core.std.MaskedMerge(gfix, db, mask)<br>
+<br>
+##Output<br>
+out = mvf.Depth(db,8)<br>
+out.set_output()<br>
+<br>
+#crf = 20.4<br>
+#--level 4.1 --vbv-bufsize 78125 --vbv-maxrate 62500 --merange 32 --bframes 16 --deblock -3:-3 --no-fast-pskip --rc-lookahead 250 --qcomp 0.62 --psy-rd 1.02:0.00 --aq-mode 3 --aq-strength 0.82 --me umh --b-adapt 2 --direct auto --subme 11 --trellis 2 --no-dct-decimate --no-mbtree --colormatrix bt709 --colorprim bt709 --ipratio 1.35 --pbratio 1.25 --zones 314,668,b=1.8/160340,165075,b=0.7</div></div></div><br>
+<div align="center" width="100%"><strong>Source vs Filtered(Deband and Deblock) vs Encode</strong></div><br>
+<div align="center" width="100%"><a href="https://img.hdbits.org/g01"><img src="https://t.hdbits.org/g01.jpg"></a> <a href="https://img.hdbits.org/g02"><img src="https://t.hdbits.org/g02.jpg"></a> <a href="https://img.hdbits.org/g03"><img src="https://t.hdbits.org/g03.jpg"></a> <br>
+<a href="https://img.hdbits.org/g04"><img src="https://t.hdbits.org/g04.jpg"></a> <a href="https://img.hdbits.org/g05"><img src="https://t.hdbits.org/g05.jpg"></a> <a href="https://img.hdbits.org/g06"><img src="https://t.hdbits.org/g06.jpg"></a></div><br>
+<div align="center" width="100%"><strong>Source vs Filtered vs Encode vs JKP(GBR) vs IDE(Kino Lorber)</strong></div><br>
+<div align="center" width="100%"><a href="https://img.hdbits.org/g07"><img src="https://t.hdbits.org/g07.jpg"></a> <a href="https://img.hdbits.org/g08"><img src="https://t.hdbits.org/g08.jpg"></a> <a href="https://img.hdbits.org/g09"><img src="https://t.hdbits.org/g09.jpg"></a> <a href="https://img.hdbits.org/g10"><img src="https://t.hdbits.org/g10.jpg"></a> <a href="https://img.hdbits.org/g11"><img src="https://t.hdbits.org/g11.jpg"></a> <br>
+<a href="https://img.hdbits.org/g12"><img src="https://t.hdbits.org/g12.jpg"></a> <a href="https://img.hdbits.org/g13"><img src="https://t.hdbits.org/g13.jpg"></a> <a href="https://img.hdbits.org/g14"><img src="https://t.hdbits.org/g14.jpg"></a> <a href="https://img.hdbits.org/g15"><img src="https://t.hdbits.org/g15.jpg"></a> <a href="https://img.hdbits.org/g16"><img src="https://t.hdbits.org/g16.jpg"></a> <br>
+<a href="https://img.hdbits.org/g17"><img src="https://t.hdbits.org/g17.jpg"></a> <a href="https://img.hdbits.org/g18"><img src="https://t.hdbits.org/g18.jpg"></a> <a href="https://img.hdbits.org/g19"><img src="https://t.hdbits.org/g19.jpg"></a> <a href="https://img.hdbits.org/g20"><img src="https://t.hdbits.org/g20.jpg"></a> <a href="https://img.hdbits.org/g21"><img src="https://t.hdbits.org/g21.jpg"></a> <br>
+<a href="https://img.hdbits.org/g22"><img src="https://t.hdbits.org/g22.jpg"></a> <a href="https://img.hdbits.org/g23"><img src="https://t.hdbits.org/g23.jpg"></a> <a href="https://img.hdbits.org/g24"><img src="https://t.hdbits.org/g24.jpg"></a> <a href="https://img.hdbits.org/g25"><img src="https://t.hdbits.org/g25.jpg"></a> <a href="https://img.hdbits.org/g26"><img src="https://t.hdbits.org/g26.jpg"></a> <br>
+<a href="https://img.hdbits.org/g27"><img src="https://t.hdbits.org/g27.jpg"></a> <a href="https://img.hdbits.org/g28"><img src="https://t.hdbits.org/g28.jpg"></a> <a href="https://img.hdbits.org/g29"><img src="https://t.hdbits.org/g29.jpg"></a> <a href="https://img.hdbits.org/g30"><img src="https://t.hdbits.org/g30.jpg"></a> <a href="https://img.hdbits.org/g31"><img src="https://t.hdbits.org/g31.jpg"></a> <br>
+<a href="https://img.hdbits.org/g32"><img src="https://t.hdbits.org/g32.jpg"></a> <a href="https://img.hdbits.org/g33"><img src="https://t.hdbits.org/g33.jpg"></a> <a href="https://img.hdbits.org/g34"><img src="https://t.hdbits.org/g34.jpg"></a> <a href="https://img.hdbits.org/g35"><img src="https://t.hdbits.org/g35.jpg"></a> <a href="https://img.hdbits.org/g36"><img src="https://t.hdbits.org/g36.jpg"></a> <br>
+<a href="https://img.hdbits.org/g37"><img src="https://t.hdbits.org/g37.jpg"></a> <a href="https://img.hdbits.org/g38"><img src="https://t.hdbits.org/g38.jpg"></a> <a href="https://img.hdbits.org/g39"><img src="https://t.hdbits.org/g39.jpg"></a> <a href="https://img.hdbits.org/g40"><img src="https://t.hdbits.org/g40.jpg"></a> <a href="https://img.hdbits.org/g41"><img src="https://t.hdbits.org/g41.jpg"></a> <br>
+<a href="https://img.hdbits.org/g42"><img src="https://t.hdbits.org/g42.jpg"></a> <a href="https://img.hdbits.org/g43"><img src="https://t.hdbits.org/g43.jpg"></a> <a href="https://img.hdbits.org/g44"><img src="https://t.hdbits.org/g44.jpg"></a> <a href="https://img.hdbits.org/g45"><img src="https://t.hdbits.org/g45.jpg"></a> <a href="https://img.hdbits.org/g46"><img src="https://t.hdbits.org/g46.jpg"></a> <br>
+<a href="https://img.hdbits.org/g47"><img src="https://t.hdbits.org/g47.jpg"></a> <a href="https://img.hdbits.org/g48"><img src="https://t.hdbits.org/g48.jpg"></a> <a href="https://img.hdbits.org/g49"><img src="https://t.hdbits.org/g49.jpg"></a> <a href="https://img.hdbits.org/g50"><img src="https://t.hdbits.org/g50.jpg"></a> <a href="https://img.hdbits.org/g51"><img src="https://t.hdbits.org/g51.jpg"></a> <br>
+<a href="https://img.hdbits.org/g52"><img src="https://t.hdbits.org/g52.jpg"></a> <a href="https://img.hdbits.org/g53"><img src="https://t.hdbits.org/g53.jpg"></a> <a href="https://img.hdbits.org/g54"><img src="https://t.hdbits.org/g54.jpg"></a> <a href="https://img.hdbits.org/g55"><img src="https://t.hdbits.org/g55.jpg"></a> <a href="https://img.hdbits.org/g56"><img src="https://t.hdbits.org/g56.jpg"></a></div><br>
+<div align="center" width="100%"><strong>Preview</strong></div><br>
+<div align="center" width="100%"><a href="https://img.hdbits.org/g57"><img src="https://t.hdbits.org/g57.jpg"></a> <a href="https://img.hdbits.org/g58"><img src="https://t.hdbits.org/g58.jpg"></a> <a href="https://img.hdbits.org/g59"><img src="https://t.hdbits.org/g59.jpg"></a> <br>
+<a href="https://img.hdbits.org/g60"><img src="https://t.hdbits.org/g60.jpg"></a> <a href="https://img.hdbits.org/g61"><img src="https://t.hdbits.org/g61.jpg"></a> <a href="https://img.hdbits.org/g62"><img src="https://t.hdbits.org/g62.jpg"></a></div>
