@@ -22,8 +22,15 @@ export function looksLikeNames(parts: string[]): boolean {
 }
 
 const GENERIC_HEADING_PREFIX_RE = /^\s*(?:screenshot\s+comparison|comparison|screenshots?)\s*/i;
-const VS_RE = /\s+vs\.?\s+/i;
-const VS_TEST = /\bvs\.?\s/i;
+// A mediainfo FIELD prefix on a comparison line ("Video: GER … | USA …",
+// "Audio: …") merely states what kind of comparison it is — strip it so the
+// real source names remain (owner ruling, 2221/2425).
+const FIELD_PREFIX_RE = /^\s*(?:video|audio|subtitles?|subs)\s*:\s*/i;
+// Comparison separators: "vs", "vs.", "v." — but NOT bare "v" (would match a
+// version token). Spaces are required around it in VS_RE so a name's internal
+// "v." is left alone.
+const VS_RE = /\s+v(?:s\.?|\.)\s+/i;
+const VS_TEST = /\bv(?:s\.?|\.)\s/i;
 const DASH_RE = /\s+-\s+/;
 const SLASH_RE = /\s+\/\s+/;
 const TIMES_RE = /\s+×\s+/;
@@ -35,7 +42,7 @@ export interface NameLabelInfo {
 }
 
 function cleanNameCandidate(text: string): string {
-  return text.replace(GENERIC_HEADING_PREFIX_RE, "").trim();
+  return text.replace(GENERIC_HEADING_PREFIX_RE, "").replace(FIELD_PREFIX_RE, "").trim();
 }
 
 // Strip a leading bbcode/bracket thread-tag such as "[Comparisons] " that
@@ -219,7 +226,9 @@ function plainSplit(c: string): string[] {
 }
 
 export function splitNames(text: string): string[] {
-  const candidate = cleanNameCandidate(text);
+  // Repair a missing space after "vs" ("…(with NGU Sharp) vsPhantom Thread…",
+  // 1313) so the separator is detected.
+  const candidate = cleanNameCandidate(text).replace(/(\s)vs(?=[A-Z])/g, "$1vs ");
   // Prefer a TOP-LEVEL separator (one outside parentheses), but only when the
   // label's parens are balanced (else masking is unreliable). When no top-level
   // separator exists, fall back to a plain split — which lets a paren-enclosed

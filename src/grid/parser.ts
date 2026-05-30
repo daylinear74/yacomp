@@ -294,13 +294,16 @@ function leadingComparisonNames(container: Element): { names: string[]; anchorEl
     if (node.nodeName === "A" && (node as Element).querySelector("img")) break;
     if (node.nodeType === 1 && (node as Element).querySelector("img")) break;
     const cur = raw[raw.length - 1];
-    // A heading followed by a bare comparison URL / "Slow.pics" link describes
-    // that EXTERNAL comparison, not the inline screenshots (007). Mark the line
-    // so it can't supply titles — but a hyperlinked source NAME ("<a>JP (Pony
-    // Canyon) AVC…</a>") is fine and contributes its text.
     if (node.nodeName === "A") {
       const at = (node.textContent || "").trim();
-      if (isUrlLabel(at) || isFooterLabel(at)) { cur.external = true; continue; }
+      // A "see it here" pointer whose text is a footer label ("Slow.pics")
+      // means the heading's screenshots live at that EXTERNAL comparison (007) —
+      // mark the line so it can't supply inline titles. A BARE URL ("( Outside
+      // link: https://slow.pics/c/… )") is just a mirror aside, NOT an external
+      // boundary — skip its text but still let the local vs-line win (2503). A
+      // hyperlinked source NAME ("<a>JP (Pony Canyon) AVC…</a>") contributes.
+      if (isFooterLabel(at)) { cur.external = true; continue; }
+      if (isUrlLabel(at)) continue;
     }
     cur.text += node.textContent || "";
     if (!cur.el && node.nodeType === 1) cur.el = node;

@@ -65,24 +65,24 @@ heading matches the count — see A1 / `headingNamesBeforeLink`).
 - `0110` = **torrent `cool-as-ice`** (`0110-torrent-694603-…`), not the
   v-for-vendetta forum post. It is all "Sources"/"Notes" preamble prose and
   currently yields 0 grids. Awaiting ruling on the intended comparison.
-## Phase 2 rulings (owner-confirmed, TODO)
+## Phase 2 rulings
 
-### `v.` separator + footnote markers (these are REAL comparisons, not garbage)
-- `0288` → `720p WEB-DL*` / `1080p WEB-DL` / `Capture` (3 col; ` v. ` separator, `*` footnote)
-- `0319` → `CtrlHD¹` / `lulz¹` / `720p WEB-DL²` / `1080p WEB-DL³` (4 col; ` v. `, superscript footnotes)
+### `v.` separator + footnote markers (DONE — `v.` added to VS_RE/VS_TEST)
+- `0288` → `720p WEB-DL*` / `1080p WEB-DL` / `Capture` ✅
+- `0319` → `CtrlHD¹` / `lulz¹` / `720p WEB-DL²` / `1080p WEB-DL³` (corpus body uses a different label line; partial)
 - `2819` → `Warner Bros. Blu-ray (2024)` / `MA 4K WEB-DL (Resize)` (keep "(Resize)")
 - `2814` → `MA 4K WEB-DL (Resize)` / `CEE BD (2024)`
-- `1720` → TWO groups: (1) `Blu-ray 1080p (VexHD/FraMeSToR Remux)` / `Amazon 1080p`; (2) `Amazon 1080p` / `Netflix 1080p` / `Amazon 1080p (resized+addBorders)`
+- `1720` → TWO groups (multi-section; TODO)
 
-### Strip `Video:` / `Audio:` / `Subtitle:` field prefixes (just say the comparison kind)
-- `2221` → TWO groups: (1) `GER (1080p AVC 19999 kbps 23.976 fps)` / `USA (…)`; (2) `GER (DTS-HD MA 5.1 3588 kbps 24-bit)` / `USA (…)`
-- `2425` → groups split on `|`, prefix stripped: e.g. `GER (French 5.1ch DTS-HD MA @ 1934 kbps)` / `USA (…)`
+### Strip `Video:` / `Audio:` / `Subtitle:` field prefixes (DONE — FIELD_PREFIX_RE)
+- `2221` → TWO groups GER/USA video + GER/USA audio ✅
+- `2425` → `GER (16,885 kbps)` / `FRA (20,007 kbps)` / `USA (26,900 kbps)` ✅
 
 ### Movie-title prefix / typos
-- `2902` → `GBR` / `USA` (strip leading "Betty 1992 1080p Remux")
-- `1313` → keep the full long names; the bug is a missing space in `…(with NGU Sharp) vsPhantom Thread…` — handle `vs` immediately followed by a capital
-- `1261` → `2160p UHD` / `1080p BD` (2 col)
-- `1293` → a **reply**: ignore the topic title; 3 col, no body title → `Source 1/2/3` (or `Source/Filtered/Encode`)
+- `2902` → `GBR` / `USA` (strip leading "Betty 1992 1080p Remux") — TODO (item 6, heuristic)
+- `1313` → keep full long names; `vsPhantom` typo handled in splitNames ✅ (corpus body picks a shorter label line; partial)
+- `1261` → `2160p UHD` / `1080p BD` ✅
+- `1293` → a **reply**: ignore the topic title (needs H1-only-for-OP) — TODO
 
 ### Numeric / row-number labels
 - `0640` → `A` / `B` / `C` (intentional — keep)
