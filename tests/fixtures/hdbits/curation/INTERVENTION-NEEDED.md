@@ -113,19 +113,25 @@ sections' images wrapped in ONE big `<strong>`:
    yields `["Source (Carlotta | FRA)", "Geek", "TayTO (TWN)"]`; the inner `|` is
    no longer split).
 3. `Source vs Geek (FRA) vs BMF (GER):` — already correct.
+Fixed since:
+- **Spurious 2-col grid** — DONE via `isMultiSourceLabel` (transpose path now
+  skips a label that is itself a multi-source list); also rescued 13 grids.
+- **3-col `Source/Filtered/Encode` default** — DONE (a 3-wide comparison with no
+  usable source label defaults to Source/Filtered/Encode; cases 055/063 updated).
+
 Still open:
-- **Spurious extra grid**: because group A and group B images share the big
-  `<strong>` container, `parseGrid(strong)` transposes the two SECTION labels
-  (`"Source…TayTO (TWN)"` + `"Dirty line fix"`) into a bogus 2-column grid. A
-  clean fix needs the groupLabels-transpose path to skip when a label is itself a
-  multi-source list (top-level comma / explicit vs), but NOT when it is a single
-  "release - AC3 - size" (0835) — distinguishable via a top-level-comma check.
-  Risky (shared path); needs a full sweep. Ruling: fix now, or accept?
-- **`Dirty line fix:` → `Source / Filtered / Encode` default** (user request):
-  needs (a) a note-label to start a new section even without `vs`, and (b) an
-  unlabeled encode-comparison to default to Source/Filtered/Encode. The default is
-  an HDBits convention guess — applying it broadly would mislabel single-source
-  galleries. Needs a careful, narrow trigger + ruling.
+- **Duplicate grid** from the nested `<strong>` inside `<td>`: `getGrids` parses
+  BOTH the inner `<strong>` (group A+B images) and the outer `<td>` (all images),
+  so the first comparison appears twice. **Tried & reverted:** climbing past
+  inline wrappers (`blockContainer`) to make every image resolve to the same
+  block — it deduped the wedding but BROKE 4 real comparisons (0887 US/EUR/HKG/NOR,
+  1741 ITA/US/GER/GBR, 1736, 0470) by changing parse scope. Net-negative, reverted.
+  A safer dedup (e.g. skip a container whose images are a subset of an
+  already-parsed outer container, or per-image assignment tracking) is needed.
+- **`Dirty line fix:` as its own grid**: group B's images currently merge into
+  group A's grid. Making it a separate Source/Filtered/Encode grid needs
+  `buildMultiCompGrids` to start a new section on a non-source NOTE label (not
+  just a `vs` label). Risky (sectioning logic); needs a careful trigger + sweep.
 
 ## Resolved (for reference)
 - 0623 single-source replenish → intentionally 0 grids (ruled: ignore).
