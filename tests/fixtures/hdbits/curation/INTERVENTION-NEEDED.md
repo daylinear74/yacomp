@@ -126,8 +126,16 @@ Still open:
   inline wrappers (`blockContainer`) to make every image resolve to the same
   block — it deduped the wedding but BROKE 4 real comparisons (0887 US/EUR/HKG/NOR,
   1741 ITA/US/GER/GBR, 1736, 0470) by changing parse scope. Net-negative, reverted.
-  A safer dedup (e.g. skip a container whose images are a subset of an
-  already-parsed outer container, or per-image assignment tracking) is needed.
+  **Also tried & reverted:** per-image dedup in `getGrids` (drop a grid whose
+  images are all already claimed). Fixed the wedding (2 clean grids) and kept
+  0887/1741, BUT collapsed legit showhide multi-grids — case 049 (2→1) and 051
+  (40→21) lost grids because their visible+hidden parses legitimately share image
+  elements. Reverted. The two failure modes are in tension: nested-strong overlap
+  (wedding) wants dedup; showhide visible/hidden (049/051) must NOT be deduped.
+  A correct fix must distinguish "same container hierarchy re-parsed" from
+  "visible vs showhide", e.g. only dedup when one parseContainer is an ancestor of
+  another. Left as a documented limitation — the wedding shows its first
+  comparison twice; not harmful, just redundant.
 - **`Dirty line fix:` as its own grid**: group B's images currently merge into
   group A's grid. Making it a separate Source/Filtered/Encode grid needs
   `buildMultiCompGrids` to start a new section on a non-source NOTE label (not
