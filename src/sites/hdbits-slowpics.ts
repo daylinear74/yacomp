@@ -9,55 +9,48 @@
 
 import type { Grid, GridCell } from "../grid";
 import { hdbFull } from "../grid/parser";
-import { parseSlowPicsKey, type SlowPicsGridInfo } from "./slowpics-source";
+import { slowPicsKeyFromAnchor, type SlowPicsGridInfo } from "./slowpics-source";
 
-export interface UnclaimedBlock {
-  /** Unclaimed HDBits thumbnail <img>s in this block (document order). */
+export interface SlowPicsComparison {
+  key: string;
+  /** The slow.pics link that introduces this comparison. */
+  link: HTMLAnchorElement;
+  /** HDBits screenshots belonging to it: those after this link and before the
+   *  next slow.pics link (document order). */
   images: HTMLImageElement[];
-  /** Node to insert the "Show comparison" affordance after. */
-  anchor: Node;
-  /** slow.pics/c key introducing this block, if any (else manual entry). */
-  slowpicsKey: string | null;
 }
 
-function docOrder(a: Node, b: Node): number {
-  if (a === b) return 0;
-  return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+function isBefore(a: Node, b: Node): boolean {
+  return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
 }
 
-/** Group unclaimed HDBits screenshots into contiguous blocks. A run breaks at a
- *  claimed image (handled by another grid) and at a slow.pics/c link (which
- *  introduces a new comparison). Each block remembers its slow.pics key (for the
- *  fetch path) or null (for manual column entry). */
-export function findUnclaimedBlocks(
-  container: Element,
-  claimed: Set<HTMLImageElement>,
-): UnclaimedBlock[] {
-  const nodes = [
-    ...container.querySelectorAll<HTMLImageElement>('img[src*="//t.hdbits.org/"]'),
-    ...[...container.querySelectorAll<HTMLAnchorElement>("a[href]")].filter((a) => parseSlowPicsKey(a.href)),
-  ].sort(docOrder);
-
-  const blocks: UnclaimedBlock[] = [];
-  let cur: HTMLImageElement[] = [];
-  let key: string | null = null;
-  let keyNode: Node | null = null;
-  const flush = () => {
-    if (cur.length) blocks.push({ images: cur, anchor: keyNode ?? cur[0], slowpicsKey: key });
-    cur = [];
-  };
-  for (const node of nodes) {
-    if (node instanceof HTMLAnchorElement) {
-      flush(); // a slow.pics link starts a new comparison
-      key = parseSlowPicsKey(node.href);
-      keyNode = node;
-    } else {
-      if (claimed.has(node)) { flush(); key = null; keyNode = null; }
-      else cur.push(node);
-    }
+/** slow.pics links are authoritative comparison boundaries: each one owns the
+ *  HDBits screenshots that follow it (until the next slow.pics link). Returns one
+ *  entry per slow.pics link that has ≥1 image — these define the comparisons,
+ *  shaped later from the fetched collection's column count + titles. */
+export function findSlowPicsComparisons(container: Element): SlowPicsComparison[] {
+  const links: { a: HTMLAnchorElement; key: string }[] = [];
+  for (const a of container.querySelectorAll<HTMLAnchorElement>("a[href]")) {
+    const key = slowPicsKeyFromAnchor(a.href, a.textContent || "");
+    if (key) links.push({ a, key });
   }
-  flush();
-  return blocks;
+  if (!links.length) return [];
+  const imgs = [...container.querySelectorAll<HTMLImageElement>('img[src*="//t.hdbits.org/"]')];
+
+  const byLink = new Map<HTMLAnchorElement, HTMLImageElement[]>();
+  for (const img of imgs) {
+    let owner: HTMLAnchorElement | null = null;
+    for (const { a } of links) {
+      if (isBefore(a, img)) owner = a;
+      else break;
+    }
+    if (!owner) continue;
+    (byLink.get(owner) ?? byLink.set(owner, []).get(owner)!).push(img);
+  }
+
+  return links
+    .filter(({ a }) => byLink.get(a)?.length)
+    .map(({ a, key }) => ({ key, link: a, images: byLink.get(a)! }));
 }
 
 /** Reshape rescued HDBits thumbnails into a grid using slow.pics' column count

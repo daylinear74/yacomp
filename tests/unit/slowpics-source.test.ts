@@ -87,3 +87,28 @@ describe("buildRescueGrid", () => {
     expect(buildRescueGrid([mockImg("a"), mockImg("b")], { names: ["S"], numCols: 1, imageUrls: [] })).toBeNull();
   });
 });
+
+import { slowPicsKeyFromAnchor } from "../../src/sites/slowpics-source";
+
+describe("slowPicsKeyFromAnchor (HDBits redirect wrapper)", () => {
+  test("reads the slow.pics key from the link text when href is a redirect", () => {
+    // Real HDBits shape: href is /redir.php?url=<base64>, text is the URL.
+    expect(slowPicsKeyFromAnchor(
+      "/redir.php?url=aHR0cHM6Ly9zbG93LnBpY3MvYy9jQWpIcjQ1cg%3D%3D",
+      "https://slow.pics/c/cAjHr45r",
+    )).toBe("cAjHr45r");
+  });
+  test("decodes the base64 redirect param when text is unhelpful", () => {
+    expect(slowPicsKeyFromAnchor(
+      "/redir.php?url=aHR0cHM6Ly9zbG93LnBpY3MvYy9jQWpIcjQ1cg%3D%3D",
+      "click here",
+    )).toBe("cAjHr45r");
+  });
+  test("handles a plain direct slow.pics href", () => {
+    expect(slowPicsKeyFromAnchor("https://slow.pics/c/AbC123", "")).toBe("AbC123");
+  });
+  test("returns null for unrelated links", () => {
+    expect(slowPicsKeyFromAnchor("/redir.php?url=aHR0cHM6Ly9leGFtcGxlLmNvbQ%3D%3D", "https://example.com")).toBeNull();
+    expect(slowPicsKeyFromAnchor("#", "Show comparison")).toBeNull();
+  });
+});

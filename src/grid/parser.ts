@@ -460,7 +460,7 @@ function hdbGridParseContainer(container: Element): Element {
   return hiddenContent.parentElement || container;
 }
 
-export function getGrids(): { grid: Grid; container: Element }[] {
+export function getGrids(preClaimed?: Set<HTMLImageElement>): { grid: Grid; container: Element }[] {
   if (_grids) return _grids;
   _grids = [];
   const seen = new Set<Element>();
@@ -468,8 +468,10 @@ export function getGrids(): { grid: Grid; container: Element }[] {
   // order, so an inner wrapper (a <strong>/showhide block of screenshots) is
   // parsed before the enclosing block; the enclosing parse then EXCLUDES those
   // images, so it only emits grids for the still-unclaimed screenshots instead
-  // of re-emitting the inner comparison.
-  const claimed = new Set<HTMLImageElement>();
+  // of re-emitting the inner comparison. `preClaimed` seeds this with images the
+  // caller handles elsewhere (e.g. slow.pics-linked comparisons), so getGrids
+  // skips them entirely.
+  const claimed = new Set<HTMLImageElement>(preClaimed);
   for (const img of document.querySelectorAll(
     'img[src*="//t.hdbits.org/"]',
   )) {

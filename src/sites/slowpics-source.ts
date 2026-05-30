@@ -41,6 +41,22 @@ export function parseSlowPicsKey(url: string): string | null {
   return m ? m[1] : null;
 }
 
+/** Resolve a slow.pics comparison key from a tracker anchor. HDBits wraps links
+ *  as `/redir.php?url=<base64>` with the real URL in the link TEXT, so we check
+ *  the text and the base64-decoded redirect param too — not just the href. */
+export function slowPicsKeyFromAnchor(href: string, text: string): string | null {
+  const direct = parseSlowPicsKey(href) ?? parseSlowPicsKey(text);
+  if (direct) return direct;
+  const m = /[?&]url=([^&#]+)/.exec(href);
+  if (m) {
+    try {
+      const decoded = atob(decodeURIComponent(m[1]).replace(/-/g, "+").replace(/_/g, "/"));
+      return parseSlowPicsKey(decoded);
+    } catch { /* not base64 */ }
+  }
+  return null;
+}
+
 /** Pull the inline `collection = { … }` object out of a fetched slow.pics page
  *  by balanced-brace scanning (string-aware), then JSON.parse it. */
 export function extractCollection(html: string): SlowPicsCollection | null {

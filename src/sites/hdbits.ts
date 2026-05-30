@@ -7,8 +7,8 @@ import { getGrids } from "../grid";
 import type { Grid } from "../grid";
 import { hasVsOrPipe } from "../grid/names";
 import { buildComparison, insertLinkAfter } from "../viewer";
-import { fetchSlowPicsGridInfo, parseSlowPicsKey } from "./slowpics-source";
-import { findUnclaimedBlocks, buildRescueGrid } from "./hdbits-slowpics";
+import { fetchSlowPicsGridInfo, parseSlowPicsKey, slowPicsKeyFromAnchor } from "./slowpics-source";
+import { findSlowPicsComparisons, buildRescueGrid, type SlowPicsComparison } from "./hdbits-slowpics";
 
 export function findComparisonLinkAnchor(container: Element): Node | null {
   const parent = container.parentElement || container;
@@ -67,13 +67,15 @@ export function setupHDBitsCore(): void {
   injectCSS();
   injectTriggerLinkCSS();
 
-  const grids = getGrids();
-  const claimed = new Set<HTMLImageElement>();
-  for (const { grid } of grids) {
-    for (const cell of grid.rows.flat()) if (cell.img) claimed.add(cell.img);
-  }
+  // slow.pics links are authoritative comparison boundaries. Gather them first
+  // and keep their screenshots out of the DOM-heuristic getGrids pass, so each
+  // slow.pics comparison (incl. ones getGrids can't shape, like a flat "Dirty
+  // line fix" block) is shaped from the linked collection's column count/titles.
+  const comparisons = collectSlowPicsComparisons();
+  const slowpicsImgs = new Set<HTMLImageElement>();
+  for (const c of comparisons) for (const img of c.images) slowpicsImgs.add(img);
 
-  for (const { grid, container } of grids) {
+  for (const { grid, container } of getGrids(slowpicsImgs)) {
     const link = makeShowComparisonLink();
     link.addEventListener("click", async (e) => {
       e.preventDefault();
@@ -101,49 +103,48 @@ export function setupHDBitsCore(): void {
     }
   }
 
-  setupUnshapedComparisons(claimed);
+  for (const comparison of comparisons) addSlowPicsComparisonLink(comparison);
 }
 
-/** Handle comparisons the DOM parser couldn't shape — a flat block of
- *  screenshots with no column markup (e.g. under a "Dirty line fix:" note). If a
- *  slow.pics/c link introduces the block, fetch the authoritative column count +
- *  titles on demand; otherwise offer a last-resort manual column-count entry. */
-function setupUnshapedComparisons(claimed: Set<HTMLImageElement>): void {
+/** All slow.pics-linked comparisons in the page, deduped by link. */
+function collectSlowPicsComparisons(): SlowPicsComparison[] {
   const roots = new Set<Element>();
-  for (const img of document.querySelectorAll<HTMLImageElement>('img[src*="//t.hdbits.org/"]')) {
-    if (!claimed.has(img)) roots.add(img.closest("td, div, p") || document.body);
-  }
-  for (const root of roots) {
-    for (const block of findUnclaimedBlocks(root, claimed)) {
-      // Only act on blocks a slow.pics link vouches for as a real comparison —
-      // a bare unshaped image run is more likely something getGrids correctly
-      // declined (a mediainfo gallery, a guard), so we never auto-inject there.
-      if (!block.slowpicsKey || block.images.length < 4) continue;
-      if (block.images.some((img) => claimed.has(img))) continue;
-      const container = (block.anchor.parentElement?.closest("td, div, p")
-        || (block.anchor as Element).closest?.("td, div, p")
-        || block.images[0].closest("td, div, p")) as HTMLElement | null;
-      if (!container) continue;
-      for (const img of block.images) claimed.add(img);
-      addSlowPicsRescueLink(block.images, block.slowpicsKey, block.anchor, container);
+  for (const a of document.querySelectorAll<HTMLAnchorElement>("a[href]")) {
+    if (slowPicsKeyFromAnchor(a.href, a.textContent || "")) {
+      roots.add(a.closest("td, div.comment, div.text, div") || document.body);
     }
   }
+  const out: SlowPicsComparison[] = [];
+  const seen = new Set<HTMLAnchorElement>();
+  for (const root of roots) {
+    for (const c of findSlowPicsComparisons(root)) {
+      if (seen.has(c.link)) continue;
+      seen.add(c.link);
+      out.push(c);
+    }
+  }
+  return out;
 }
 
-function addSlowPicsRescueLink(images: HTMLImageElement[], key: string, anchor: Node, container: HTMLElement): void {
+/** A "Show comparison" affordance for a slow.pics-linked block: fetch the
+ *  collection on click for the authoritative column count + titles, reshape the
+ *  HDBits screenshots, render. Falls back to manual column entry on failure. */
+function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
+  const { key, link: spLink, images } = comparison;
+  const container = (spLink.closest("td, div, p") || spLink.parentElement) as HTMLElement | null;
+  if (!container) return;
   const link = makeShowComparisonLink();
   link.style.display = "block";
   link.style.marginTop = "6px";
   link.addEventListener("click", async (e) => {
     e.preventDefault();
     const info = await fetchSlowPicsGridInfo(key);
-    const grid = info && buildRescueGrid(images, info, anchor);
+    const grid = info && buildRescueGrid(images, info, spLink);
     if (grid) { buildComparison(grid, container, link); return; }
-    // slow.pics fetch failed or didn't fit — fall back to manual column entry.
     link.remove();
-    addManualColumnControl(images, anchor, container);
+    addManualColumnControl(images, spLink, container);
   });
-  insertLinkAfter(anchor, link);
+  insertLinkAfter(spLink, link);
 }
 
 /** Last resort: a tiny "columns: [ ] Show comparison" control. The user types
