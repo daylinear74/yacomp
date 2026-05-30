@@ -67,10 +67,13 @@ export function setupHDBitsCore(): void {
   injectCSS();
   injectTriggerLinkCSS();
 
-  // slow.pics links are authoritative comparison boundaries. Gather them first
-  // and keep their screenshots out of the DOM-heuristic getGrids pass, so each
-  // slow.pics comparison (incl. ones getGrids can't shape, like a flat "Dirty
-  // line fix" block) is shaped from the linked collection's column count/titles.
+  // Title-inference order (owner ruling): a local DOM label (per-group "GER:/
+  // FRA:/ESP:" or a "vs"/"|" line) wins over the adjacent slow.pics link. A
+  // slow.pics link is therefore authoritative ONLY for screenshots that have no
+  // local label of their own (its label is consumed by the link itself, e.g. a
+  // flat "Dirty line fix" block) — those are kept out of getGrids and shaped
+  // from the linked collection; screenshots that DO carry a local per-group
+  // label (088: "GER:/FRA:/ESP:") stay in getGrids so the label wins.
   const comparisons = collectSlowPicsComparisons();
   const slowpicsImgs = new Set<HTMLImageElement>();
   for (const c of comparisons) for (const img of c.images) slowpicsImgs.add(img);

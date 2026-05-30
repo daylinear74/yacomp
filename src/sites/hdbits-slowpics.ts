@@ -24,10 +24,26 @@ function isBefore(a: Node, b: Node): boolean {
   return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
 }
 
+/** True when a local text label (e.g. "GER:") sits between a slow.pics link and
+ *  a screenshot. Such a screenshot carries its own DOM label, so it belongs to
+ *  the DOM parser, not to the slow.pics link — per the title-inference order a
+ *  local label outranks the adjacent slow.pics collection. */
+function hasLocalLabelBetween(link: Node, img: Node): boolean {
+  try {
+    const range = document.createRange();
+    range.setStartAfter(link);
+    range.setEndBefore(img);
+    return /[A-Za-z]/.test(range.toString());
+  } catch {
+    return false;
+  }
+}
+
 /** slow.pics links are authoritative comparison boundaries: each one owns the
- *  HDBits screenshots that follow it (until the next slow.pics link). Returns one
- *  entry per slow.pics link that has ≥1 image — these define the comparisons,
- *  shaped later from the fetched collection's column count + titles. */
+ *  HDBits screenshots that follow it (until the next slow.pics link) AND that
+ *  have no local label of their own. Returns one entry per slow.pics link that
+ *  has ≥1 such image — these define the comparisons, shaped later from the
+ *  fetched collection's column count + titles. */
 export function findSlowPicsComparisons(container: Element): SlowPicsComparison[] {
   const links: { a: HTMLAnchorElement; key: string }[] = [];
   for (const a of container.querySelectorAll<HTMLAnchorElement>("a[href]")) {
@@ -45,6 +61,8 @@ export function findSlowPicsComparisons(container: Element): SlowPicsComparison[
       else break;
     }
     if (!owner) continue;
+    // A screenshot with its own local label belongs to the DOM parser, not here.
+    if (hasLocalLabelBetween(owner, img)) continue;
     (byLink.get(owner) ?? byLink.set(owner, []).get(owner)!).push(img);
   }
 
