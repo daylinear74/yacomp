@@ -6,7 +6,7 @@ import type { GridCell, Grid } from "./types";
 import {
   hasVsOrPipe, hasExplicitComparison, splitNames, looksLikeNames,
   findComparisonNames, namesFromLeadingStructuredLabels,
-  foldTrailingSize, isNonSourceLabel, tidyName, isMultiSourceLabel,
+  foldTrailingSize, isNonSourceLabel, isUrlLabel, isFooterLabel, tidyName, isMultiSourceLabel,
 } from "./names";
 
 export function hdbFull(src: string): string {
@@ -59,6 +59,16 @@ function isExternalTextLink(anchor: HTMLAnchorElement): boolean {
   return !anchor.querySelector("img") && anchor.origin !== location.origin;
 }
 
+// Signature/tracker images embedded in a post (most commonly a FlagCounter
+// banner in the user's sig or a hidden block) are NOT comparison screenshots.
+// Counting them as grid cells throws off the column-count divisibility — e.g. a
+// clean 60-image 5-wide grid + 1 FlagCounter image = 61, which divides by
+// nothing — so they are excluded from group collection.
+const NON_SCREENSHOT_IMG_RE = /(?:\/\/|\.)flagcounter\.com\//i;
+function isNonScreenshotImg(img: HTMLImageElement): boolean {
+  return NON_SCREENSHOT_IMG_RE.test(img.src);
+}
+
 /** Walk container's childNodes, collecting BR-separated image groups with labels.
  *  Images in `excludeImgs` (already claimed by an inner container's grid) are
  *  skipped, so an enclosing container's parse doesn't re-emit them. */
@@ -89,7 +99,7 @@ function collectGroups(container: Element, excludeImgs: Set<HTMLImageElement>): 
     } else if (node.nodeName === "A") {
       const anchor = node as HTMLAnchorElement;
       const img = anchor.querySelector("img") as HTMLImageElement | null;
-      if (img && !excludeImgs.has(img)) {
+      if (img && !excludeImgs.has(img) && !isNonScreenshotImg(img)) {
         const isHdb = /\/\/t\.hdbits\.org\//i.test(img.src);
         const full = isHdb
           ? hdbFull(img.src)
@@ -246,6 +256,88 @@ function leadingVsLabelInfo(container: Element): { names: string[]; anchorEl: El
   return null;
 }
 
+// Per project ruling, ONLY an explicit "vs" / "vs." / "v." / "|" separator gives
+// a leading line title-precedence. A slash, comma, dash or "×" does NOT — those
+// routinely appear inside BDInfo codec lines ("MPEG-4 AVC / 27191 kbps"), byte
+// counts ("614,127,007 bytes") and prose ("1.78:1 / 1.85:1"), which must never
+// outrank the real per-group/heading labels.
+const VS_BAR_RE = /\bvs?\.\s|\bvs\s|\|/i;
+// A continuation line of a multi-line vs-list, e.g. "DE (…) vs. KR (…)<br>vs. US (…)".
+const VS_CONTINUATION_RE = /^\s*(?:vs?\.|\|)\s/i;
+
+/** True when a split "name" is really prose — a paragraph that merely MENTIONS a
+ *  comparison ("UK vs. DE: There are lots of parts of the film… on DE. For
+ *  reference…"), not a title. A real source name is short and tokenised; a
+ *  sentence boundary (".", "!", "?" then a capitalised word) or an absurd length
+ *  marks prose. Long release names ("…7.1 (33454 kbps) (with NGU Sharp)") have
+ *  no sentence boundary, so they pass. */
+function looksLikeProse(parts: string[]): boolean {
+  // A sentence boundary (".", "!", "?" then a capitalised word) marks prose. A
+  // length cap is deliberately NOT used — legit release names run long
+  // ("Beetlejuice 1988 2160p UHD BluRay HEVC TrueHD Atmos 7.1 (71.2mb/s) …").
+  return parts.some((p) => /[.!?]["')\]]?\s+[A-Z]/.test(p.trim()));
+}
+
+/** Highest-precedence label source: a leading line (before the first screenshot)
+ *  that carries an explicit "vs"/"v."/"|" separator. Per project ruling, such a
+ *  line always wins over per-group comma labels and NOTE:/nb: preamble prose. It
+ *  captures hyperlinked source names (1202: "<a>JP (Pony Canyon)…</a> vs. <a>UK
+ *  (Anime Ltd)…</a>"), inline-wrapped headings (0478: "<strong>Source vs
+ *  encode</strong>"), and vs-lists split across <br> lines (2022: "DE … vs.
+ *  KR …<br>vs. US …"). */
+function leadingComparisonNames(container: Element): { names: string[]; anchorEl: ChildNode | null } | null {
+  type Line = { text: string; el: ChildNode | null; external: boolean };
+  const raw: Line[] = [{ text: "", el: null, external: false }];
+  for (const node of container.childNodes) {
+    if (node.nodeName === "BR") { raw.push({ text: "", el: null, external: false }); continue; }
+    if (node.nodeName === "IMG") break;
+    if (node.nodeName === "A" && (node as Element).querySelector("img")) break;
+    if (node.nodeType === 1 && (node as Element).querySelector("img")) break;
+    const cur = raw[raw.length - 1];
+    // A heading followed by a bare comparison URL / "Slow.pics" link describes
+    // that EXTERNAL comparison, not the inline screenshots (007). Mark the line
+    // so it can't supply titles — but a hyperlinked source NAME ("<a>JP (Pony
+    // Canyon) AVC…</a>") is fine and contributes its text.
+    if (node.nodeName === "A") {
+      const at = (node.textContent || "").trim();
+      if (isUrlLabel(at) || isFooterLabel(at)) { cur.external = true; continue; }
+    }
+    cur.text += node.textContent || "";
+    if (!cur.el && node.nodeType === 1) cur.el = node;
+    // A block element ends the line (its siblings start a new one).
+    if (node.nodeType === 1 && /^(?:DIV|P|PRE|TABLE|BLOCKQUOTE|UL|OL)$/.test(node.nodeName)) {
+      raw.push({ text: "", el: null, external: false });
+    }
+  }
+  // Merge a continuation line ("vs. US …") into the line it continues.
+  const lines: Line[] = [];
+  for (const ln of raw) {
+    if (lines.length && VS_CONTINUATION_RE.test(ln.text)) {
+      lines[lines.length - 1].text += ` ${ln.text.trim()}`;
+      lines[lines.length - 1].external ||= ln.external;
+    } else {
+      lines.push({ ...ln });
+    }
+  }
+  // Nearest-to-images line wins among explicit vs/v./| lines. A vs-heading is
+  // disqualified when an external comparison link ("Slow.pics") sits BETWEEN it
+  // and the screenshots — those screenshots belong to that external comparison
+  // (007), not to this heading.
+  let sawExternalAfter = false;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].external) { sawExternalAfter = true; continue; }
+    if (sawExternalAfter) continue;
+    // Drop a showhide affordance marker ("Source vs Encode [show]" → "… Encode").
+    const t = lines[i].text.replace(/\s*\[(?:show|hide)\]\s*/gi, " ").trim();
+    if (!t || isNonSourceLabel(t) || !VS_BAR_RE.test(t)) continue;
+    const names = splitNames(t);
+    if (names.length >= 2 && looksLikeNames(names) && !looksLikeProse(names)) {
+      return { names, anchorEl: lines[i].el };
+    }
+  }
+  return null;
+}
+
 function stableGridColumnCount(groups: GridCell[][]): number | null {
   const firstLen = groups[0]?.length ?? 0;
   if (
@@ -368,7 +460,16 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   // each group is already a row, so skip them and let findComparisonNames run.
   let names: string[] | null = null;
   let anchorEl: ChildNode | null = null;
-  if (groupLabels.length >= 2 && groupLabels.every((l) => l)) {
+  // Highest precedence: a leading line with an explicit "vs"/"v."/"|" comparison.
+  // Only when its column count divides the screenshots — otherwise it is a
+  // sub-section line ("2160p UHD vs 1080p BD") in a wider grid (e.g. a 3-wide
+  // "UHD/new BD/old BD"), and the real per-group/heading label must still win.
+  const leadCmp = leadingComparisonNames(container);
+  if (leadCmp && groups.flat().length % leadCmp.names.length === 0) {
+    names = leadCmp.names;
+    anchorEl = leadCmp.anchorEl;
+  }
+  if (!names && groupLabels.length >= 2 && groupLabels.every((l) => l)) {
     const allNumeric = groupLabels.every((l) => /^\d+$/.test(l!));
     // Each label must be a SINGLE source for the transpose (one group per
     // source). If a label is itself a multi-source list (e.g. a section heading
