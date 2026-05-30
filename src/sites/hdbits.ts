@@ -8,7 +8,7 @@ import type { Grid } from "../grid";
 import { hasVsOrPipe } from "../grid/names";
 import { buildComparison, insertLinkAfter } from "../viewer";
 import { fetchSlowPicsGridInfo, parseSlowPicsKey } from "./slowpics-source";
-import { findSlowPicsRescues, buildRescueGrid } from "./hdbits-slowpics";
+import { findUnclaimedBlocks, buildRescueGrid } from "./hdbits-slowpics";
 
 export function findComparisonLinkAnchor(container: Element): Node | null {
   const parent = container.parentElement || container;
@@ -101,39 +101,77 @@ export function setupHDBitsCore(): void {
     }
   }
 
-  setupSlowPicsRescues(claimed);
+  setupUnshapedComparisons(claimed);
 }
 
-/** Rescue comparisons the DOM parser couldn't shape: a slow.pics-linked block of
- *  screenshots with no column markup (e.g. a flat row under "Dirty line fix:").
- *  The grid size + titles come from the linked slow.pics collection, fetched on
- *  demand when the user clicks the link. */
-function setupSlowPicsRescues(claimed: Set<HTMLImageElement>): void {
+/** Handle comparisons the DOM parser couldn't shape — a flat block of
+ *  screenshots with no column markup (e.g. under a "Dirty line fix:" note). If a
+ *  slow.pics/c link introduces the block, fetch the authoritative column count +
+ *  titles on demand; otherwise offer a last-resort manual column-count entry. */
+function setupUnshapedComparisons(claimed: Set<HTMLImageElement>): void {
   const roots = new Set<Element>();
-  for (const a of document.querySelectorAll<HTMLAnchorElement>("a[href]")) {
-    if (parseSlowPicsKey(a.href)) roots.add(a.closest("td, div, p") || document.body);
+  for (const img of document.querySelectorAll<HTMLImageElement>('img[src*="//t.hdbits.org/"]')) {
+    if (!claimed.has(img)) roots.add(img.closest("td, div, p") || document.body);
   }
   for (const root of roots) {
-    for (const rescue of findSlowPicsRescues(root, claimed)) {
-      if (rescue.images.some((img) => claimed.has(img))) continue;
-      const container = (rescue.link.closest("td, div, p") || rescue.link.parentElement) as HTMLElement | null;
+    for (const block of findUnclaimedBlocks(root, claimed)) {
+      // Only act on blocks a slow.pics link vouches for as a real comparison —
+      // a bare unshaped image run is more likely something getGrids correctly
+      // declined (a mediainfo gallery, a guard), so we never auto-inject there.
+      if (!block.slowpicsKey || block.images.length < 4) continue;
+      if (block.images.some((img) => claimed.has(img))) continue;
+      const container = (block.anchor.parentElement?.closest("td, div, p")
+        || (block.anchor as Element).closest?.("td, div, p")
+        || block.images[0].closest("td, div, p")) as HTMLElement | null;
       if (!container) continue;
-      for (const img of rescue.images) claimed.add(img);
-
-      const link = makeShowComparisonLink();
-      link.style.display = "block";
-      link.style.marginTop = "6px";
-      link.addEventListener("click", async (e) => {
-        e.preventDefault();
-        const info = await fetchSlowPicsGridInfo(rescue.key);
-        if (!info) { link.textContent = "Show comparison (slow.pics unavailable)"; return; }
-        const grid = buildRescueGrid(rescue.images, info, rescue.link);
-        if (!grid) { link.textContent = "Show comparison (couldn't fit columns)"; return; }
-        buildComparison(grid, container, link);
-      });
-      insertLinkAfter(rescue.link, link);
+      for (const img of block.images) claimed.add(img);
+      addSlowPicsRescueLink(block.images, block.slowpicsKey, block.anchor, container);
     }
   }
+}
+
+function addSlowPicsRescueLink(images: HTMLImageElement[], key: string, anchor: Node, container: HTMLElement): void {
+  const link = makeShowComparisonLink();
+  link.style.display = "block";
+  link.style.marginTop = "6px";
+  link.addEventListener("click", async (e) => {
+    e.preventDefault();
+    const info = await fetchSlowPicsGridInfo(key);
+    const grid = info && buildRescueGrid(images, info, anchor);
+    if (grid) { buildComparison(grid, container, link); return; }
+    // slow.pics fetch failed or didn't fit — fall back to manual column entry.
+    link.remove();
+    addManualColumnControl(images, anchor, container);
+  });
+  insertLinkAfter(anchor, link);
+}
+
+/** Last resort: a tiny "columns: [ ] Show comparison" control. The user types
+ *  the column count and the flat block is reshaped into that many columns. */
+function addManualColumnControl(images: HTMLImageElement[], anchor: Node, container: HTMLElement): void {
+  const wrap = document.createElement("span");
+  wrap.style.display = "block";
+  wrap.style.marginTop = "6px";
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "2";
+  input.placeholder = "cols";
+  input.style.width = "4em";
+  const link = makeShowComparisonLink();
+  link.addEventListener("click", (e) => {
+    e.preventDefault();
+    const cols = Number.parseInt(input.value, 10);
+    if (!(cols >= 2) || images.length % cols !== 0) {
+      link.textContent = `Show comparison (enter a column count that divides ${images.length})`;
+      return;
+    }
+    const names = Array.from({ length: cols }, (_, i) => `Source ${i + 1}`);
+    const grid = buildRescueGrid(images, { names, numCols: cols, imageUrls: [] }, anchor);
+    if (grid) buildComparison(grid, container, link);
+  });
+  wrap.append("columns: ", input, " ", link);
+  if (anchor.parentNode) insertLinkAfter(anchor, wrap);
+  else container.insertBefore(wrap, container.firstChild);
 }
 
 export function setupHDBits(): void {

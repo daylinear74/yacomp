@@ -11,50 +11,53 @@ import type { Grid, GridCell } from "../grid";
 import { hdbFull } from "../grid/parser";
 import { parseSlowPicsKey, type SlowPicsGridInfo } from "./slowpics-source";
 
-export interface SlowPicsRescue {
-  key: string;
-  /** The slow.pics link that introduces this comparison. */
-  link: HTMLAnchorElement;
-  /** Unclaimed HDBits thumbnail <img>s belonging to it (document order). */
+export interface UnclaimedBlock {
+  /** Unclaimed HDBits thumbnail <img>s in this block (document order). */
   images: HTMLImageElement[];
+  /** Node to insert the "Show comparison" affordance after. */
+  anchor: Node;
+  /** slow.pics/c key introducing this block, if any (else manual entry). */
+  slowpicsKey: string | null;
 }
 
-function isBefore(a: Node, b: Node): boolean {
-  return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+function docOrder(a: Node, b: Node): number {
+  if (a === b) return 0;
+  return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
 }
 
-/** Group every unclaimed HDBits screenshot under the nearest preceding
- *  slow.pics/c link. Each group with ≥1 image becomes a rescue candidate. */
-export function findSlowPicsRescues(
+/** Group unclaimed HDBits screenshots into contiguous blocks. A run breaks at a
+ *  claimed image (handled by another grid) and at a slow.pics/c link (which
+ *  introduces a new comparison). Each block remembers its slow.pics key (for the
+ *  fetch path) or null (for manual column entry). */
+export function findUnclaimedBlocks(
   container: Element,
   claimed: Set<HTMLImageElement>,
-): SlowPicsRescue[] {
-  const links = [...container.querySelectorAll<HTMLAnchorElement>("a[href]")]
-    .filter((a) => parseSlowPicsKey(a.href));
-  if (!links.length) return [];
-  const imgs = [...container.querySelectorAll<HTMLImageElement>('img[src*="//t.hdbits.org/"]')];
+): UnclaimedBlock[] {
+  const nodes = [
+    ...container.querySelectorAll<HTMLImageElement>('img[src*="//t.hdbits.org/"]'),
+    ...[...container.querySelectorAll<HTMLAnchorElement>("a[href]")].filter((a) => parseSlowPicsKey(a.href)),
+  ].sort(docOrder);
 
-  const byLink = new Map<HTMLAnchorElement, HTMLImageElement[]>();
-  for (const img of imgs) {
-    if (claimed.has(img)) continue;
-    // nearest preceding slow.pics link (links are in document order)
-    let owner: HTMLAnchorElement | null = null;
-    for (const link of links) {
-      if (isBefore(link, img)) owner = link;
-      else break;
-    }
-    if (!owner) continue;
-    (byLink.get(owner) ?? byLink.set(owner, []).get(owner)!).push(img);
-  }
-
-  const rescues: SlowPicsRescue[] = [];
-  for (const link of links) {
-    const images = byLink.get(link);
-    if (images && images.length) {
-      rescues.push({ key: parseSlowPicsKey(link.href)!, link, images });
+  const blocks: UnclaimedBlock[] = [];
+  let cur: HTMLImageElement[] = [];
+  let key: string | null = null;
+  let keyNode: Node | null = null;
+  const flush = () => {
+    if (cur.length) blocks.push({ images: cur, anchor: keyNode ?? cur[0], slowpicsKey: key });
+    cur = [];
+  };
+  for (const node of nodes) {
+    if (node instanceof HTMLAnchorElement) {
+      flush(); // a slow.pics link starts a new comparison
+      key = parseSlowPicsKey(node.href);
+      keyNode = node;
+    } else {
+      if (claimed.has(node)) { flush(); key = null; keyNode = null; }
+      else cur.push(node);
     }
   }
-  return rescues;
+  flush();
+  return blocks;
 }
 
 /** Reshape rescued HDBits thumbnails into a grid using slow.pics' column count
