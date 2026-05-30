@@ -5,7 +5,7 @@
 import { injectCSS, injectTriggerLinkCSS } from "../ui/css";
 import { getGrids } from "../grid";
 import type { Grid } from "../grid";
-import { hasVsOrPipe } from "../grid/names";
+import { hasVsOrPipe, splitNames, looksLikeNames } from "../grid/names";
 import { buildComparison, insertLinkAfter } from "../viewer";
 import { fetchSlowPicsGridInfo, parseSlowPicsKey, slowPicsKeyFromAnchor } from "./slowpics-source";
 import { findSlowPicsComparisons, buildRescueGrid, type SlowPicsComparison } from "./hdbits-slowpics";
@@ -126,8 +126,46 @@ function collectSlowPicsComparisons(): SlowPicsComparison[] {
   return out;
 }
 
+/** Document-order previous node (deepest-last-child of the previous sibling, else
+ *  the parent) — for walking backwards from a slow.pics link to its heading. */
+function prevNode(n: Node): Node | null {
+  if (n.previousSibling) {
+    let p: Node = n.previousSibling;
+    while (p.lastChild) p = p.lastChild;
+    return p;
+  }
+  return n.parentNode;
+}
+
+/** The descriptive HDBits comparison heading just before a slow.pics link — the
+ *  text between the previous comparison's screenshots and this link. Used only
+ *  when it splits into exactly `numCols` real source names; otherwise the
+ *  (sometimes terse, e.g. "S/F/E") slow.pics titles are kept. Links' own text
+ *  (the "Show comparison" affordance, the slow.pics URL) is skipped. */
+function headingNamesBeforeLink(link: Node, numCols: number, root: Element): string[] | null {
+  const lines: string[] = [];
+  let line = "";
+  const flush = () => { const t = line.replace(/\s+/g, " ").trim(); if (t) lines.push(t); line = ""; };
+  let n: Node | null = prevNode(link);
+  for (let i = 0; n && n !== root && root.contains(n) && i < 600; i++, n = prevNode(n)) {
+    if (n.nodeName === "IMG") break; // reached the previous comparison's images
+    if (n.nodeName === "STYLE" || n.nodeName === "SCRIPT") continue;
+    if (n.nodeName === "BR") flush();
+    else if (n.nodeType === 3 && !n.parentElement?.closest("a, style, script")) {
+      line = (n.textContent || "") + line;
+    }
+  }
+  flush();
+  for (const l of lines) {
+    const parts = splitNames(l);
+    if (parts.length === numCols && looksLikeNames(parts)) return parts;
+  }
+  return null;
+}
+
 /** A "Show comparison" affordance for a slow.pics-linked block: fetch the
- *  collection on click for the authoritative column count + titles, reshape the
+ *  collection on click for the authoritative column COUNT, prefer the descriptive
+ *  HDBits heading for the titles (falling back to slow.pics titles), reshape the
  *  HDBits screenshots, render. Falls back to manual column entry on failure. */
 function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
   const { key, link: spLink, images } = comparison;
@@ -143,8 +181,13 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
     const original = link.textContent;
     link.textContent = "Loading comparison…";
     const info = await fetchSlowPicsGridInfo(key);
-    const grid = info && buildRescueGrid(images, info, spLink);
-    if (grid) { link.textContent = original; buildComparison(grid, container, link); return; }
+    if (info) {
+      // slow.pics is authoritative for the column COUNT; prefer the descriptive
+      // HDBits heading for the titles when it matches that count.
+      const names = headingNamesBeforeLink(spLink, info.numCols, container) ?? info.names;
+      const grid = buildRescueGrid(images, { ...info, names }, spLink);
+      if (grid) { link.textContent = original; buildComparison(grid, container, link); return; }
+    }
     link.remove();
     addManualColumnControl(images, spLink, container);
   });
