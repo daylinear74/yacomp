@@ -79,7 +79,16 @@ heading matches the count — see A1 / `headingNamesBeforeLink`).
 - `2425` → `GER (16,885 kbps)` / `FRA (20,007 kbps)` / `USA (26,900 kbps)` ✅
 
 ### Movie-title prefix / typos
-- `2902` → `GBR` / `USA` (strip leading "Betty 1992 1080p Remux") — TODO (item 6, heuristic)
+- `2902` → `GBR` / `USA` (strip leading "Betty 1992 1080p Remux") — **DEFERRED**.
+  Rule (owner): strip a shared "Title YEAR …" prefix only when ASYMMETRIC (some
+  columns have it, others don't), trimming titled columns to the trailing tokens
+  that parallel the short untitled column. A first attempt (`stripAsymmetricTitle`
+  in splitNames) was reverted: it broke long madVR names whose terse third column
+  ("1080p BD", no year) made the pair look asymmetric → trimmed to garbage; and
+  2902 itself flows through `namesFromHeadings` (not `splitNames`), so the strip
+  didn't even reach it. Needs a shape-aware "parallel token" match (trim only
+  when the trailing token matches the untitled column's shape, e.g. a 3-letter
+  region code) AND must be applied in the H1/headings path too. Left for later.
 - `1313` → keep full long names; `vsPhantom` typo handled in splitNames ✅ (corpus body picks a shorter label line; partial)
 - `1261` → `2160p UHD` / `1080p BD` ✅
 - `1293` → a **reply**: ignore the topic title (needs H1-only-for-OP) — TODO
