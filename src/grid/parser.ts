@@ -59,8 +59,10 @@ function isExternalTextLink(anchor: HTMLAnchorElement): boolean {
   return !anchor.querySelector("img") && anchor.origin !== location.origin;
 }
 
-/** Walk container's childNodes, collecting BR-separated image groups with labels */
-function collectGroups(container: Element): GroupsResult | null {
+/** Walk container's childNodes, collecting BR-separated image groups with labels.
+ *  Images in `excludeImgs` (already claimed by an inner container's grid) are
+ *  skipped, so an enclosing container's parse doesn't re-emit them. */
+function collectGroups(container: Element, excludeImgs: Set<HTMLImageElement>): GroupsResult | null {
   const groups: GridCell[][] = [];
   const groupLabels: (string | null)[] = [];
   const groupLabelEls: (ChildNode | null)[] = [];
@@ -87,7 +89,7 @@ function collectGroups(container: Element): GroupsResult | null {
     } else if (node.nodeName === "A") {
       const anchor = node as HTMLAnchorElement;
       const img = anchor.querySelector("img") as HTMLImageElement | null;
-      if (img) {
+      if (img && !excludeImgs.has(img)) {
         const isHdb = /\/\/t\.hdbits\.org\//i.test(img.src);
         const full = isHdb
           ? hdbFull(img.src)
@@ -350,8 +352,8 @@ export function reshapeGrid(groups: GridCell[][], allImages: GridCell[], names: 
   return { numCols, gridRows };
 }
 
-export function parseGrid(container: Element): Grid[] | null {
-  let collected = collectGroups(container);
+export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement> = new Set()): Grid[] | null {
+  let collected = collectGroups(container, excludeImgs);
   if (!collected) return null;
   let { groups, groupLabels, groupLabelEls } = collected;
 
@@ -429,12 +431,14 @@ export function parseGrid(container: Element): Grid[] | null {
     }
   }
 
-  // A 3-wide comparison whose label wasn't a usable source list is, by HDBits
-  // convention, a Source / Filtered / Encode comparison — assume that default
-  // rather than leaving it unlabelled.
+  // No usable source label: fall back to defaults. By HDBits convention a
+  // 3-wide comparison is Source / Filtered / Encode; any other width is just
+  // numbered Source 1 … Source N.
   let finalNames = finalizeNames(names);
-  if (!finalNames && shaped.numCols === 3) {
-    finalNames = ["Source", "Filtered", "Encode"];
+  if (!finalNames) {
+    finalNames = shaped.numCols === 3
+      ? ["Source", "Filtered", "Encode"]
+      : Array.from({ length: shaped.numCols }, (_, i) => `Source ${i + 1}`);
   }
 
   return [{ rows: shaped.gridRows, numCols: shaped.numCols, names: finalNames, anchorEl }];
@@ -460,9 +464,16 @@ export function getGrids(): { grid: Grid; container: Element }[] {
   if (_grids) return _grids;
   _grids = [];
   const seen = new Set<Element>();
+  // Images already emitted in a grid. Containers are visited in image-document
+  // order, so an inner wrapper (a <strong>/showhide block of screenshots) is
+  // parsed before the enclosing block; the enclosing parse then EXCLUDES those
+  // images, so it only emits grids for the still-unclaimed screenshots instead
+  // of re-emitting the inner comparison.
+  const claimed = new Set<HTMLImageElement>();
   for (const img of document.querySelectorAll(
     'img[src*="//t.hdbits.org/"]',
   )) {
+    if (claimed.has(img as HTMLImageElement)) continue;
     const a = img.closest("a");
     if (!a) continue;
     const c = a.parentElement;
@@ -470,9 +481,12 @@ export function getGrids(): { grid: Grid; container: Element }[] {
     const parseContainer = hdbGridParseContainer(c);
     if (seen.has(parseContainer)) continue;
     seen.add(parseContainer);
-    const parsed = parseGrid(parseContainer);
+    const parsed = parseGrid(parseContainer, claimed);
     if (parsed) {
       for (const grid of parsed) {
+        for (const cell of grid.rows.flat()) {
+          if (cell.img) claimed.add(cell.img);
+        }
         _grids.push({ grid, container: c });
       }
     }
