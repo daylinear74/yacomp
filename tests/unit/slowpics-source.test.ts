@@ -59,3 +59,31 @@ describe("extractCollection + collectionToGridInfo", () => {
     expect(extractCollection("<html>no data here</html>")).toBeNull();
   });
 });
+
+import { buildRescueGrid } from "../../src/sites/hdbits-slowpics";
+
+function mockImg(hash: string): HTMLImageElement {
+  return { src: `https://t.hdbits.org/${hash}.jpg`, closest: () => null } as unknown as HTMLImageElement;
+}
+
+describe("buildRescueGrid", () => {
+  const info = { names: ["S", "F", "E"], numCols: 3, imageUrls: [] };
+  test("reshapes a flat 9-image block into a 3x3 grid", () => {
+    const imgs = ["a", "b", "c", "d", "e", "f", "g", "h", "i"].map(mockImg);
+    const grid = buildRescueGrid(imgs, info)!;
+    expect(grid.numCols).toBe(3);
+    expect(grid.rows.length).toBe(3);
+    expect(grid.names).toEqual(["S", "F", "E"]);
+    expect(grid.rows[0].map((c) => c.full)).toEqual([
+      "https://i.hdbits.org/a.png",
+      "https://i.hdbits.org/b.png",
+      "https://i.hdbits.org/c.png",
+    ]);
+  });
+  test("rejects when image count doesn't fit the column count", () => {
+    expect(buildRescueGrid(["a", "b", "c", "d"].map(mockImg), info)).toBeNull();
+  });
+  test("rejects fewer than 2 columns", () => {
+    expect(buildRescueGrid([mockImg("a"), mockImg("b")], { names: ["S"], numCols: 1, imageUrls: [] })).toBeNull();
+  });
+});

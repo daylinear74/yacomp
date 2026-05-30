@@ -9,7 +9,7 @@ import {
   foldTrailingSize, isNonSourceLabel, tidyName, isMultiSourceLabel,
 } from "./names";
 
-function hdbFull(src: string): string {
+export function hdbFull(src: string): string {
   return src.replace(
     /\/\/t(\.hdbits\.org\/[^.?]+)\.jpg(\?.*)?$/i,
     "//i$1.png",
