@@ -110,6 +110,21 @@ export function collectionToGridInfo(col: SlowPicsCollection): SlowPicsGridInfo 
 
 const cache = new Map<string, Promise<SlowPicsGridInfo | null>>();
 
+// Persistent cache (across page loads) — a slow.pics collection is immutable, so
+// once fetched we never need to hit the ~1s network round-trip again.
+const PERSIST_PREFIX = "_scf_slowpics_";
+function persistGet(key: string): SlowPicsGridInfo | null {
+  if (typeof GM_getValue !== "function") return null;
+  try {
+    const raw = GM_getValue(PERSIST_PREFIX + key, "");
+    return raw ? (JSON.parse(raw) as SlowPicsGridInfo) : null;
+  } catch { return null; }
+}
+function persistSet(key: string, info: SlowPicsGridInfo): void {
+  if (typeof GM_setValue !== "function") return;
+  try { GM_setValue(PERSIST_PREFIX + key, JSON.stringify(info)); } catch { /* quota */ }
+}
+
 function gmGet(url: string): Promise<string | null> {
   return new Promise((resolve) => {
     if (typeof GM_xmlhttpRequest !== "function") { resolve(null); return; }
@@ -124,14 +139,23 @@ function gmGet(url: string): Promise<string | null> {
   });
 }
 
-/** Fetch + parse a slow.pics collection by comparison key. Cached per key. */
+/** Fetch + parse a slow.pics collection by comparison key. Cached in-memory for
+ *  the page and persistently (GM_setValue) across page loads. */
 export function fetchSlowPicsGridInfo(key: string): Promise<SlowPicsGridInfo | null> {
   const cached = cache.get(key);
   if (cached) return cached;
+  const persisted = persistGet(key);
+  if (persisted) {
+    const p = Promise.resolve(persisted);
+    cache.set(key, p);
+    return p;
+  }
   const p = gmGet(`https://slow.pics/c/${key}`).then((html) => {
     if (!html) return null;
     const col = extractCollection(html);
-    return col ? collectionToGridInfo(col) : null;
+    const info = col ? collectionToGridInfo(col) : null;
+    if (info) persistSet(key, info);
+    return info;
   });
   cache.set(key, p);
   return p;

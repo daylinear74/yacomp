@@ -136,11 +136,15 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
   const link = makeShowComparisonLink();
   link.style.display = "block";
   link.style.marginTop = "6px";
+  // Warm the ~1s slow.pics fetch on hover so the click feels instant (cached).
+  link.addEventListener("mouseenter", () => { void fetchSlowPicsGridInfo(key); });
   link.addEventListener("click", async (e) => {
     e.preventDefault();
+    const original = link.textContent;
+    link.textContent = "Loading comparison…";
     const info = await fetchSlowPicsGridInfo(key);
     const grid = info && buildRescueGrid(images, info, spLink);
-    if (grid) { buildComparison(grid, container, link); return; }
+    if (grid) { link.textContent = original; buildComparison(grid, container, link); return; }
     link.remove();
     addManualColumnControl(images, spLink, container);
   });
