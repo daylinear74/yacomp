@@ -106,6 +106,27 @@ USA(Criterion)` → 0 grids). 2927 has 120 images + a trailing showhide block; t
 to trace. Kept the change (+22 / −1). Open question: worth root-causing the
 showhide+quote interaction to recover 2927?
 
+### 10. Wedding-Banquet post — multi-section comparison inside one `<strong>`
+A torrent.description with THREE comparison sections, all labels + the first two
+sections' images wrapped in ONE big `<strong>`:
+1. `Source (Carlotta | FRA), Geek, TayTO (TWN):` — **FIXED** (top-level split now
+   yields `["Source (Carlotta | FRA)", "Geek", "TayTO (TWN)"]`; the inner `|` is
+   no longer split).
+3. `Source vs Geek (FRA) vs BMF (GER):` — already correct.
+Still open:
+- **Spurious extra grid**: because group A and group B images share the big
+  `<strong>` container, `parseGrid(strong)` transposes the two SECTION labels
+  (`"Source…TayTO (TWN)"` + `"Dirty line fix"`) into a bogus 2-column grid. A
+  clean fix needs the groupLabels-transpose path to skip when a label is itself a
+  multi-source list (top-level comma / explicit vs), but NOT when it is a single
+  "release - AC3 - size" (0835) — distinguishable via a top-level-comma check.
+  Risky (shared path); needs a full sweep. Ruling: fix now, or accept?
+- **`Dirty line fix:` → `Source / Filtered / Encode` default** (user request):
+  needs (a) a note-label to start a new section even without `vs`, and (b) an
+  unlabeled encode-comparison to default to Source/Filtered/Encode. The default is
+  an HDBits convention guess — applying it broadly would mislabel single-source
+  galleries. Needs a careful, narrow trigger + ruling.
+
 ## Resolved (for reference)
 - 0623 single-source replenish → intentionally 0 grids (ruled: ignore).
 - 015 / 064 → upgraded to correct multi-grid output.
