@@ -4,8 +4,21 @@
 
 // Reject pipe/vs splits that look like metadata (years, runtimes, dates)
 const META_RE = /^(\d{4}|\d+\s*min|[a-z]{3,9}\s+\d{1,2},?\s*\d{4}|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})$/i;
+// A bare mediainfo/BDInfo metric value ("69.36 kbps", "48 kHz", "23.976 fps").
+// A real source keeps its name ("Amazon (7755 kbps)"). "bit"/"nits" are
+// deliberately excluded — "8-bit"/"10-bit"/"130 nits" are legitimate columns.
+// Resolutions like "1080p"/"2160p" are also not matched.
+const PURE_MEDIAINFO_VALUE_RE = /^\(?\s*[\d.,]+\s*-?\s*(?:kbps|mbps|kb\/s|mb\/s|k?hz|fps)\s*\)?$/i;
 export function looksLikeNames(parts: string[]): boolean {
-  return parts.length >= 2 && !parts.some((p) => META_RE.test(p.trim()));
+  if (parts.length < 2) return false;
+  if (parts.some((p) => META_RE.test(p.trim()))) return false;
+  // A MIX of a bare-metric column ("69.36 kbps") and a non-metric column
+  // ("Subtitle: English") is a mediainfo/BDInfo table, not a comparison. An
+  // all-source set (no metric columns) or an all-metric set (a genuine bitrate
+  // comparison) is left alone.
+  const metric = parts.map((p) => PURE_MEDIAINFO_VALUE_RE.test(p.trim()));
+  if (metric.some(Boolean) && metric.some((m) => !m)) return false;
+  return true;
 }
 
 const GENERIC_HEADING_PREFIX_RE = /^\s*(?:screenshot\s+comparison|comparison|screenshots?)\s*/i;
@@ -147,24 +160,79 @@ function stripLeadingMovieTitle(s: string): string {
   return m ? m[1].trim() : s;
 }
 
+/** Replace every character inside (...) / [...] with a neutral 'x', preserving
+ *  length and the brackets themselves — so a separator that lives inside a
+ *  parenthesised aside (e.g. the "|" in "Source (Carlotta | FRA)") is invisible
+ *  to top-level separator detection. */
+function maskParens(s: string): string {
+  let depth = 0, out = "";
+  for (const ch of s) {
+    if (ch === "(" || ch === "[") { depth++; out += ch; }
+    else if (ch === ")" || ch === "]") { depth = Math.max(0, depth - 1); out += ch; }
+    else out += depth > 0 ? "x" : ch;
+  }
+  return out;
+}
+
+/** Split `s` at TOP-LEVEL occurrences of `sep` (those outside any parens),
+ *  located via the parens-masked copy but sliced from the original. Returns null
+ *  when there is no top-level occurrence. */
+function topLevelSplit(s: string, sep: string | RegExp): string[] | null {
+  const mask = maskParens(s);
+  const re = typeof sep === "string"
+    ? new RegExp(sep.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")
+    : new RegExp(sep.source, sep.flags.includes("g") ? sep.flags : sep.flags + "g");
+  const cuts: Array<[number, number]> = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(mask)) !== null) {
+    cuts.push([m.index, m.index + m[0].length]);
+    if (m[0].length === 0) re.lastIndex++;
+  }
+  if (!cuts.length) return null;
+  const parts: string[] = [];
+  let last = 0;
+  for (const [a, b] of cuts) { parts.push(s.slice(last, a)); last = b; }
+  parts.push(s.slice(last));
+  return parts;
+}
+
+/** True when every ( / [ has a matching close. Top-level separator detection
+ *  relies on paren depth, so a malformed/unbalanced label (e.g. a missing close
+ *  paren) must fall back to the plain split instead. */
+function parensBalanced(s: string): boolean {
+  let depth = 0;
+  for (const ch of s) {
+    if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") { if (--depth < 0) return false; }
+  }
+  return depth === 0;
+}
+
+function plainSplit(c: string): string[] {
+  if (c.includes("|")) return c.split("|");
+  if (VS_TEST.test(c)) return c.split(VS_RE);
+  if (c.includes(",")) return c.split(",");
+  if (DASH_RE.test(c)) return c.split(DASH_RE);
+  if (SLASH_RE.test(c)) return c.split(SLASH_RE);
+  if (TIMES_RE.test(c)) return c.split(TIMES_RE);
+  return [c];
+}
+
 export function splitNames(text: string): string[] {
   const candidate = cleanNameCandidate(text);
-  let parts: string[];
-  if (candidate.includes("|")) {
-    parts = candidate.split("|").map(cleanNamePart).filter(Boolean);
-  } else if (VS_TEST.test(candidate)) {
-    parts = candidate.split(VS_RE).map(cleanNamePart).filter(Boolean);
-  } else if (candidate.includes(",")) {
-    parts = candidate.split(",").map(cleanNamePart).filter(Boolean);
-  } else if (DASH_RE.test(candidate)) {
-    parts = candidate.split(DASH_RE).map(cleanNamePart).filter(Boolean);
-  } else if (SLASH_RE.test(candidate)) {
-    parts = candidate.split(SLASH_RE).map(cleanNamePart).filter(Boolean);
-  } else if (TIMES_RE.test(candidate)) {
-    parts = candidate.split(TIMES_RE).map(cleanNamePart).filter(Boolean);
-  } else {
-    parts = [cleanNamePart(candidate)].filter(Boolean);
-  }
+  // Prefer a TOP-LEVEL separator (one outside parentheses), but only when the
+  // label's parens are balanced (else masking is unreliable). When no top-level
+  // separator exists, fall back to a plain split — which lets a paren-enclosed
+  // source list like "E01 (DE, ES, FR, UK, US)" split on its inner commas.
+  const topLevel = parensBalanced(candidate)
+    ? topLevelSplit(candidate, "|") ??
+      topLevelSplit(candidate, VS_RE) ??
+      topLevelSplit(candidate, ",") ??
+      topLevelSplit(candidate, DASH_RE) ??
+      topLevelSplit(candidate, SLASH_RE) ??
+      topLevelSplit(candidate, TIMES_RE)
+    : null;
+  let parts = (topLevel ?? plainSplit(candidate)).map(cleanNamePart).filter(Boolean);
   // Strip a "Movie Title (YYYY) - " prefix that clings to the first source when
   // the whole comparison line led with the film name.
   if (parts.length >= 2) parts[0] = stripLeadingMovieTitle(parts[0]);
