@@ -120,22 +120,15 @@ Fixed since:
   usable source label defaults to Source/Filtered/Encode; cases 055/063 updated).
 
 Still open:
-- **Duplicate grid** from the nested `<strong>` inside `<td>`: `getGrids` parses
-  BOTH the inner `<strong>` (group A+B images) and the outer `<td>` (all images),
-  so the first comparison appears twice. **Tried & reverted:** climbing past
-  inline wrappers (`blockContainer`) to make every image resolve to the same
-  block — it deduped the wedding but BROKE 4 real comparisons (0887 US/EUR/HKG/NOR,
-  1741 ITA/US/GER/GBR, 1736, 0470) by changing parse scope. Net-negative, reverted.
-  **Also tried & reverted:** per-image dedup in `getGrids` (drop a grid whose
-  images are all already claimed). Fixed the wedding (2 clean grids) and kept
-  0887/1741, BUT collapsed legit showhide multi-grids — case 049 (2→1) and 051
-  (40→21) lost grids because their visible+hidden parses legitimately share image
-  elements. Reverted. The two failure modes are in tension: nested-strong overlap
-  (wedding) wants dedup; showhide visible/hidden (049/051) must NOT be deduped.
-  A correct fix must distinguish "same container hierarchy re-parsed" from
-  "visible vs showhide", e.g. only dedup when one parseContainer is an ancestor of
-  another. Left as a documented limitation — the wedding shows its first
-  comparison twice; not harmful, just redundant.
+- **Duplicate grid** — DONE. `getGrids` now threads a claimed-image set through
+  `parseGrid`/`collectGroups`: an inner wrapper (a `<strong>`/showhide block) is
+  parsed first and the enclosing container's parse EXCLUDES those images, so it no
+  longer re-emits the same comparison. The original "two grids" were actually
+  OVERLAPPING (049 = a `g01-g12` showhide grid + a `g01-g18` td re-parse that
+  contains it; 2171 = `GER/FRA/USA` shown twice). Sweep: 24 overlapping/duplicate
+  grids collapsed corpus-wide, 0 real comparisons lost; cases 049 (2->1) and 051
+  (40->21) updated. Earlier `blockContainer` and ancestor-dedup attempts were
+  reverted (broke 0887/1741 / 049 / 051); the exclude-claimed approach is correct.
 - **`Dirty line fix:` as its own grid**: group B's images currently merge into
   group A's grid. Making it a separate Source/Filtered/Encode grid needs
   `buildMultiCompGrids` to start a new section on a non-source NOTE label (not
