@@ -6,7 +6,7 @@ import type { GridCell, Grid } from "./types";
 import {
   hasVsOrPipe, hasExplicitComparison, splitNames, looksLikeNames,
   findComparisonNames, namesFromLeadingStructuredLabels,
-  foldTrailingSize, isNonSourceLabel, tidyName,
+  foldTrailingSize, isNonSourceLabel, tidyName, isMultiSourceLabel,
 } from "./names";
 
 function hdbFull(src: string): string {
@@ -368,7 +368,12 @@ export function parseGrid(container: Element): Grid[] | null {
   let anchorEl: ChildNode | null = null;
   if (groupLabels.length >= 2 && groupLabels.every((l) => l)) {
     const allNumeric = groupLabels.every((l) => /^\d+$/.test(l!));
-    if (!allNumeric) names = (groupLabels as string[]).map(foldTrailingSize);
+    // Each label must be a SINGLE source for the transpose (one group per
+    // source). If a label is itself a multi-source list (e.g. a section heading
+    // "Source (Carlotta | FRA), Geek, TayTO (TWN)"), these groups are separate
+    // comparisons, not columns — don't transpose them.
+    const anyMultiSource = (groupLabels as string[]).some(isMultiSourceLabel);
+    if (!allNumeric && !anyMultiSource) names = (groupLabels as string[]).map(foldTrailingSize);
   }
   if (!names) {
     const singleLabel = singleGroupLabelInfo(groupLabels, groupLabelEls);
@@ -424,7 +429,15 @@ export function parseGrid(container: Element): Grid[] | null {
     }
   }
 
-  return [{ rows: shaped.gridRows, numCols: shaped.numCols, names: finalizeNames(names), anchorEl }];
+  // A 3-wide comparison whose label wasn't a usable source list is, by HDBits
+  // convention, a Source / Filtered / Encode comparison — assume that default
+  // rather than leaving it unlabelled.
+  let finalNames = finalizeNames(names);
+  if (!finalNames && shaped.numCols === 3) {
+    finalNames = ["Source", "Filtered", "Encode"];
+  }
+
+  return [{ rows: shaped.gridRows, numCols: shaped.numCols, names: finalNames, anchorEl }];
 }
 
 let _grids: { grid: Grid; container: Element }[] | null = null;

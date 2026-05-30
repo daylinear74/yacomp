@@ -240,6 +240,23 @@ export function splitNames(text: string): string[] {
   parts = parts.filter((p) => !isUrlLabel(p));
   return foldFileSizeParts(parts);
 }
+
+/** True when the label is itself a list of 2+ sources joined by a TOP-LEVEL
+ *  comma or an explicit vs/|/ ÷ separator (e.g. "Source (Carlotta | FRA), Geek,
+ *  TayTO (TWN)"). A single source that merely contains a dash ("release - AC3
+ *  5.1 - size", the 0835 shape) is NOT multi-source. Used to stop the
+ *  per-group-label transpose from treating two SECTION labels as columns. */
+export function isMultiSourceLabel(label: string): boolean {
+  const c = cleanNameCandidate(label);
+  const masked = parensBalanced(c) ? maskParens(c) : c;
+  const hasMultiSep =
+    masked.includes("|") || VS_TEST.test(masked) || SLASH_RE.test(masked) ||
+    TIMES_RE.test(masked) || masked.includes(",");
+  if (!hasMultiSep) return false;
+  const parts = splitNames(label);
+  return parts.length >= 2 && looksLikeNames(parts);
+}
+
 export function hasVsOrPipe(text: string): boolean {
   const candidate = cleanNameCandidate(text);
   return candidate.includes("|") || VS_TEST.test(candidate) || candidate.includes(",") || DASH_RE.test(candidate) || SLASH_RE.test(candidate) || TIMES_RE.test(candidate);
