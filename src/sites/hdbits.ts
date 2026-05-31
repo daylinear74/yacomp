@@ -68,17 +68,30 @@ export function setupHDBitsCore(): void {
   injectTriggerLinkCSS();
 
   // Title-inference order (owner ruling): a local DOM label (per-group "GER:/
-  // FRA:/ESP:" or a "vs"/"|" line) wins over the adjacent slow.pics link. A
-  // slow.pics link is therefore authoritative ONLY for screenshots that have no
-  // local label of their own (its label is consumed by the link itself, e.g. a
-  // flat "Dirty line fix" block) — those are kept out of getGrids and shaped
-  // from the linked collection; screenshots that DO carry a local per-group
-  // label (088: "GER:/FRA:/ESP:") stay in getGrids so the label wins.
+  // FRA:/ESP:" or a "vs"/"|" line) wins over the adjacent slow.pics link.
+  //
+  // A post container with ≥2 slow.pics comparisons is sectioned BY those links
+  // (087 "Dirty line fix": three sections the DOM parser would merge) — its
+  // screenshots are kept out of getGrids and shaped from the linked collections.
+  // A SINGLE slow.pics link (2503: a bare "Outside link" mirror under a "FRA vs
+  // GBR" heading; 088: per-group labels) leaves its screenshots IN getGrids so a
+  // local title wins; slow.pics then only rescues screenshots getGrids couldn't
+  // shape.
   const comparisons = collectSlowPicsComparisons();
+  const perContainer = new Map<Element, SlowPicsComparison[]>();
+  for (const c of comparisons) {
+    const k = c.link.closest("td, div.comment, div.text, div") ?? document.body;
+    (perContainer.get(k) ?? perContainer.set(k, []).get(k)!).push(c);
+  }
   const slowpicsImgs = new Set<HTMLImageElement>();
-  for (const c of comparisons) for (const img of c.images) slowpicsImgs.add(img);
+  for (const comps of perContainer.values()) {
+    if (comps.length < 2) continue; // single link → let getGrids try first
+    for (const c of comps) for (const img of c.images) slowpicsImgs.add(img);
+  }
 
+  const claimed = new Set<HTMLImageElement>();
   for (const { grid, container } of getGrids(slowpicsImgs)) {
+    for (const cell of grid.rows.flat()) if (cell.img) claimed.add(cell.img);
     const link = makeShowComparisonLink();
     link.addEventListener("click", async (e) => {
       e.preventDefault();
@@ -106,7 +119,12 @@ export function setupHDBitsCore(): void {
     }
   }
 
-  for (const comparison of comparisons) addSlowPicsComparisonLink(comparison);
+  // Rescue from slow.pics only the comparisons whose screenshots getGrids did
+  // not already shape from a local label.
+  for (const comparison of comparisons) {
+    if (comparison.images.every((img) => claimed.has(img))) continue;
+    addSlowPicsComparisonLink(comparison);
+  }
 }
 
 /** All slow.pics-linked comparisons in the page, deduped by link. */
