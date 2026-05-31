@@ -82,16 +82,17 @@ heading matches the count — see A1 / `headingNamesBeforeLink`).
 - `2425` → `GER (16,885 kbps)` / `FRA (20,007 kbps)` / `USA (26,900 kbps)` ✅
 
 ### Movie-title prefix / typos
-- `2902` → `GBR` / `USA` (strip leading "Betty 1992 1080p Remux") — **DEFERRED**.
-  Rule (owner): strip a shared "Title YEAR …" prefix only when ASYMMETRIC (some
-  columns have it, others don't), trimming titled columns to the trailing tokens
-  that parallel the short untitled column. A first attempt (`stripAsymmetricTitle`
-  in splitNames) was reverted: it broke long madVR names whose terse third column
-  ("1080p BD", no year) made the pair look asymmetric → trimmed to garbage; and
-  2902 itself flows through `namesFromHeadings` (not `splitNames`), so the strip
-  didn't even reach it. Needs a shape-aware "parallel token" match (trim only
-  when the trailing token matches the untitled column's shape, e.g. a 3-letter
-  region code) AND must be applied in the H1/headings path too. Left for later.
+- `2902` → `GBR` / `USA` (strip leading "Betty 1992 1080p Remux") — **DONE**
+  (`stripAsymmetricTitle`, iconic fixture 103). Strip a shared "Title YEAR …"
+  prefix only when ASYMMETRIC (some columns have it, others don't), trimming each
+  titled column to the trailing tokens that parallel the short untitled column —
+  accepted ONLY when every trimmed token is a simple code of the SAME shape as
+  the reference (both pure-alpha region codes, or both digit-bearing format
+  codes). The shape guard fixes the earlier reverted attempt: long madVR names
+  whose terse "1080p BD" column faked asymmetry are kept (trailing "…(113)" has
+  parens → rejected). Applied in BOTH `splitNames` and `namesFromHeadings`.
+  Sweep: +10 name improvements, 0 regressions. One borderline result (0167 trims
+  to a codec tail "H.264 DD5.1") — imperfect but not broken.
 - `1313` → keep full long names; `vsPhantom` typo handled in splitNames ✅ (corpus body picks a shorter label line; partial)
 - `1261` → `2160p UHD` / `1080p BD` ✅
 - `1293` → a **reply**: ignore the topic title (needs H1-only-for-OP) — TODO
