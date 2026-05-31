@@ -353,46 +353,51 @@ function leadingComparisonNames(container: Element): { names: string[]; anchorEl
   return null;
 }
 
-/** Sources documented as "JPN BD: [Hidden text]" / "USA BD: [Hidden text]" … —
- *  a text label before each image-LESS showhide block, with the screenshots in a
- *  separate flat block afterwards (77086 One Punch Man). The labels are the
- *  columns; the BDInfo behind the showhides is ignored. Looks in the container's
- *  parent because getGrids parses the bare image wrapper, while the labels sit as
- *  its preceding siblings. */
-function leadingShowhideSourceLabels(container: Element): { names: string[]; anchorEl: Element | null } | null {
-  const parent = container.parentElement;
-  if (!parent) return null;
+// A real per-source label is short and clean ("JPN BD", "USA", "Sony Pictures |
+// Germany") — never a quote/paragraph/URL (2715).
+function isCleanSourceLabel(t: string): boolean {
+  return t.length > 0 && t.length <= 40 && !/https?:\/\//i.test(t) &&
+    !/\bquote\b/i.test(t) && !looksLikeProse([t]) && !isNonSourceLabel(t);
+}
+
+/** Collect per-source labels that each precede an image-LESS documentation block
+ *  (a "Hidden text" showhide, or a BDInfo `<table>` / Quote header), within
+ *  `scope` and up to `stopAt`. The screenshots are a separate flat block; the
+ *  labels are the columns (the BDInfo is ignored). */
+function sourceLabelsBeforeDocBlocks(scope: Element, stopAt: Node | null): { names: string[]; anchorEl: Element | null } | null {
   const labels: string[] = [];
   let lastEl: Element | null = null;
   let pending = "";
-  // A real per-source label is short and clean ("JPN BD", "Sony Pictures |
-  // Germany") — never a quote/paragraph/URL (2715).
-  const cleanLabel = (t: string) =>
-    t.length > 0 && t.length <= 40 && !/https?:\/\//i.test(t) &&
-    !/\bquote\b/i.test(t) && !looksLikeProse([t]) && !isNonSourceLabel(t);
-  for (const node of parent.childNodes) {
-    if (node === container) break; // reached the screenshot block
-    if (node.nodeName === "BR") { pending = ""; continue; } // label is one line
-    if (node.nodeType === 3) {
-      pending += node.textContent || "";
-    } else if (node.nodeType === 1) {
-      const el = node as Element;
-      const showhide = !!el.querySelector?.("label.label_showhide");
-      if (showhide && !el.querySelector("img")) {
-        const t = pending.replace(/[:\s]+$/, "").trim();
-        if (!cleanLabel(t)) return null; // a non-source-label showhide → not this pattern
-        labels.push(t);
-        lastEl = el;
-        pending = "";
-      } else if (el.querySelector?.("img")) {
-        return null; // an earlier image block — not this pattern
-      } else {
-        pending += el.textContent || "";
-      }
+  let lastLine = ""; // last non-empty line — the label may sit a <br> above the block
+  for (const node of scope.childNodes) {
+    if (node === stopAt) break;
+    if (node.nodeName === "BR") { const t = pending.trim(); if (t) lastLine = t; pending = ""; continue; }
+    if (node.nodeType === 3) { pending += node.textContent || ""; continue; }
+    if (node.nodeType !== 1) continue;
+    const el = node as Element;
+    if (el.nodeName === "IMG" || (el.nodeName === "A" && el.querySelector("img"))) break; // screenshots
+    const docBlock = !el.querySelector("img") &&
+      (!!el.querySelector?.("label.label_showhide") || el.matches?.("table, p.sub"));
+    if (docBlock) {
+      const t = (pending.trim() || lastLine).replace(/[:\s]+$/, "").trim();
+      if (t && isCleanSourceLabel(t) && labels[labels.length - 1] !== t) { labels.push(t); lastEl = el; }
+      pending = ""; lastLine = "";
+    } else if (el.querySelector?.("img")) {
+      break; // an inline image block before this — not the pattern
+    } else {
+      pending += el.textContent || "";
     }
   }
-  if (labels.length < 2 || !looksLikeNames(labels)) return null;
-  return { names: labels, anchorEl: lastEl };
+  return labels.length >= 2 && looksLikeNames(labels) ? { names: labels, anchorEl: lastEl } : null;
+}
+
+/** Sources documented as per-source labels before image-less blocks, with the
+ *  screenshots in a separate flat block: "JPN BD: [Hidden text]…" (77086, labels
+ *  in the parent of the image wrapper) or "USA<Quote BDInfo> CAN<Quote BDInfo>"
+ *  (80662, labels alongside the screenshots in the same container). */
+function leadingShowhideSourceLabels(container: Element): { names: string[]; anchorEl: Element | null } | null {
+  return sourceLabelsBeforeDocBlocks(container, null) ??
+    (container.parentElement ? sourceLabelsBeforeDocBlocks(container.parentElement, container) : null);
 }
 
 function stableGridColumnCount(groups: GridCell[][]): number | null {

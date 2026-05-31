@@ -42,7 +42,10 @@ export interface NameLabelInfo {
 }
 
 function cleanNameCandidate(text: string): string {
-  return text.replace(GENERIC_HEADING_PREFIX_RE, "").replace(FIELD_PREFIX_RE, "").trim();
+  return text.replace(GENERIC_HEADING_PREFIX_RE, "").replace(FIELD_PREFIX_RE, "")
+    // A dangling leading/trailing "|" left after a comparison URL was dropped
+    // ("USA, TWN | https://slow.pics/…" → the link removed → "USA, TWN |").
+    .replace(/\s*\|\s*$/, "").replace(/^\s*\|\s*/, "").trim();
 }
 
 // Strip a leading bbcode/bracket thread-tag such as "[Comparisons] " that
