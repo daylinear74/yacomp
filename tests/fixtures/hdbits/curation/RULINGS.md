@@ -15,7 +15,10 @@ prefix of the bootstrapped fixture filename (e.g. `1202` →
 2. **H1 / topic-title extraction applies ONLY to the original poster (first
    post)**, never to replies. A reply infers titles from its own body text only;
    if it has none, fall back to defaults (`Source 1..N`, or
-   `Source / Filtered / Encode` for 3 columns). [TODO — not yet implemented]
+   `Source / Filtered / Encode` for 3 columns). DONE — `isOriginalPost` gates
+   `namesFromHeadings`; tested via the `forum.reply` fixture slot (cases 101 OP /
+   102 reply). NOTE: real multi-post pages aren't fully reproduced by the
+   synthetic 2-post fixture — see UNVERIFIED.md.
 
 ## Rule A — explicit-comparison line wins (IMPLEMENTED)
 A leading line that carries an **explicit** comparison separator

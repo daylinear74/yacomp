@@ -34,10 +34,16 @@ covered.
   grid would claim the images instead of falling back to slow.pics — only the
   iconic e2e cases are covered, not every wild single-link shape.
 
-## H1-only-for-OP (1293)
-- Current fixtures are SINGLE-post bodies wrapped by the harness, so every case
-  looks like the original poster. The OP-vs-reply distinction (skip the topic H1
-  title for replies) cannot be tested until a multi-post fixture path exists.
+## H1-only-for-OP (1293) — now partly testable
+- Implemented (`isOriginalPost` gates `namesFromHeadings`) and tested via the
+  new `forum.reply` slot (cases 101 OP / 102 reply). BUT the `forum.reply` slot
+  renders a SYNTHETIC two-post thread (an OP placeholder + the body as #2); real
+  HDBits thread markup (nested `readpost` tables, multiple replies, edits) is not
+  reproduced. `isOriginalPost` keys off "the first `td.comment`" — if real pages
+  use a different post container, OP detection could misfire. Confirm on a live
+  multi-post comparison thread.
+- The corpus SWEEP still renders every case as a single post, so it cannot
+  exercise the reply path at all.
 
 ## Tampermonkey / GM_* runtime
 - `GM_xmlhttpRequest` cross-origin fetch, `GM_setValue`/`GM_getValue`
