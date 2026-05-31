@@ -271,9 +271,13 @@ function plainSplit(c: string): string[] {
 }
 
 export function splitNames(text: string): string[] {
-  // Repair a missing space after "vs" ("…(with NGU Sharp) vsPhantom Thread…",
-  // 1313) so the separator is detected.
-  const candidate = cleanNameCandidate(text).replace(/(\s)vs(?=[A-Z])/g, "$1vs ");
+  // Repair a separator "vs" with a missing space on either/both sides
+  // ("GERvsUSA", "A vsB", "…Sharp)vsPhantom Thread…") so it is detected. Only a
+  // LOWERCASE "vs" bounded by token chars / "(" / ")" is touched, so a name's
+  // own "VS" / "AVS" (AviSynth) stays intact.
+  const candidate = cleanNameCandidate(text)
+    .replace(/([A-Za-z0-9)\]])vs(?=[A-Z(]|\s)/g, "$1 vs ")
+    .replace(/(\s)vs(?=[A-Z(])/g, "$1vs ");
   // Prefer a TOP-LEVEL separator (one outside parentheses), but only when the
   // label's parens are balanced (else masking is unreliable). When no top-level
   // separator exists, fall back to a plain split — which lets a paren-enclosed

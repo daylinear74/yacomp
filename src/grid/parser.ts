@@ -271,7 +271,7 @@ const VS_CONTINUATION_RE = /^\s*(?:vs?\.|\|)\s/i;
  *  sentence boundary (".", "!", "?" then a capitalised word) or an absurd length
  *  marks prose. Long release names ("…7.1 (33454 kbps) (with NGU Sharp)") have
  *  no sentence boundary, so they pass. */
-function looksLikeProse(parts: string[]): boolean {
+export function looksLikeProse(parts: string[]): boolean {
   // A sentence boundary (".", "!", "?" then a capitalised word) or a comma
   // followed by a lowercase sentence connector (", the latter is better, but…")
   // marks prose. A length cap is deliberately NOT used — legit release names run

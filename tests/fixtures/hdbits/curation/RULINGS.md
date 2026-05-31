@@ -6,6 +6,31 @@ worked examples for the heuristics they motivated. Case IDs are the numeric
 prefix of the bootstrapped fixture filename (e.g. `1202` →
 `1202-topic-70854-post-0-…`).
 
+## TEST COVERAGE (every ruling is locked)
+Unit = `tests/unit/hdbits-rulings.test.ts` (pure functions). E2e = an iconic
+fixture in `tests/fixtures/hdbits/cases/` (full DOM through `setupHDBitsCore`).
+
+| Ruling | Unit | E2e fixture |
+|---|---|---|
+| vs / vs. / v. / \| precedence | ✓ | 089 1202, 090 0478, 091 2022, 100 0288 |
+| `vs` with a missing space (AvsB / Avs B / A vsB) | ✓ | — |
+| strip `Video:`/`Audio:`/`Subtitle:` prefix | ✓ | 095 2221, 096 2425 |
+| top-level split masks separators in (…) | ✓ | 087, 088 |
+| asymmetric movie-title strip (+ negatives) | ✓ | 103 2902 |
+| mediainfo / metric guard (looksLikeNames) | ✓ | 086 |
+| prose guard (sentence + comma-prose) | ✓ | 093 2007, 098 3040 |
+| footer label incl. "Slow.pics" (dot) | ✓ | 007, 094 2503 |
+| explicit vs/\| ≠ comma/dash | ✓ | — |
+| FlagCounter sig image excluded | — | 092 2927 |
+| label divisibility / OP-H1 fall-through | — | 097 1261, 104 2625 |
+| H1 title only for the OP, not replies | — | 101 OP / 102 reply |
+| single slow.pics link defers to local title | — | 094 2503, 099 2751 |
+| local per-group labels > adjacent slow.pics | — | 088 |
+| slow.pics rescue for label-less blocks (A1) | — | 087 |
+| image-less showhide ignored; per-source labels | — | 105 77086 |
+| "Show comparison" link after the whole title | — | 106 74778 |
+| row-index labels ignored (real title wins) | — | 060 2277 |
+
 ## META-RULES (canonical)
 1. **`vs` / `vs.` / `v.` / `|` take precedence over ALL other separators** when
    extracting comparison titles. A slash, comma, dash or `×` never outranks a
