@@ -31,12 +31,14 @@ tester judgment, to confirm. Tracked here so future work doesn't assume they're
 covered.
 
 ## slow.pics integration
-- **Real slow.pics fetch/parse.** e2e/sweep use a test stub (`tests/fixtures/
-  hdbits/test-entry.ts`) that returns a canned 3-col `S/F/E` collection for ANY
-  key. The real `extractCollection` against live slow.pics HTML, real column
-  titles, real image counts, and the `/redir.php?url=<base64>` decode against
-  real keys are NOT exercised offline. (Validated once manually via Chrome MCP on
-  the live dirty-line-fix page; not in CI.)
+- **Real slow.pics fetch/parse — OWNER-VERIFIED WORKING (2026-05) on topicid
+  80433.** The live network fetch, the `/redir.php?url=<base64>` decode, and the
+  collection parse all work on a real page. (CI still uses the canned stub in
+  `tests/fixtures/hdbits/test-entry.ts`, so the *parse of arbitrary real
+  collections* is still only stub-tested — but the round-trip is confirmed.)
+  Verification also surfaced cases that wrongly fell back to slow.pics when a
+  better local source existed; those are now fixed (80662 per-source labels,
+  79784 dangling `|`, 79242 `>>>`, 80433 OP-H1-over-slow.pics).
 - **slow.pics performance.** Hover-prefetch, the GM_setValue persistent cache,
   and the ~1s fetch latency are only measurable in a real browser. The "Loading
   comparison…" state and cache hit-rate are unverified in CI.

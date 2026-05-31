@@ -261,7 +261,7 @@ function leadingVsLabelInfo(container: Element): { names: string[]; anchorEl: El
 // routinely appear inside BDInfo codec lines ("MPEG-4 AVC / 27191 kbps"), byte
 // counts ("614,127,007 bytes") and prose ("1.78:1 / 1.85:1"), which must never
 // outrank the real per-group/heading labels.
-const VS_BAR_RE = /\bvs?\.\s|\bvs\s|\|/i;
+const VS_BAR_RE = /\bvs?\.\s|\bvs\s|\||[<>]{2,}/i;
 // A continuation line of a multi-line vs-list, e.g. "DE (…) vs. KR (…)<br>vs. US (…)".
 const VS_CONTINUATION_RE = /^\s*(?:vs?\.|\|)\s/i;
 
@@ -398,6 +398,17 @@ function sourceLabelsBeforeDocBlocks(scope: Element, stopAt: Node | null): { nam
 function leadingShowhideSourceLabels(container: Element): { names: string[]; anchorEl: Element | null } | null {
   return sourceLabelsBeforeDocBlocks(container, null) ??
     (container.parentElement ? sourceLabelsBeforeDocBlocks(container.parentElement, container) : null);
+}
+
+/** True when the container carries a slow.pics comparison link (direct or via an
+ *  HDBits /redir.php wrapper whose visible text is the slow.pics URL). */
+function hasSlowPicsLink(container: Element): boolean {
+  for (const a of container.querySelectorAll("a[href]")) {
+    if (/slow\.pics/i.test(a.getAttribute("href") || "") || /slow\.pics/i.test(a.textContent || "")) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function stableGridColumnCount(groups: GridCell[][]): number | null {
@@ -577,7 +588,17 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     }
   }
   if (!names && hasLocalNonNameHeading(groupLabels)) {
-    return null;
+    // A non-name local heading normally suppresses the grid. But when the only
+    // alternative is a slow.pics link, the ORIGINAL POSTER's H1 title is the
+    // preferred source (owner ruling): use it when its column count divides the
+    // screenshots, else leave it for the slow.pics rescue. A block with NO
+    // slow.pics link stays suppressed (e.g. a non-comparison gallery, 057).
+    const h1 = isOriginalPost(container) && hasSlowPicsLink(container) ? namesFromHeadings() : null;
+    if (h1 && total % h1.length === 0 && looksLikeNames(h1)) {
+      names = h1;
+    } else {
+      return null;
+    }
   }
   if (!names) {
     names = findComparisonNames(container);

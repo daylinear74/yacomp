@@ -14,6 +14,10 @@ fixture in `tests/fixtures/hdbits/cases/` (full DOM through `setupHDBitsCore`).
 |---|---|---|
 | vs / vs. / v. / \| precedence | ✓ | 089 1202, 090 0478, 091 2022, 100 0288 |
 | `vs` with a missing space (AvsB / Avs B / A vsB) | ✓ | — |
+| `>>>` / `>>` (better-than) is a separator | ✓ | 109 79242 |
+| per-source labels before showhide/BDInfo blocks | — | 105 77086, 107 80662 |
+| dangling `\|` after a dropped URL stripped | — | 108 79784 |
+| OP H1 preferred over slow.pics when it divides | — | 110 80433 |
 | strip `Video:`/`Audio:`/`Subtitle:` prefix | ✓ | 095 2221, 096 2425 |
 | top-level split masks separators in (…) | ✓ | 087, 088 |
 | asymmetric movie-title strip (+ negatives) | ✓ | 103 2902 |

@@ -37,6 +37,19 @@ describe("ruling: a 'vs' with a missing space is still a separator (1313 + gener
   });
 });
 
+describe("ruling: '>>>' / '>>' (better-than) is a comparison separator (79242)", () => {
+  test("splits on >>>", () =>
+    expect(splitNames("Eureka Classics >>> Cargo Records")).toEqual(["Eureka Classics", "Cargo Records"]));
+  test("splits on >> and chains", () =>
+    expect(splitNames("GER >> USA >> FRA")).toEqual(["GER", "USA", "FRA"]));
+  test("a one-sided decorative arrow run yields one part (no false split)", () => {
+    expect(splitNames("BD >>>>>")).toEqual(["BD"]);
+    expect(splitNames(">>>>> AMZN")).toEqual(["AMZN"]);
+  });
+  test("a single '>' is NOT a separator", () =>
+    expect(splitNames("Source > Encode")).toEqual(["Source > Encode"]));
+});
+
 describe("ruling: strip Video:/Audio:/Subtitle: field prefix (2221, 2425)", () => {
   test("Video:", () => expect(splitNames("Video: GER (1080p AVC) | USA (1080p AVC)"))
     .toEqual(["GER (1080p AVC)", "USA (1080p AVC)"]));

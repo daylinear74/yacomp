@@ -31,6 +31,12 @@ const FIELD_PREFIX_RE = /^\s*(?:video|audio|subtitles?|subs)\s*:\s*/i;
 // "v." is left alone.
 const VS_RE = /\s+v(?:s\.?|\.)\s+/i;
 const VS_TEST = /\bv(?:s\.?|\.)\s/i;
+// A "better-than" arrow run (">>>", ">>", "<<") used as a comparison separator,
+// e.g. "Eureka Classics >>> Cargo Records" (owner ruling). 2+ arrows only, so a
+// single ">" in other text is left alone; a one-sided decorative run yields one
+// part (the other side is empty) and is dropped.
+const ARROW_RE = /\s*[<>]{2,}\s*/;
+const ARROW_TEST = /[<>]{2,}/;
 const DASH_RE = /\s+-\s+/;
 const SLASH_RE = /\s+\/\s+/;
 const TIMES_RE = /\s+×\s+/;
@@ -266,6 +272,7 @@ function parensBalanced(s: string): boolean {
 function plainSplit(c: string): string[] {
   if (c.includes("|")) return c.split("|");
   if (VS_TEST.test(c)) return c.split(VS_RE);
+  if (ARROW_TEST.test(c)) return c.split(ARROW_RE);
   if (c.includes(",")) return c.split(",");
   if (DASH_RE.test(c)) return c.split(DASH_RE);
   if (SLASH_RE.test(c)) return c.split(SLASH_RE);
@@ -288,6 +295,7 @@ export function splitNames(text: string): string[] {
   const topLevel = parensBalanced(candidate)
     ? topLevelSplit(candidate, "|") ??
       topLevelSplit(candidate, VS_RE) ??
+      topLevelSplit(candidate, ARROW_RE) ??
       topLevelSplit(candidate, ",") ??
       topLevelSplit(candidate, DASH_RE) ??
       topLevelSplit(candidate, SLASH_RE) ??
@@ -321,7 +329,7 @@ export function isMultiSourceLabel(label: string): boolean {
 
 export function hasVsOrPipe(text: string): boolean {
   const candidate = cleanNameCandidate(text);
-  return candidate.includes("|") || VS_TEST.test(candidate) || candidate.includes(",") || DASH_RE.test(candidate) || SLASH_RE.test(candidate) || TIMES_RE.test(candidate);
+  return candidate.includes("|") || VS_TEST.test(candidate) || ARROW_TEST.test(candidate) || candidate.includes(",") || DASH_RE.test(candidate) || SLASH_RE.test(candidate) || TIMES_RE.test(candidate);
 }
 
 /** An UNAMBIGUOUS multi-source separator ("X vs Y", "X | Y", "X / Y", "X × Y").
@@ -332,7 +340,7 @@ export function hasVsOrPipe(text: string): boolean {
  *  a single transposed grid. */
 export function hasExplicitComparison(text: string): boolean {
   const candidate = cleanNameCandidate(text);
-  return candidate.includes("|") || VS_TEST.test(candidate) || SLASH_RE.test(candidate) || TIMES_RE.test(candidate);
+  return candidate.includes("|") || VS_TEST.test(candidate) || ARROW_TEST.test(candidate) || SLASH_RE.test(candidate) || TIMES_RE.test(candidate);
 }
 
 // ── Name-finding sub-strategies ──
