@@ -167,6 +167,51 @@ function stripLeadingMovieTitle(s: string): string {
   return m ? m[1].trim() : s;
 }
 
+// A "Movie Title YEAR …" prefix: ≥1 word, then a standalone 1900-2099 year (NOT
+// a parenthesised "(2009)" region year).
+const TITLE_YEAR_RE = /^.+?\s(?:19|20)\d{2}(?:\s|$)/;
+// A bare source code (region "GBR"/"USA", or a short format like "1080p BD") —
+// ≤2 words, ≤14 chars, no parens/sentence clutter.
+function isSimpleCode(s: string): boolean {
+  const t = s.trim();
+  return t.length > 0 && t.length <= 14 && !/[()]/.test(t) &&
+    /[A-Za-z0-9]/.test(t) && t.split(/\s+/).length <= 2;
+}
+// Two codes share a shape when both are pure-alpha (region codes) or both carry
+// a digit (resolution/format) — so a trimmed trailing token is only accepted as
+// the parallel source code when it actually looks like the reference.
+function sameCodeShape(a: string, b: string): boolean {
+  const alpha = (s: string) => /^[A-Za-z]+$/.test(s.trim());
+  const digit = (s: string) => /\d/.test(s);
+  return (alpha(a) && alpha(b)) || (digit(a) && digit(b));
+}
+/** Strip a shared "Title YEAR …" prefix from columns that carry it ONLY when the
+ *  set is ASYMMETRIC — at least one column has the prefix and at least one does
+ *  not (owner ruling). Each titled column is trimmed to the trailing tokens that
+ *  parallel the short untitled reference column, and the result is accepted only
+ *  when every trimmed token is a simple code of the same shape as the reference
+ *  ("Betty 1992 1080p Remux GBR" / "USA" → "GBR" / "USA"). Symmetric full
+ *  release-name pairs (1313) and long names whose trailing tokens are clutter
+ *  ("…(latest madVR test build (113)") are left untouched. */
+export function stripAsymmetricTitle(parts: string[]): string[] {
+  if (parts.length < 2) return parts;
+  const titled = parts.map((p) => TITLE_YEAR_RE.test(p.trim()));
+  if (!titled.some(Boolean) || titled.every(Boolean)) return parts;
+  const ref = parts[titled.findIndex((t) => !t)].trim();
+  if (!isSimpleCode(ref)) return parts;
+  const refWords = ref.split(/\s+/).length;
+  const out = parts.map((p, i) => {
+    if (!titled[i]) return p;
+    const words = p.trim().split(/\s+/);
+    return words.length > refWords ? words.slice(-refWords).join(" ") : p;
+  });
+  for (let i = 0; i < parts.length; i++) {
+    if (!titled[i]) continue;
+    if (out[i] === parts[i] || !isSimpleCode(out[i]) || !sameCodeShape(out[i], ref)) return parts;
+  }
+  return out;
+}
+
 /** Replace every character inside (...) / [...] with a neutral 'x', preserving
  *  length and the brackets themselves — so a separator that lives inside a
  *  parenthesised aside (e.g. the "|" in "Source (Carlotta | FRA)") is invisible
@@ -247,6 +292,7 @@ export function splitNames(text: string): string[] {
   if (parts.length >= 2) parts[0] = stripLeadingMovieTitle(parts[0]);
   // A bare-URL part is an external link, not a source column — drop it.
   parts = parts.filter((p) => !isUrlLabel(p));
+  parts = stripAsymmetricTitle(parts);
   return foldFileSizeParts(parts);
 }
 
@@ -437,8 +483,9 @@ export function namesFromHeadings(): string[] | null {
     }
 
     if (VS_TEST.test(text)) {
-      const parts = text.split(VS_RE).map((n) => n.trim());
+      let parts = text.split(VS_RE).map((n) => n.trim());
       parts[0] = stripTitlePrefix(parts[0]);
+      parts = stripAsymmetricTitle(parts);
       if (parts.every((p) => p) && looksLikeNames(parts)) return parts;
     }
   }
