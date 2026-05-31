@@ -454,17 +454,36 @@ function cmpThreadLargestBlock(container: Element, groups: GridCell[][]): Grid[]
   // Only for the scattered-spoiler shape: example frames live in a generic
   // "Hidden text" showhide, with the real grid outside it (80070). This keeps
   // the fallback from resurrecting an unrelated leftover block (057).
+  const h1 = namesFromHeadings();
+  if (!h1 || !looksLikeNames(h1)) return null;
+  const total = groups.flat().length;
+  const block = groups.reduce((a, b) => (b.length > a.length ? b : a), groups[0]);
+  if (block.length < h1.length) return null;
+
   const hasSpoiler = [...container.querySelectorAll("label.label_showhide")].some(
     (l) => /^hidden\s+text$/i.test((l.textContent || "").replace(/\s*\[(?:show|hide)\]\s*$/i, "").trim()),
   );
-  if (!hasSpoiler) return null;
-  const h1 = namesFromHeadings();
-  if (!h1 || !looksLikeNames(h1)) return null;
-  const block = groups.reduce((a, b) => (b.length > a.length ? b : a), groups[0]);
-  if (block.length < h1.length || block.length % h1.length !== 0) return null;
+  let partial = false;
+  if (hasSpoiler) {
+    // 80070: example frames scattered through a generic "Hidden text" spoiler,
+    // with the real grid outside it → take the largest block, but it must
+    // divide the H1 column count cleanly.
+    if (block.length % h1.length !== 0) return null;
+  } else if (hasSlowPicsLink(container) && block.length === total && block.length > h1.length) {
+    // 80402: a comparison-thread OP whose slow.pics-linked shots are ONE
+    // contiguous block titled by the H1, but the count is indivisible (the
+    // poster dropped a screenshot — 37 shots for a 2-wide AUS/GBR set). Show it
+    // anyway; the trailing short row is the "orphan" the viewer lets you click
+    // to ignore. Gated to the slow.pics + single-block shape so a multi-section
+    // OP with no slow.pics link (057's leftover blocks) stays suppressed.
+    partial = block.length % h1.length !== 0;
+  } else {
+    return null;
+  }
+
   const rows: GridCell[][] = [];
   for (let i = 0; i < block.length; i += h1.length) rows.push(block.slice(i, i + h1.length));
-  return [{ rows, numCols: h1.length, names: finalizeNames(h1), anchorEl: null }];
+  return [{ rows, numCols: h1.length, names: finalizeNames(h1), anchorEl: null, partial }];
 }
 
 /** True when the container carries a slow.pics comparison link (direct or via an

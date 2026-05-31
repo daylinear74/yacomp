@@ -17,6 +17,7 @@ fixture in `tests/fixtures/hdbits/cases/` (full DOM through `setupHDBitsCore`).
 | `>>>` / `>>` (better-than) is a separator | ✓ | 109 79242 |
 | `~` (spaced tilde) separator, BELOW `/` precedence | ✓ | 111 78043 |
 | leading comparison title in PARENT, before container | — | 057 |
+| indivisible comparison-thread OP → partial grid + orphan | — | 113 80402 |
 | per-source labels before showhide/BDInfo blocks | — | 105 77086, 107 80662 |
 | dangling `\|` after a dropped URL stripped | — | 108 79784 |
 | OP H1 preferred over slow.pics when it divides | — | 110 80433 |
@@ -166,3 +167,17 @@ previous image block) and takes its `vs`/`|` names → `FRA / USA / GBR`, 63 / 3
 21 rows; the sub-section labels are row-group dividers, not columns. Scoped to
 that one line so a sibling grid's title can never leak across. (The 6-wide audio
 downmix `USA_2 | GBR_6_2_…` is a separate section-c comparison.)
+
+### Comparison-thread OP, indivisible count → show it anyway (80402)
+`Berserk (1967) AUS vs GBR` (forumid 40). The OP posted 37 screenshots for a
+2-wide AUS/GBR set — it should be 38, but the poster dropped one, so the count is
+prime and no clean grid exists. Owner ruling: for an OP in a comparison thread,
+always offer the "Show comparison" button anyway so the viewer can look. The
+title comes from the H1 (the body has only a "Slowpics:" link, no inline label).
+`cmpThreadLargestBlock` emits a PARTIAL grid (18 pairs + 1 trailing orphan,
+`grid.partial`) instead of suppressing; the viewer dims the lone orphan row and a
+clean click drops it (`Grid.partial` → `_scf_comp_orphan` in row.ts). Gated to
+the comparison-thread OP + slow.pics + single-contiguous-block shape, so a
+multi-section OP with no slow.pics link (057's leftover blocks) stays suppressed,
+and the divisible spoiler case (80070) keeps its clean-divide requirement. The
+grid claims the shots, so the slow.pics rescue does not add a second button.

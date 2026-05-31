@@ -74,6 +74,11 @@ export function buildRow(
 
   const imgs: HTMLImageElement[] = [];
   for (let ci = 0; ci < numCols; ci++) {
+    // A partial final row (the "orphan" of an indivisible comparison-thread
+    // grid, 80402) has fewer cells than numCols — stop at the gap instead of
+    // dereferencing a missing cell. Missing cells are always trailing (the row
+    // is a contiguous slice), so the imgs[] indices still map to columns.
+    if (!rowCells[ci]) break;
     const cell = document.createElement("div");
     cell.className = "_scf_comp_cell";
     const img = document.createElement("img");
@@ -105,6 +110,22 @@ export function buildRow(
       switchColumn(newCol);
     }
   });
+
+  // A partial final row (the orphan of an indivisible comparison-thread grid,
+  // 80402) holds a single unpaired screenshot. Dim it and let a clean click
+  // (not a drag) drop the row so the rest of the grid pairs up cleanly.
+  if (rowCells.length < numCols) {
+    rowDiv.classList.add("_scf_comp_orphan");
+    rowDiv.style.opacity = "0.55";
+    rowDiv.style.cursor = "pointer";
+    rowDiv.title = "Unpaired screenshot — the comparison set is missing its pair. Click to ignore it.";
+    let downX = 0, downY = 0;
+    rowDiv.addEventListener("mousedown", (e) => { downX = e.clientX; downY = e.clientY; });
+    rowDiv.addEventListener("click", (e) => {
+      if (Math.abs(e.clientX - downX) > 4 || Math.abs(e.clientY - downY) > 4) return; // was a drag
+      rowDiv.remove();
+    });
+  }
 
   return { rowDiv, sizer, imgs, adjustRowAR };
 }

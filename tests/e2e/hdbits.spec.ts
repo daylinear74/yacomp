@@ -147,6 +147,28 @@ test("hdbits: host trigger link inherits page color and opens the viewer", async
   await expect(page.locator("._scf_comp")).toBeVisible();
 });
 
+test("hdbits: indivisible comparison-thread OP shows a partial grid with a click-to-ignore orphan (80402)", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/113-iconic-80402");
+  await page.waitForFunction(
+    () => (window as unknown as { __yacomp_test_ready?: boolean }).__yacomp_test_ready === true,
+    undefined,
+    { timeout: 5000 },
+  );
+  // 37 shots, 2-wide AUS/GBR (from the H1) → 18 pairs + 1 orphan row.
+  await expect(page.locator("._scf_comp_link")).toHaveCount(1);
+  await page.locator("._scf_comp_link").first().click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(19);
+  await expect(page.locator("._scf_comp_orphan")).toHaveCount(1);
+  // Clicking the lone trailing screenshot drops it → a clean 18-pair grid.
+  const orphan = page.locator("._scf_comp_orphan").first();
+  await orphan.scrollIntoViewIfNeeded();
+  await orphan.click();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(18);
+  await expect(page.locator("._scf_comp_orphan")).toHaveCount(0);
+});
+
 for (const { file, meta } of cases) {
   test(`hdbits: ${file}`, async ({ page }) => {
     await stubHdbitsImages(page);
