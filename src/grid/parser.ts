@@ -312,7 +312,10 @@ function leadingComparisonNames(container: Element): { names: string[]; anchorEl
       if (isUrlLabel(at)) continue;
     }
     cur.text += node.textContent || "";
-    if (!cur.el && node.nodeType === 1) cur.el = node;
+    // Anchor the "Show comparison" link to the LAST element of the heading line
+    // (e.g. the trailing "US" source), so it is inserted AFTER the whole title
+    // rather than splitting it ("GER [link] vs US" — 74778).
+    if (node.nodeType === 1) cur.el = node;
     // A block element ends the line (its siblings start a new one).
     if (node.nodeType === 1 && /^(?:DIV|P|PRE|TABLE|BLOCKQUOTE|UL|OL)$/.test(node.nodeName)) {
       raw.push({ text: "", el: null, external: false });
@@ -324,6 +327,9 @@ function leadingComparisonNames(container: Element): { names: string[]; anchorEl
     if (lines.length && VS_CONTINUATION_RE.test(ln.text)) {
       lines[lines.length - 1].text += ` ${ln.text.trim()}`;
       lines[lines.length - 1].external ||= ln.external;
+      // Anchor on the LAST element of the merged heading (the trailing source),
+      // so the "Show comparison" link follows the whole title (74778).
+      if (ln.el) lines[lines.length - 1].el = ln.el;
     } else {
       lines.push({ ...ln });
     }
@@ -345,6 +351,48 @@ function leadingComparisonNames(container: Element): { names: string[]; anchorEl
     }
   }
   return null;
+}
+
+/** Sources documented as "JPN BD: [Hidden text]" / "USA BD: [Hidden text]" … —
+ *  a text label before each image-LESS showhide block, with the screenshots in a
+ *  separate flat block afterwards (77086 One Punch Man). The labels are the
+ *  columns; the BDInfo behind the showhides is ignored. Looks in the container's
+ *  parent because getGrids parses the bare image wrapper, while the labels sit as
+ *  its preceding siblings. */
+function leadingShowhideSourceLabels(container: Element): { names: string[]; anchorEl: Element | null } | null {
+  const parent = container.parentElement;
+  if (!parent) return null;
+  const labels: string[] = [];
+  let lastEl: Element | null = null;
+  let pending = "";
+  // A real per-source label is short and clean ("JPN BD", "Sony Pictures |
+  // Germany") — never a quote/paragraph/URL (2715).
+  const cleanLabel = (t: string) =>
+    t.length > 0 && t.length <= 40 && !/https?:\/\//i.test(t) &&
+    !/\bquote\b/i.test(t) && !looksLikeProse([t]) && !isNonSourceLabel(t);
+  for (const node of parent.childNodes) {
+    if (node === container) break; // reached the screenshot block
+    if (node.nodeName === "BR") { pending = ""; continue; } // label is one line
+    if (node.nodeType === 3) {
+      pending += node.textContent || "";
+    } else if (node.nodeType === 1) {
+      const el = node as Element;
+      const showhide = !!el.querySelector?.("label.label_showhide");
+      if (showhide && !el.querySelector("img")) {
+        const t = pending.replace(/[:\s]+$/, "").trim();
+        if (!cleanLabel(t)) return null; // a non-source-label showhide → not this pattern
+        labels.push(t);
+        lastEl = el;
+        pending = "";
+      } else if (el.querySelector?.("img")) {
+        return null; // an earlier image block — not this pattern
+      } else {
+        pending += el.textContent || "";
+      }
+    }
+  }
+  if (labels.length < 2 || !looksLikeNames(labels)) return null;
+  return { names: labels, anchorEl: lastEl };
 }
 
 function stableGridColumnCount(groups: GridCell[][]): number | null {
@@ -514,6 +562,13 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     if (leadingVs) {
       names = leadingVs.names;
       anchorEl = leadingVs.anchorEl;
+    }
+  }
+  if (!names) {
+    const showhideLabels = leadingShowhideSourceLabels(container);
+    if (showhideLabels && total % showhideLabels.names.length === 0) {
+      names = showhideLabels.names;
+      anchorEl = showhideLabels.anchorEl;
     }
   }
   if (!names && hasLocalNonNameHeading(groupLabels)) {

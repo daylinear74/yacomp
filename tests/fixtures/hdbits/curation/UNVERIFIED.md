@@ -3,19 +3,24 @@
 ## Corpus examples to inspect on the LIVE site
 (Visit `https://hdbits.org/forums/viewtopic?topicid=<id>`.)
 
-**slow.pics-dependent (live titles/counts unverified — 64 cases with ≥2 slow.pics
-links route through the rescue path):**
-- topicid 78859 (Doctor Who — **25** slow.pics links, heavy multi-section)
-- topicid 78578 (4 links), 78534 / 78526 (Marvel, 3 links each)
-- topicid 80336 (Chatroom 2625 — now fixed via H1, but has 2 links)
-- topicid 79320, 81472, 79498, 79068, 79848 (2 links each)
+**slow.pics-dependent (ONLY when no local label exists).** Having a slow.pics
+link does NOT mean the comparison is slow.pics-dependent — if a local "X vs Y vs
+Z" / per-source label is present, slow.pics must NOT be triggered (the label
+sits between the link and the screenshots, so `hasLocalLabelBetween` keeps the
+images out of the rescue). Owner-confirmed examples that are NOT slow.pics
+dependent (clear local labels) and must shape from the DOM:
+- topicid 78859 (Doctor Who — per-season showhides each labelled "GBR BD vs USA
+  BD vs GER BD"; the 25 slow.pics links must NOT fire)
+Genuinely slow.pics-dependent = a flat screenshot block with NO local label and
+a slow.pics link (e.g. the 087 dirty-line-fix shape) — those need a LIVE fetch
+to verify titles/counts; find them by a slow.pics link whose images have no
+preceding source label.
 
-**reply posts with screenshots (H1-only-for-OP — 732 cases; the single-post
-corpus can't exercise the reply path, confirm the topic H1 is NOT applied to a
-reply that has a labelless grid):**
-- topicid 74778 post#6, 62860 post#11, 59424 post#14, 77086 post#7,
-  72182 post#6 (clear replies, deep in the thread)
-- topicid 58805 post#2, 61913 post#2, 72847 post#2, 78200 post#2
+**reply posts with screenshots (H1-only-for-OP).** Owner spot-checked these as
+already correct: 62860 post#11 (winged-style ✓), 59424 post#14 (replenish, no
+comparison ✓), 77086 post#7 (replenish ✓), 58805 post#2 ✓, 72847 post#2 ✓. The
+single-post corpus still can't exercise the reply path in general; confirm on a
+live multi-post thread that the topic H1 is not applied to a reply., 78200 post#2
 
 ---
 
