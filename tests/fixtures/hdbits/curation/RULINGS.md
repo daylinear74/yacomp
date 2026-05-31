@@ -17,7 +17,8 @@ fixture in `tests/fixtures/hdbits/cases/` (full DOM through `setupHDBitsCore`).
 | `>>>` / `>>` (better-than) is a separator | ✓ | 109 79242 |
 | `~` (spaced tilde) separator, BELOW `/` precedence | ✓ | 111 78043 |
 | leading comparison title in PARENT, before container | — | 057 |
-| indivisible comparison-thread OP → partial grid + orphan | — | 113 80402 |
+| indivisible comparison-thread OP → drop-odd-shot picker | — | 113 80402 |
+| quote/URL-sourced title is unreliable; torrent gallery → 1-wide viewer | — | 114 838405 |
 | per-source labels before showhide/BDInfo blocks | — | 105 77086, 107 80662 |
 | dangling `\|` after a dropped URL stripped | — | 108 79784 |
 | OP H1 preferred over slow.pics when it divides | — | 110 80433 |
@@ -174,10 +175,29 @@ downmix `USA_2 | GBR_6_2_…` is a separate section-c comparison.)
 prime and no clean grid exists. Owner ruling: for an OP in a comparison thread,
 always offer the "Show comparison" button anyway so the viewer can look. The
 title comes from the H1 (the body has only a "Slowpics:" link, no inline label).
-`cmpThreadLargestBlock` emits a PARTIAL grid (18 pairs + 1 trailing orphan,
-`grid.partial`) instead of suppressing; the viewer dims the lone orphan row and a
-clean click drops it (`Grid.partial` → `_scf_comp_orphan` in row.ts). Gated to
-the comparison-thread OP + slow.pics + single-contiguous-block shape, so a
+`cmpThreadLargestBlock` emits a PARTIAL grid (`grid.partial`) instead of
+suppressing. Because the dropped shot can be ANYWHERE (a middle drop shifts every
+pair after it), clicking "Show comparison" opens a thumbnail PICKER
+(`openOrphanSelect`) laid out in the column count: the user clicks the odd
+shot(s) to drop — with a live "N shots ÷ C ✓ / drop K more" hint — and Enter /
+"Build comparison" re-flows the kept shots into a clean comparison. Gated to the
+comparison-thread OP + slow.pics + single-contiguous-block shape, so a
 multi-section OP with no slow.pics link (057's leftover blocks) stays suppressed,
 and the divisible spoiler case (80070) keeps its clean-divide requirement. The
 grid claims the shots, so the slow.pics rescue does not add a second button.
+
+### Ambiguous torrent gallery → 1-wide "Show viewer", not bogus columns (838405)
+`The White Dove AKA Holubice` (torrent 838405). The description ends with 10
+sample screenshots of the encode — a single-source GALLERY, not an A/B
+comparison; the two real comparisons are behind slow.pics links. The parser used
+to invent a 5-column grid by folding the whole quote `<table>` (the "SOURCE:"
+line plus the two slow.pics captions "…vs WEB-DL" / "Source vs Filtered vs Encode
+vs WEB-DL") into one line and splitting it on "vs". Owner ruling (false viewer >
+missing one): a title scraped from a quote/data block (`<table>`/`<pre>`/
+`<blockquote>`) or carrying a URL is UNRELIABLE and must not title columns; on a
+torrent page, a single flat image group whose only title was that blob falls back
+to a 1-wide gallery (`Grid.gallery`, trigger reads "Show viewer"). Scoped so it
+only fires where a bogus grid would otherwise have formed — quiet untitled blocks
+stay quiet, and real Source/Encode / per-source comparisons (clean titles) are
+untouched. A clean title with an indivisible count still becomes a partial grid
+(80402), not a gallery.

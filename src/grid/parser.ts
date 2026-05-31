@@ -291,11 +291,12 @@ export function looksLikeProse(parts: string[]): boolean {
  *  (Anime Ltd)…</a>"), inline-wrapped headings (0478: "<strong>Source vs
  *  encode</strong>"), and vs-lists split across <br> lines (2022: "DE … vs.
  *  KR …<br>vs. US …"). */
-function leadingComparisonNames(container: Element): { names: string[]; anchorEl: ChildNode | null } | null {
+function leadingComparisonNames(container: Element): { names: string[]; anchorEl: ChildNode | null; reliable: boolean } | null {
   type Line = { text: string; el: ChildNode | null; external: boolean };
-  const raw: Line[] = [{ text: "", el: null, external: false }];
+  const mk = (): Line => ({ text: "", el: null, external: false });
+  const raw: Line[] = [mk()];
   for (const node of container.childNodes) {
-    if (node.nodeName === "BR") { raw.push({ text: "", el: null, external: false }); continue; }
+    if (node.nodeName === "BR") { raw.push(mk()); continue; }
     if (node.nodeName === "IMG") break;
     if (node.nodeName === "A" && (node as Element).querySelector("img")) break;
     if (node.nodeType === 1 && (node as Element).querySelector("img")) break;
@@ -318,7 +319,7 @@ function leadingComparisonNames(container: Element): { names: string[]; anchorEl
     if (node.nodeType === 1) cur.el = node;
     // A block element ends the line (its siblings start a new one).
     if (node.nodeType === 1 && /^(?:DIV|P|PRE|TABLE|BLOCKQUOTE|UL|OL)$/.test(node.nodeName)) {
-      raw.push({ text: "", el: null, external: false });
+      raw.push(mk());
     }
   }
   // Merge a continuation line ("vs. US …") into the line it continues.
@@ -347,7 +348,15 @@ function leadingComparisonNames(container: Element): { names: string[]; anchorEl
     if (!t || isNonSourceLabel(t) || !VS_BAR_RE.test(t)) continue;
     const names = splitNames(t);
     if (names.length >= 2 && looksLikeNames(names) && !looksLikeProse(names)) {
-      return { names, anchorEl: lines[i].el };
+      // A real column title is a short clean label — it never carries a URL.
+      // A "title" line that does is a slow.pics caption / external-link
+      // description folded in from a quote block (Holubice 838405): mark it
+      // UNRELIABLE so a torrent-page gallery falls back to the 1-wide viewer
+      // instead of these invented columns. (A title that merely sits AFTER a
+      // BDInfo <table> stays reliable — it carries no URL — so legit
+      // quote-adjacent comparisons like 1009/1766 are untouched.)
+      const reliable = !/https?:\/\/|\bslow\.pics/i.test(t);
+      return { names, anchorEl: lines[i].el, reliable };
     }
   }
   return null;
@@ -441,6 +450,13 @@ function leadingShowhideSourceLabels(container: Element): { names: string[]; anc
  *  to that forum. Such an OP is, by definition, a comparison. */
 function isComparisonThread(): boolean {
   return !!document.querySelector('h1 a[href*="forumid=40"]');
+}
+
+/** True on a torrent-detail page (vs a forum thread). Used to scope the
+ *  "show an ambiguous image block as a 1-wide gallery" fallback to torrent
+ *  descriptions/comments, where a flat sample gallery is common. */
+function isTorrentPage(): boolean {
+  return !!document.querySelector("div.torrent-title, table#details");
 }
 
 /** Comparison-thread OP fallback: a comparison is a CONTIGUOUS image block, so
@@ -624,10 +640,17 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   // Only when its column count divides the screenshots — otherwise it is a
   // sub-section line ("2160p UHD vs 1080p BD") in a wider grid (e.g. a 3-wide
   // "UHD/new BD/old BD"), and the real per-group/heading label must still win.
+  // A comparison-like title scraped from a quote block / URL blob is unreliable
+  // (Holubice 838405). Don't title columns with it — instead remember that this
+  // block looked like a comparison but couldn't be titled cleanly, so a
+  // torrent-page gallery fallback can offer a 1-wide viewer.
+  let ambiguousTitle = false;
   const leadCmp = leadingComparisonNames(container);
-  if (leadCmp && total % leadCmp.names.length === 0) {
+  if (leadCmp && leadCmp.reliable && total % leadCmp.names.length === 0) {
     names = leadCmp.names;
     anchorEl = leadCmp.anchorEl;
+  } else if (leadCmp && !leadCmp.reliable) {
+    ambiguousTitle = true;
   }
   if (!names && groupLabels.length >= 2 && groupLabels.every((l) => l)) {
     const allNumeric = groupLabels.every((l) => /^\d+$/.test(l!));
@@ -715,7 +738,18 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   }
 
   const shaped = reshapeGrid(groups, groups.flat(), names);
-  if (!shaped) return cmpThreadLargestBlock(container, groups);
+  if (!shaped) {
+    // Torrent-page gallery fallback (owner ruling, Holubice 838405): the block
+    // looked like a comparison (a vs/| title) but the only title was an
+    // unreliable quote/URL blob, so the shots are a single-source SAMPLE
+    // gallery, not an A/B comparison. Rather than invent columns or go silent,
+    // show them as a 1-wide viewer. Scoped to a single flat image group on a
+    // torrent page so it never competes with a real multi-group comparison.
+    if (ambiguousTitle && isTorrentPage() && groups.length === 1 && total >= 2) {
+      return [{ rows: groups[0].map((c) => [c]), numCols: 1, names: null, anchorEl: null, gallery: true }];
+    }
+    return cmpThreadLargestBlock(container, groups);
+  }
 
   // Fallback: match strong count to numCols
   if (!names) {

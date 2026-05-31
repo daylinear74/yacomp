@@ -111,22 +111,6 @@ export function buildRow(
     }
   });
 
-  // A partial final row (the orphan of an indivisible comparison-thread grid,
-  // 80402) holds a single unpaired screenshot. Dim it and let a clean click
-  // (not a drag) drop the row so the rest of the grid pairs up cleanly.
-  if (rowCells.length < numCols) {
-    rowDiv.classList.add("_scf_comp_orphan");
-    rowDiv.style.opacity = "0.55";
-    rowDiv.style.cursor = "pointer";
-    rowDiv.title = "Unpaired screenshot — the comparison set is missing its pair. Click to ignore it.";
-    let downX = 0, downY = 0;
-    rowDiv.addEventListener("mousedown", (e) => { downX = e.clientX; downY = e.clientY; });
-    rowDiv.addEventListener("click", (e) => {
-      if (Math.abs(e.clientX - downX) > 4 || Math.abs(e.clientY - downY) > 4) return; // was a drag
-      rowDiv.remove();
-    });
-  }
-
   return { rowDiv, sizer, imgs, adjustRowAR };
 }
 

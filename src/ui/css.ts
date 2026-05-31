@@ -836,6 +836,67 @@ export function injectCSS(): void {
       border: 1px solid rgba(255,255,255,.12);
       pointer-events: none;
     }
+    ._scf_orphan_select {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483646;
+      background: #0b0b0b;
+      color: #ddd;
+      overflow-y: auto;
+      font: 400 13px/1.4 system-ui, sans-serif;
+    }
+    ._scf_os_header {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: #161616;
+      border-bottom: 1px solid #333;
+    }
+    ._scf_os_hint { flex: 1; }
+    ._scf_os_build, ._scf_os_cancel {
+      padding: 6px 12px;
+      cursor: pointer;
+      border: 1px solid #444;
+      background: #222;
+      color: #ddd;
+      border-radius: 4px;
+      font: inherit;
+    }
+    ._scf_os_build:disabled { opacity: .4; cursor: not-allowed; }
+    ._scf_os_grid { display: grid; gap: 4px; padding: 8px; }
+    ._scf_os_thumb {
+      position: relative;
+      cursor: pointer;
+      aspect-ratio: 16 / 9;
+      background: #1a1a1a;
+    }
+    ._scf_os_thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    ._scf_os_thumb:hover { outline: 2px solid #4a90d9; }
+    ._scf_os_thumb._scf_os_excluded { opacity: .35; outline: 2px solid #c0392b; }
+    ._scf_os_badge {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      display: none;
+      width: 22px;
+      height: 22px;
+      line-height: 22px;
+      text-align: center;
+      background: #c0392b;
+      color: #fff;
+      border-radius: 50%;
+      font-weight: bold;
+    }
+    ._scf_os_thumb._scf_os_excluded ._scf_os_badge { display: block; }
   `;
   root.appendChild(style);
 }

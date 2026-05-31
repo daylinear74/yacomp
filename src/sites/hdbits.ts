@@ -6,7 +6,7 @@ import { injectCSS, injectTriggerLinkCSS } from "../ui/css";
 import { getGrids } from "../grid";
 import type { Grid } from "../grid";
 import { hasVsOrPipe, splitNames, looksLikeNames } from "../grid/names";
-import { buildComparison, insertLinkAfter } from "../viewer";
+import { buildComparison, insertLinkAfter, openOrphanSelect } from "../viewer";
 import { fetchSlowPicsGridInfo, parseSlowPicsKey, slowPicsKeyFromAnchor } from "./slowpics-source";
 import { findSlowPicsComparisons, buildRescueGrid, type SlowPicsComparison } from "./hdbits-slowpics";
 
@@ -22,11 +22,11 @@ export function isHDBitsHost(hostname: string = location.hostname): boolean {
   return /(?:^|\.)hdbits\.org$/.test(hostname);
 }
 
-function makeShowComparisonLink(): HTMLAnchorElement {
+function makeShowComparisonLink(label = "Show comparison"): HTMLAnchorElement {
   const link = document.createElement("a");
   link.href = "#";
   link.className = "_scf_comp_link";
-  link.textContent = "Show comparison";
+  link.textContent = label;
   return link;
 }
 
@@ -92,11 +92,17 @@ export function setupHDBitsCore(): void {
   const claimed = new Set<HTMLImageElement>();
   for (const { grid, container } of getGrids(slowpicsImgs)) {
     for (const cell of grid.rows.flat()) if (cell.img) claimed.add(cell.img);
-    const link = makeShowComparisonLink();
+    // A 1-wide gallery (ambiguous torrent sample shots) reads "Show viewer", not
+    // "Show comparison" — it's a scroll-through viewer, not an A/B comparison.
+    const link = makeShowComparisonLink(grid.gallery ? "Show viewer" : "Show comparison");
     link.addEventListener("click", async (e) => {
       e.preventDefault();
       await maybeEnrichNames(grid);
-      buildComparison(grid, container as HTMLElement, link);
+      // An indivisible set (a comparison-thread OP that dropped a shot, 80402)
+      // can't pair up cleanly and the gap may be anywhere, so let the user pick
+      // the odd shot(s) to drop first, then build the comparison from the rest.
+      if (grid.partial) openOrphanSelect(grid, container as HTMLElement, link);
+      else buildComparison(grid, container as HTMLElement, link);
     });
 
     // Keep links for a BBCode hide block inside its hidden content. Inserting

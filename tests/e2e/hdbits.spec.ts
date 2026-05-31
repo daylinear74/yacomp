@@ -147,7 +147,7 @@ test("hdbits: host trigger link inherits page color and opens the viewer", async
   await expect(page.locator("._scf_comp")).toBeVisible();
 });
 
-test("hdbits: indivisible comparison-thread OP shows a partial grid with a click-to-ignore orphan (80402)", async ({ page }) => {
+test("hdbits: indivisible comparison-thread OP opens the drop-the-odd-shot picker, then builds a clean comparison (80402)", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/113-iconic-80402");
   await page.waitForFunction(
@@ -155,18 +155,40 @@ test("hdbits: indivisible comparison-thread OP shows a partial grid with a click
     undefined,
     { timeout: 5000 },
   );
-  // 37 shots, 2-wide AUS/GBR (from the H1) → 18 pairs + 1 orphan row.
+  // 37 shots, 2-wide AUS/GBR (from the H1) — indivisible, so the link opens the
+  // thumbnail picker (not the comparison) with all 37 shots and a disabled Build.
   await expect(page.locator("._scf_comp_link")).toHaveCount(1);
   await page.locator("._scf_comp_link").first().click();
+  const overlay = page.locator("._scf_orphan_select");
+  await expect(overlay).toBeVisible();
+  await expect(overlay.locator("._scf_os_thumb")).toHaveCount(37);
+  await expect(overlay.locator("._scf_os_build")).toBeDisabled();
+  // Drop one odd shot → 36 divides by 2 → Build enables; Enter builds the grid.
+  await overlay.locator("._scf_os_thumb").last().click();
+  await expect(overlay.locator("._scf_os_thumb._scf_os_excluded")).toHaveCount(1);
+  await expect(overlay.locator("._scf_os_build")).toBeEnabled();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("._scf_orphan_select")).toHaveCount(0);
   await expect(page.locator("._scf_comp")).toBeVisible();
-  await expect(page.locator("._scf_comp_row")).toHaveCount(19);
-  await expect(page.locator("._scf_comp_orphan")).toHaveCount(1);
-  // Clicking the lone trailing screenshot drops it → a clean 18-pair grid.
-  const orphan = page.locator("._scf_comp_orphan").first();
-  await orphan.scrollIntoViewIfNeeded();
-  await orphan.click();
-  await expect(page.locator("._scf_comp_row")).toHaveCount(18);
-  await expect(page.locator("._scf_comp_orphan")).toHaveCount(0);
+  await expect(page.locator("._scf_comp_row")).toHaveCount(18); // 36 shots / 2 cols
+});
+
+test("hdbits: ambiguous torrent gallery falls back to a 1-wide 'Show viewer', not bogus columns (Holubice 838405)", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/114-iconic-holubice-gallery");
+  await page.waitForFunction(
+    () => (window as unknown as { __yacomp_test_ready?: boolean }).__yacomp_test_ready === true,
+    undefined,
+    { timeout: 5000 },
+  );
+  // The 10 sample shots used to be invented into a 5-column comparison. Now:
+  // one "Show viewer" link (not "Show comparison"), opening a 1-wide gallery.
+  const link = page.locator("._scf_comp_link");
+  await expect(link).toHaveCount(1);
+  await expect(link).toHaveText("Show viewer");
+  await link.first().click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(10); // 1 column → 10 rows
 });
 
 for (const { file, meta } of cases) {
