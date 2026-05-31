@@ -1,5 +1,25 @@
 # Things the test harness CANNOT verify
 
+## Corpus examples to inspect on the LIVE site
+(Visit `https://hdbits.org/forums/viewtopic?topicid=<id>`.)
+
+**slow.pics-dependent (live titles/counts unverified — 64 cases with ≥2 slow.pics
+links route through the rescue path):**
+- topicid 78859 (Doctor Who — **25** slow.pics links, heavy multi-section)
+- topicid 78578 (4 links), 78534 / 78526 (Marvel, 3 links each)
+- topicid 80336 (Chatroom 2625 — now fixed via H1, but has 2 links)
+- topicid 79320, 81472, 79498, 79068, 79848 (2 links each)
+
+**reply posts with screenshots (H1-only-for-OP — 732 cases; the single-post
+corpus can't exercise the reply path, confirm the topic H1 is NOT applied to a
+reply that has a labelless grid):**
+- topicid 74778 post#6, 62860 post#11, 59424 post#14, 77086 post#7,
+  72182 post#6 (clear replies, deep in the thread)
+- topicid 58805 post#2, 61913 post#2, 72847 post#2, 78200 post#2
+
+---
+
+
 These behaviours are exercised only partially (or not at all) by the unit/e2e
 suite and the corpus sweep. They need a real Tampermonkey + live tracker page, or
 tester judgment, to confirm. Tracked here so future work doesn't assume they're
