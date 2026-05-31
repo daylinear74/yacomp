@@ -261,7 +261,7 @@ function leadingVsLabelInfo(container: Element): { names: string[]; anchorEl: El
 // routinely appear inside BDInfo codec lines ("MPEG-4 AVC / 27191 kbps"), byte
 // counts ("614,127,007 bytes") and prose ("1.78:1 / 1.85:1"), which must never
 // outrank the real per-group/heading labels.
-const VS_BAR_RE = /\bvs?\.\s|\bvs\s|\||[<>]{2,}/i;
+const VS_BAR_RE = /\bvs?\.\s|\bvs\s|\||[<>]{2,}|\s~\s/i;
 // A continuation line of a multi-line vs-list, e.g. "DE (…) vs. KR (…)<br>vs. US (…)".
 const VS_CONTINUATION_RE = /^\s*(?:vs?\.|\|)\s/i;
 
@@ -353,6 +353,43 @@ function leadingComparisonNames(container: Element): { names: string[]; anchorEl
   return null;
 }
 
+/** The comparison title may sit in the PARENT, on the single line directly
+ *  before this container — e.g. a multi-section post where the column title is a
+ *  `<strong>` and the screenshots are inside a following `<pre>` grouped by
+ *  sub-section dividers (057: `<strong>FRA | USA | GBR</strong><br><pre>Video
+ *  Bitrate … General … Luma … Chroma …</pre>`). Read the immediately-preceding
+ *  sibling line (back to the first blank line / previous block / previous image
+ *  block) and take its vs/| comparison names. Scoped to that one introductory
+ *  line so a sibling grid's title can never leak across. */
+function leadingComparisonNamesBeforeContainer(container: Element): { names: string[]; anchorEl: ChildNode | null } | null {
+  let text = "";
+  let el: ChildNode | null = null;
+  for (let node: ChildNode | null = container.previousSibling; node; node = node.previousSibling) {
+    if (node.nodeName === "BR") {
+      if (text.trim()) break; // a blank line above the title ends it
+      continue;
+    }
+    if (node.nodeType === 1) {
+      const e = node as Element;
+      // Stop at the previous image block or any block-level sibling: the title
+      // we want is the inline run (text / <strong> / <font>) right above us.
+      if (e.nodeName === "IMG" || e.querySelector?.("img")) break;
+      if (/^(?:DIV|P|PRE|TABLE|BLOCKQUOTE|UL|OL|HR)$/.test(e.nodeName)) break;
+      text = (e.textContent || "") + text;
+      el = e;
+    } else if (node.nodeType === 3) {
+      text = (node.textContent || "") + text;
+    }
+  }
+  const t = text.trim();
+  if (!t || isNonSourceLabel(t) || !VS_BAR_RE.test(t)) return null;
+  const names = splitNames(t);
+  if (names.length >= 2 && looksLikeNames(names) && !looksLikeProse(names)) {
+    return { names, anchorEl: el };
+  }
+  return null;
+}
+
 // A real per-source label is short and clean ("JPN BD", "USA", "Sony Pictures |
 // Germany") — never a quote/paragraph/URL (2715).
 function isCleanSourceLabel(t: string): boolean {
@@ -398,6 +435,36 @@ function sourceLabelsBeforeDocBlocks(scope: Element, stopAt: Node | null): { nam
 function leadingShowhideSourceLabels(container: Element): { names: string[]; anchorEl: Element | null } | null {
   return sourceLabelsBeforeDocBlocks(container, null) ??
     (container.parentElement ? sourceLabelsBeforeDocBlocks(container.parentElement, container) : null);
+}
+
+/** True when the page is a Comparisons-forum thread (forumid 40) — its H1 links
+ *  to that forum. Such an OP is, by definition, a comparison. */
+function isComparisonThread(): boolean {
+  return !!document.querySelector('h1 a[href*="forumid=40"]');
+}
+
+/** Comparison-thread OP fallback: a comparison is a CONTIGUOUS image block, so
+ *  when the whole-container reshape fails (stray example screenshots scattered
+ *  through a "Hidden text" spoiler, then the real grid — 80070), retry on the
+ *  LARGEST image group alone, titled by the curated H1. Only when it divides
+ *  cleanly, so a reply/discussion post's 1-per-line samples (3 imgs / 2 cols)
+ *  stay suppressed. Off comparison threads / non-OP posts → null. */
+function cmpThreadLargestBlock(container: Element, groups: GridCell[][]): Grid[] | null {
+  if (!isComparisonThread() || !isOriginalPost(container)) return null;
+  // Only for the scattered-spoiler shape: example frames live in a generic
+  // "Hidden text" showhide, with the real grid outside it (80070). This keeps
+  // the fallback from resurrecting an unrelated leftover block (057).
+  const hasSpoiler = [...container.querySelectorAll("label.label_showhide")].some(
+    (l) => /^hidden\s+text$/i.test((l.textContent || "").replace(/\s*\[(?:show|hide)\]\s*$/i, "").trim()),
+  );
+  if (!hasSpoiler) return null;
+  const h1 = namesFromHeadings();
+  if (!h1 || !looksLikeNames(h1)) return null;
+  const block = groups.reduce((a, b) => (b.length > a.length ? b : a), groups[0]);
+  if (block.length < h1.length || block.length % h1.length !== 0) return null;
+  const rows: GridCell[][] = [];
+  for (let i = 0; i < block.length; i += h1.length) rows.push(block.slice(i, i + h1.length));
+  return [{ rows, numCols: h1.length, names: finalizeNames(h1), anchorEl: null }];
 }
 
 /** True when the container carries a slow.pics comparison link (direct or via an
@@ -588,16 +655,29 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     }
   }
   if (!names && hasLocalNonNameHeading(groupLabels)) {
-    // A non-name local heading normally suppresses the grid. But when the only
-    // alternative is a slow.pics link, the ORIGINAL POSTER's H1 title is the
-    // preferred source (owner ruling): use it when its column count divides the
-    // screenshots, else leave it for the slow.pics rescue. A block with NO
-    // slow.pics link stays suppressed (e.g. a non-comparison gallery, 057).
-    const h1 = isOriginalPost(container) && hasSlowPicsLink(container) ? namesFromHeadings() : null;
-    if (h1 && total % h1.length === 0 && looksLikeNames(h1)) {
-      names = h1;
+    // The group label is a non-name heading — a section divider ("Video
+    // Bitrate", "General") or a gallery caption. The real column title may sit
+    // in the PARENT, on the line directly before this container: a multi-section
+    // post whose <pre> groups its shots under sub-section dividers but is titled
+    // by a "<strong>FRA | USA | GBR</strong>" just above it (057). Prefer that
+    // when it divides the screenshots — it's a tightly-scoped single line, so it
+    // can't override an in-container label (which would have set `names` above).
+    const parentCmp = leadingComparisonNamesBeforeContainer(container);
+    if (parentCmp && total % parentCmp.names.length === 0) {
+      names = parentCmp.names;
+      anchorEl = parentCmp.anchorEl;
     } else {
-      return null;
+      // Otherwise a non-name heading suppresses the grid — except when the only
+      // alternative is a slow.pics link, where the ORIGINAL POSTER's H1 title is
+      // preferred (owner ruling): use it when its column count divides, else
+      // leave it for the slow.pics rescue. A block with NO slow.pics link stays
+      // suppressed (e.g. a non-comparison gallery).
+      const h1 = isOriginalPost(container) && hasSlowPicsLink(container) ? namesFromHeadings() : null;
+      if (h1 && total % h1.length === 0 && looksLikeNames(h1)) {
+        names = h1;
+      } else {
+        return cmpThreadLargestBlock(container, groups);
+      }
     }
   }
   if (!names) {
@@ -616,7 +696,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   }
 
   const shaped = reshapeGrid(groups, groups.flat(), names);
-  if (!shaped) return null;
+  if (!shaped) return cmpThreadLargestBlock(container, groups);
 
   // Fallback: match strong count to numCols
   if (!names) {

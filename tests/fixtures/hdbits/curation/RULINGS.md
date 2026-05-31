@@ -15,6 +15,8 @@ fixture in `tests/fixtures/hdbits/cases/` (full DOM through `setupHDBitsCore`).
 | vs / vs. / v. / \| precedence | ✓ | 089 1202, 090 0478, 091 2022, 100 0288 |
 | `vs` with a missing space (AvsB / Avs B / A vsB) | ✓ | — |
 | `>>>` / `>>` (better-than) is a separator | ✓ | 109 79242 |
+| `~` (spaced tilde) separator, BELOW `/` precedence | ✓ | 111 78043 |
+| leading comparison title in PARENT, before container | — | 057 |
 | per-source labels before showhide/BDInfo blocks | — | 105 77086, 107 80662 |
 | dangling `\|` after a dropped URL stripped | — | 108 79784 |
 | OP H1 preferred over slow.pics when it divides | — | 110 80433 |
@@ -134,3 +136,33 @@ heading matches the count — see A1 / `headingNamesBeforeLink`).
 Topic `Winged Creatures (2008) GER vs FRA vs ESP` (forumid 40). The OP (Game0ver75)
 has `GER:` / `FRA:` / `ESP:` per-group labels → 3 col. The reply "German audio is
 obviously the best one" must NOT inherit the H1 title.
+
+## Phase 3 rulings (separator precedence + multi-section)
+
+### `>>>` / `>>` (better-than) separator — DONE (ARROW_RE, iconic 109)
+- `79242` → `Eureka Classics` / `Cargo Records`. Two-or-more angle brackets are a
+  comparison divider ("A is better than B"). A single `>` is left alone (it lives
+  in prose / breadcrumb "Comparisons > …"); a one-sided decorative run (`BD >>>>>`)
+  yields one part.
+
+### `~` (spaced tilde) separator — DONE (TILDE_RE, iconic 111)
+- `78043` → `AMAZON` / `FRA BD`. A spaced `~` ("AMAZON ~ FRA BD") is a divider.
+- PRECEDENCE: `~` is the LOWEST real separator — below `,` `-` `/`. When a
+  stronger separator already splits the line, the `~` is a sub-connector, NOT a
+  split: `2241` "GBR ~ BFI (…) / USA ~ CC (…)" splits on `/` into two
+  "REGION ~ distributor" sources (a tilde-high precedence wrongly made it 3
+  parts and also broke the exotica `0049`/`0050` torrent grids — both fixed by
+  the reorder). A bare `~5GB` size approximation is left alone (no spaces).
+
+### Multi-section post: title in the PARENT, before the container — DONE (057)
+`Cosmos (2015) FRA vs. US vs. GBR` (forumid 40). The main video comparison is a
+`<strong>FRA | USA | GBR</strong>` sitting in the parent `<div>`, immediately
+before a `<pre>` whose 63 screenshots are grouped by SUB-SECTION dividers
+("Video Bitrate", "General", "Luma Artifacts", "Chroma Artifacts"). The grid
+container is the `<pre>`, so the column title is not one of its own children —
+`leadingComparisonNamesBeforeContainer` reads the single introductory line
+directly before the container (back to the first blank line / previous block /
+previous image block) and takes its `vs`/`|` names → `FRA / USA / GBR`, 63 / 3 =
+21 rows; the sub-section labels are row-group dividers, not columns. Scoped to
+that one line so a sibling grid's title can never leak across. (The 6-wide audio
+downmix `USA_2 | GBR_6_2_…` is a separate section-c comparison.)

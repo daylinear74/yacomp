@@ -37,6 +37,9 @@ const VS_TEST = /\bv(?:s\.?|\.)\s/i;
 // part (the other side is empty) and is dropped.
 const ARROW_RE = /\s*[<>]{2,}\s*/;
 const ARROW_TEST = /[<>]{2,}/;
+// A "~" used as a comparison separator, e.g. "AMAZON ~ FRA BD" (owner ruling).
+// Spaces are required so a "~5GB" size approximation is left alone.
+const TILDE_RE = /\s+~\s+/;
 const DASH_RE = /\s+-\s+/;
 const SLASH_RE = /\s+\/\s+/;
 const TIMES_RE = /\s+×\s+/;
@@ -276,6 +279,7 @@ function plainSplit(c: string): string[] {
   if (c.includes(",")) return c.split(",");
   if (DASH_RE.test(c)) return c.split(DASH_RE);
   if (SLASH_RE.test(c)) return c.split(SLASH_RE);
+  if (TILDE_RE.test(c)) return c.split(TILDE_RE);
   if (TIMES_RE.test(c)) return c.split(TIMES_RE);
   return [c];
 }
@@ -299,6 +303,11 @@ export function splitNames(text: string): string[] {
       topLevelSplit(candidate, ",") ??
       topLevelSplit(candidate, DASH_RE) ??
       topLevelSplit(candidate, SLASH_RE) ??
+      // "~" is the LOWEST-precedence separator: a spaced tilde is only the
+      // comparison divider when nothing stronger splits the line. When a "/"
+      // (or vs/|) already separates two "REGION ~ distributor" units
+      // ("GBR ~ BFI / USA ~ CC", 2241) the "~" is a sub-connector, not a split.
+      topLevelSplit(candidate, TILDE_RE) ??
       topLevelSplit(candidate, TIMES_RE)
     : null;
   let parts = (topLevel ?? plainSplit(candidate)).map(cleanNamePart).filter(Boolean);
@@ -329,7 +338,7 @@ export function isMultiSourceLabel(label: string): boolean {
 
 export function hasVsOrPipe(text: string): boolean {
   const candidate = cleanNameCandidate(text);
-  return candidate.includes("|") || VS_TEST.test(candidate) || ARROW_TEST.test(candidate) || candidate.includes(",") || DASH_RE.test(candidate) || SLASH_RE.test(candidate) || TIMES_RE.test(candidate);
+  return candidate.includes("|") || VS_TEST.test(candidate) || ARROW_TEST.test(candidate) || TILDE_RE.test(candidate) || candidate.includes(",") || DASH_RE.test(candidate) || SLASH_RE.test(candidate) || TIMES_RE.test(candidate);
 }
 
 /** An UNAMBIGUOUS multi-source separator ("X vs Y", "X | Y", "X / Y", "X × Y").
@@ -340,7 +349,7 @@ export function hasVsOrPipe(text: string): boolean {
  *  a single transposed grid. */
 export function hasExplicitComparison(text: string): boolean {
   const candidate = cleanNameCandidate(text);
-  return candidate.includes("|") || VS_TEST.test(candidate) || ARROW_TEST.test(candidate) || SLASH_RE.test(candidate) || TIMES_RE.test(candidate);
+  return candidate.includes("|") || VS_TEST.test(candidate) || ARROW_TEST.test(candidate) || TILDE_RE.test(candidate) || SLASH_RE.test(candidate) || TIMES_RE.test(candidate);
 }
 
 // ── Name-finding sub-strategies ──

@@ -50,6 +50,18 @@ describe("ruling: '>>>' / '>>' (better-than) is a comparison separator (79242)",
     expect(splitNames("Source > Encode")).toEqual(["Source > Encode"]));
 });
 
+describe("ruling: '~' is a comparison separator (78043)", () => {
+  test("splits on ' ~ '", () => expect(splitNames("AMAZON ~ FRA BD")).toEqual(["AMAZON", "FRA BD"]));
+  test("a '~' size approximation is left alone", () =>
+    expect(splitNames("Movie ~5GB remux")).toEqual(["Movie ~5GB remux"]));
+  // '~' is the LOWEST-precedence separator: when a stronger separator ('/', '|',
+  // vs) already splits the line, each "REGION ~ distributor" is ONE source and
+  // the '~' must NOT split further (2241: GBR via BFI / USA via Criterion).
+  test("a higher-precedence '/' wins; '~' stays a sub-connector (2241)", () =>
+    expect(splitNames("GBR ~ BFI (1080p AVC 29978 kbps) / USA ~ CC (1080p AVC 34984 kbps)"))
+      .toEqual(["GBR ~ BFI (1080p AVC 29978 kbps)", "USA ~ CC (1080p AVC 34984 kbps)"]));
+});
+
 describe("ruling: strip Video:/Audio:/Subtitle: field prefix (2221, 2425)", () => {
   test("Video:", () => expect(splitNames("Video: GER (1080p AVC) | USA (1080p AVC)"))
     .toEqual(["GER (1080p AVC)", "USA (1080p AVC)"]));
