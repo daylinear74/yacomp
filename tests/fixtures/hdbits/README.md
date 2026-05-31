@@ -6,6 +6,10 @@ mounted into a sanitized HDBits page chrome. Playwright opens the
 rendered page, lets the userscript run, and asserts on the resulting
 "Show comparison" links.
 
+> **Taking over this work?** Start with [`HANDOFF.md`](./HANDOFF.md) — the big
+> picture, the corpus sweep, and what to zip alongside the repo (the corpus and
+> sweep tooling are gitignored).
+
 ## Why this exists
 
 The detector spans `src/grid/parser.ts` and `src/sites/hdbits.ts`. It
