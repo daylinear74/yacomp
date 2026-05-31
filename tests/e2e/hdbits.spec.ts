@@ -191,6 +191,43 @@ test("hdbits: ambiguous torrent gallery falls back to a 1-wide 'Show viewer', no
   await expect(page.locator("._scf_comp_row")).toHaveCount(10); // 1 column → 10 rows
 });
 
+test("hdbits: sibling heading sections place triggers under matching titles", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/115-torrent-desc-sibling-heading-sections");
+  await page.waitForFunction(
+    () => (window as unknown as { __yacomp_test_ready?: boolean }).__yacomp_test_ready === true,
+    undefined,
+    { timeout: 5000 },
+  );
+
+  await expect(page.locator("._scf_comp_link")).toHaveCount(2);
+  const placement = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLAnchorElement>("._scf_comp_link")].map((link) => {
+      const parent = link.parentElement;
+      const title = parent
+        ?.querySelector("strong")
+        ?.textContent
+        ?.replace(/\s+/g, " ")
+        .trim() ?? null;
+      return {
+        title,
+        linksInTitleBlock: parent?.querySelectorAll("._scf_comp_link").length ?? 0,
+      };
+    }),
+  );
+
+  expect(placement).toEqual([
+    {
+      title: "Source vs Filtered(Deband and Deblock) vs Encode",
+      linksInTitleBlock: 1,
+    },
+    {
+      title: "Source vs Encode vs CtrlHD(USA) vs SKALiWAGZ(USA)",
+      linksInTitleBlock: 1,
+    },
+  ]);
+});
+
 for (const { file, meta } of cases) {
   test(`hdbits: ${file}`, async ({ page }) => {
     await stubHdbitsImages(page);

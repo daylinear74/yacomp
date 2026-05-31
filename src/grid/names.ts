@@ -355,30 +355,38 @@ export function hasExplicitComparison(text: string): boolean {
 // ── Name-finding sub-strategies ──
 
 /** Scan bold tags (reverse order) for vs/pipe labels, skipping links */
-export function namesFromBoldTags(tags: Element[]): string[] | null {
+export function nameLabelInfoFromBoldTags(tags: Element[]): NameLabelInfo | null {
   for (let i = tags.length - 1; i >= 0; i--) {
     if (tags[i].closest("a")) continue;
     const text = tags[i].textContent!.trim();
     if (isNonSourceLabel(text)) continue;
     if (hasVsOrPipe(text)) {
       const p = splitNames(text);
-      if (looksLikeNames(p)) return p;
+      if (looksLikeNames(p)) return { names: p, anchorEl: tags[i] };
     }
   }
   return null;
 }
 
+export function namesFromBoldTags(tags: Element[]): string[] | null {
+  return nameLabelInfoFromBoldTags(tags)?.names ?? null;
+}
+
 /** Strategy 1: preceding siblings' bold tags */
-export function namesFromSiblings(container: Element): string[] | null {
+export function namesFromSiblingInfo(container: Element): NameLabelInfo | null {
   let sib = container.previousElementSibling;
   for (let steps = 0; steps < 8 && sib; steps++, sib = sib.previousElementSibling) {
     if (sib.nodeName === "BR") continue;
     const tags: Element[] = sib.matches?.("strong, b") ? [sib] : [];
     tags.push(...(sib.querySelectorAll?.("strong, b") || []));
-    const found = namesFromBoldTags(tags);
+    const found = nameLabelInfoFromBoldTags(tags);
     if (found) return found;
   }
   return null;
+}
+
+export function namesFromSiblings(container: Element): string[] | null {
+  return namesFromSiblingInfo(container)?.names ?? null;
 }
 
 /** Strategy 2: container's leading text (text nodes + non-image links) */

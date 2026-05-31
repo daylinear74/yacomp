@@ -6,6 +6,7 @@ import type { GridCell, Grid } from "./types";
 import {
   hasVsOrPipe, hasExplicitComparison, splitNames, looksLikeNames,
   findComparisonNames, namesFromLeadingStructuredLabels, namesFromHeadings, isOriginalPost,
+  namesFromSiblingInfo,
   foldTrailingSize, isNonSourceLabel, isUrlLabel, isFooterLabel, tidyName, isMultiSourceLabel,
 } from "./names";
 
@@ -539,6 +540,16 @@ function hasLocalNonNameHeading(groupLabels: (string | null)[]): boolean {
   return !looksLikeNames(splitNames(firstImageLabel));
 }
 
+function hasPreviousSiblingPreviewHeading(container: Element): boolean {
+  let sib = container.previousElementSibling;
+  for (let steps = 0; steps < 8 && sib; steps++, sib = sib.previousElementSibling) {
+    if (sib.nodeName === "BR") continue;
+    if (sib.querySelector?.("img")) return false;
+    return /^preview\s*:?\s*$/i.test((sib.textContent || "").trim());
+  }
+  return false;
+}
+
 function trimTrailingLabeledSectionAfterSingleGridLabel(collected: GroupsResult): GroupsResult {
   const gridLabelIndexes = collected.groupLabels
     .map((label, index) => ({ label, index }))
@@ -634,7 +645,8 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   // Numeric-only labels (1, 2, 37…) are frame/row indices, not source names —
   // each group is already a row, so skip them and let findComparisonNames run.
   let names: string[] | null = null;
-  let anchorEl: ChildNode | null = null;
+  let anchorEl: Node | null = null;
+  const siblingPreviewHeading = hasPreviousSiblingPreviewHeading(container);
   const total = groups.flat().length;
   // Highest precedence: a leading line with an explicit "vs"/"v."/"|" comparison.
   // Only when its column count divides the screenshots — otherwise it is a
@@ -720,6 +732,16 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
       } else {
         return cmpThreadLargestBlock(container, groups);
       }
+    }
+  }
+  if (!names && siblingPreviewHeading) {
+    return null;
+  }
+  if (!names) {
+    const sibling = namesFromSiblingInfo(container);
+    if (sibling) {
+      names = sibling.names;
+      anchorEl = sibling.anchorEl;
     }
   }
   if (!names) {
