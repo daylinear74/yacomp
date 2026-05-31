@@ -90,6 +90,43 @@ for id_, n in new.items():
 an improvement — eyeball them. Only `cp new-out.json _baseline.json` to
 re-baseline once you've confirmed every delta is intended.
 
+The local sweep driver also writes review pages when there is something to
+inspect:
+
+- `.scratch/gain-review.html` / `.scratch/gain-review.json` for `GAIN` rows.
+- `.scratch/name-review.html` / `.scratch/name-review.json` for `NAME` rows.
+- `.scratch/*-review-marks.json` and `.scratch/*-review-summary.json` for the
+  manual decisions.
+
+Start the local review server if you need persistent marking:
+
+```sh
+bun tests/fixtures/hdbits/curation/gain-review.ts --serve --port=4187
+```
+
+Then open `http://localhost:4187/gain` and `http://localhost:4187/name`.
+Opening the HTML files directly is useful for browsing, but only the local
+server writes review marks back to `.scratch/`.
+
+Review semantics:
+
+- `GAIN` means `new.grids > baseline.grids`: the current parser found more
+  comparison grids/buttons than the baseline.
+- `NAME` means `new.grids == baseline.grids` and the parsed name arrays differ.
+  `NAME` excludes gain/loss/flaky rows, so it is not double-counting the extra
+  names created by `GAIN` rows.
+- Rows default to `correct`. Only mark a row `wrong` when the new grid or name
+  is actually bad. The summary JSON files are the handoff artifact for the next
+  agent.
+- Original HDBits links are copied only when the source case header contains a
+  `notes: ... scraped from https://hdbits.org/...` value. Do not guess missing
+  source URLs.
+
+If a reviewed `GAIN` or `NAME` is wrong, fix the parser/name extraction logic
+first (`src/grid/parser.ts` and/or `src/grid/names.ts` are the usual places),
+then rerun the focused tests and the sweep. Re-baseline only after every
+remaining delta has been reviewed and accepted.
+
 Inspect one case: open its `id` path under the corpus dir, or wrap its body in a
 tiny Playwright harness that calls `getGrids()` (see `.scratch/_diag-entry.ts`
 for the shape). The sweep's flakiness (occasional `ERR_INVALID_HTTP_RESPONSE` /

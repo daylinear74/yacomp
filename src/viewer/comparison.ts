@@ -463,27 +463,38 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   }
 }
 
-/** Insert a link node after refNode, skipping past any trailing BR */
+/** Insert a link node after refNode, keeping repeated comparison links in order. */
 export function insertLinkAfter(refNode: Node, link: HTMLElement): void {
-  const next = refNode.nextSibling;
-  if (next && next.nodeName === "BR") {
-    next.parentNode!.insertBefore(link, next.nextSibling);
-    next.parentNode!.insertBefore(
-      document.createElement("br"),
-      link.nextSibling,
+  const isCompLink = (node: Node | null): boolean => {
+    if (!node || node.nodeType !== 1) return false;
+    const el = node as Element & { className?: string };
+    return (
+      el.classList?.contains("_scf_comp_link") ||
+      /\b_scf_comp_link\b/.test(el.className || "")
     );
-  } else {
-    const insertionPoint = refNode.nextSibling;
-    refNode.parentNode!.insertBefore(
-      document.createElement("br"),
-      insertionPoint,
-    );
-    refNode.parentNode!.insertBefore(link, insertionPoint);
-    refNode.parentNode!.insertBefore(
-      document.createElement("br"),
-      link.nextSibling,
-    );
+  };
+
+  let insertionPoint = refNode.nextSibling;
+  let needLeadingBreak = true;
+  if (insertionPoint && insertionPoint.nodeName === "BR") {
+    needLeadingBreak = false;
+    insertionPoint = insertionPoint.nextSibling;
+    while (insertionPoint && isCompLink(insertionPoint)) {
+      insertionPoint = insertionPoint.nextSibling;
+      if (insertionPoint && insertionPoint.nodeName === "BR") {
+        insertionPoint = insertionPoint.nextSibling;
+      }
+    }
   }
+
+  if (needLeadingBreak) {
+    refNode.parentNode!.insertBefore(document.createElement("br"), insertionPoint);
+  }
+  refNode.parentNode!.insertBefore(link, insertionPoint);
+  refNode.parentNode!.insertBefore(
+    document.createElement("br"),
+    link.nextSibling,
+  );
 }
 
 export function openWithDummyWrapper(grid: Grid, extraCleanup?: () => void): void {
