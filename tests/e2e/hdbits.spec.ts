@@ -17,7 +17,7 @@ import { join } from "node:path";
 const CASES_DIR = "tests/fixtures/hdbits/cases";
 
 interface CaseMetadata {
-  slot: "torrent.description" | "torrent.comment" | "forum.post";
+  slot: "torrent.description" | "torrent.comment" | "forum.post" | "forum.reply";
   expectedGrids: number;
   expectedNames?: (string[] | null)[] | null;
   threadTitle?: string;

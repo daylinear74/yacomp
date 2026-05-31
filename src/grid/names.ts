@@ -445,6 +445,18 @@ export function namesFromHeadings(): string[] | null {
   return null;
 }
 
+/** The thread/topic H1 title describes the ORIGINAL post's comparison, not a
+ *  reply's. A reply that re-uses the same screenshots-with-no-local-label shape
+ *  must NOT inherit "Movie (2008) GER vs FRA" from the H1 (owner ruling, 1293).
+ *  True for the first post, and for non-forum pages (torrent description/comment,
+ *  single-post renders) which have no reply structure. */
+export function isOriginalPost(container: Element): boolean {
+  const posts = [...document.querySelectorAll("td.comment")];
+  if (posts.length <= 1) return true;
+  const first = posts[0];
+  return first === container || first.contains(container) || container.contains(first);
+}
+
 export function findComparisonNames(container: Element): string[] | null {
   return (
     namesFromSiblings(container) ||
@@ -452,6 +464,6 @@ export function findComparisonNames(container: Element): string[] | null {
     namesFromColorSpans(container) ||
     namesFromLeadingBoldTags(container) ||
     namesFromAncestors(container) ||
-    namesFromHeadings()
+    (isOriginalPost(container) ? namesFromHeadings() : null)
   );
 }

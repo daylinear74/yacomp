@@ -55,7 +55,7 @@ const torrentTemplate = await Bun.file(`${HDBITS_DIR}/templates/torrent.html`).t
 const forumTemplate = await Bun.file(`${HDBITS_DIR}/templates/forum.html`).text();
 
 interface CaseMetadata {
-  slot: "torrent.description" | "torrent.comment" | "forum.post";
+  slot: "torrent.description" | "torrent.comment" | "forum.post" | "forum.reply";
   expectedGrids: number;
   expectedNames?: (string[] | null)[] | null;
   threadTitle?: string;
@@ -138,6 +138,25 @@ function wrapInPostRow(body: string): string {
   `;
 }
 
+// A reply post (#2) in the same thread — used to verify that the topic H1 title
+// is NOT inherited by replies (only the original poster's comparison uses it).
+function wrapInReplyRow(body: string): string {
+  return `
+    <a name="2"></a>
+    <table border="0" cellspacing="0" cellpadding="0" style="margin-top:8px;margin-bottom:10px;">
+      <tbody><tr>
+        <td class="embedded" width="99%"><a href="#2">#2</a> by ReplyUser at 2025-01-02 09:00:00 [<a href="#">Quote</a>]</td>
+      </tr></tbody>
+    </table>
+    <table class="main" width="100%" border="1" cellspacing="0" cellpadding="5">
+      <tbody><tr valign="top">
+        <td width="150" align="center" style="padding: 0px"><div class="default_avatar"></div></td>
+        <td class="comment">${body}</td>
+      </tr></tbody>
+    </table>
+  `;
+}
+
 function fillTemplate(template: string, vars: Record<string, string>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? "");
 }
@@ -185,6 +204,16 @@ async function serveHdbitsCase(slug: string): Promise<Response> {
       html = fillTemplate(forumTemplate, {
         THREAD_TITLE: threadTitle,
         POSTS: wrapInPostRow(body),
+      });
+      break;
+    case "forum.reply":
+      // The case body is the REPLY (#2); an original post (#1) precedes it so the
+      // container is not the first td.comment.
+      html = fillTemplate(forumTemplate, {
+        THREAD_TITLE: threadTitle,
+        POSTS:
+          wrapInPostRow("<p>Original post — see the comparison below.</p>") +
+          wrapInReplyRow(body),
       });
       break;
     default:
