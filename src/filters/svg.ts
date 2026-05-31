@@ -9,12 +9,30 @@ import { getShadowRoot } from "../ui/shadow";
 function gammaMismatchCheckFilterDefs(): string {
   return GAMMA_MISMATCH_CHECK_PRESETS.map((preset) => {
     const exponent = gammaMismatchCheckExponent(preset.id).toFixed(6);
+    // Luma-only additive gamma — matches VapourSynth std.Levels planes=0
+    // exactly in display-RGB space (U/V untouched ⇔ same Δ added to R,G,B):
+    //   Y   = 0.2126·R + 0.7152·G + 0.0722·B
+    //   R'  = R + pow(Y, 1/ratio) − Y    (same for G, B)
+    //
+    // feComposite arithmetic only takes inputs in [0,1], so the (Y'−Y) delta
+    // is biased by +1 in step 2 and the bias is removed in step 3:
+    //   deltaPos = pow(Y, 1/ratio) − Y + 1   (always ∈ [0,2])
+    //   output   = SourceGraphic + deltaPos − 1
     return `<filter id="${preset.svgId}" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
-      <feComponentTransfer>
+      <feColorMatrix type="matrix" in="SourceGraphic" result="luma"
+        values="0.2126 0.7152 0.0722 0 0
+                0.2126 0.7152 0.0722 0 0
+                0.2126 0.7152 0.0722 0 0
+                0 0 0 1 0"/>
+      <feComponentTransfer in="luma" result="gammaLuma">
         <feFuncR type="gamma" amplitude="1" exponent="${exponent}" offset="0"/>
         <feFuncG type="gamma" amplitude="1" exponent="${exponent}" offset="0"/>
         <feFuncB type="gamma" amplitude="1" exponent="${exponent}" offset="0"/>
       </feComponentTransfer>
+      <feComposite in="gammaLuma" in2="luma" operator="arithmetic" result="deltaPos"
+        k1="0" k2="1" k3="-1" k4="1"/>
+      <feComposite in="SourceGraphic" in2="deltaPos" operator="arithmetic"
+        k1="0" k2="1" k3="1" k4="-1"/>
     </filter>`;
   }).join("");
 }
