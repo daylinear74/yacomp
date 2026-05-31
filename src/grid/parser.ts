@@ -5,7 +5,7 @@
 import type { GridCell, Grid } from "./types";
 import {
   hasVsOrPipe, hasExplicitComparison, splitNames, looksLikeNames,
-  findComparisonNames, namesFromLeadingStructuredLabels,
+  findComparisonNames, namesFromLeadingStructuredLabels, namesFromHeadings, isOriginalPost,
   foldTrailingSize, isNonSourceLabel, isUrlLabel, isFooterLabel, tidyName, isMultiSourceLabel,
 } from "./names";
 
@@ -469,12 +469,13 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   // each group is already a row, so skip them and let findComparisonNames run.
   let names: string[] | null = null;
   let anchorEl: ChildNode | null = null;
+  const total = groups.flat().length;
   // Highest precedence: a leading line with an explicit "vs"/"v."/"|" comparison.
   // Only when its column count divides the screenshots — otherwise it is a
   // sub-section line ("2160p UHD vs 1080p BD") in a wider grid (e.g. a 3-wide
   // "UHD/new BD/old BD"), and the real per-group/heading label must still win.
   const leadCmp = leadingComparisonNames(container);
-  if (leadCmp && groups.flat().length % leadCmp.names.length === 0) {
+  if (leadCmp && total % leadCmp.names.length === 0) {
     names = leadCmp.names;
     anchorEl = leadCmp.anchorEl;
   }
@@ -520,6 +521,17 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   }
   if (!names) {
     names = findComparisonNames(container);
+  }
+  // Fall-through to the topic H1: if the chosen local label does NOT divide the
+  // screenshots but the original poster's H1 title DOES, the H1 is the real
+  // comparison (owner ruling, 2625: a 3-wide "GBR Blu-ray vs GER Blu-ray vs GBR
+  // Blu-ray" gamma sub-note over a 4-wide "GBR vs USA vs GER vs AUS" grid).
+  if (names && total % names.length !== 0 && isOriginalPost(container)) {
+    const h1 = namesFromHeadings();
+    if (h1 && total % h1.length === 0 && looksLikeNames(h1)) {
+      names = h1;
+      anchorEl = null;
+    }
   }
 
   const shaped = reshapeGrid(groups, groups.flat(), names);
