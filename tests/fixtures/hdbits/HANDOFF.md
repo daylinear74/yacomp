@@ -62,8 +62,11 @@ Build/verify: `bun run build` → `dist/yacomp.user.js`; `bun run verify`;
 ## The corpus sweep
 
 Validates every parser change against the 3,685 real bodies. It tests
-`getGrids()` ONLY — not the slow.pics rescue or the viewer, and it renders each
-body as a single post (no multi-post threads). Run:
+`getGrids()` ONLY — not the slow.pics rescue or the viewer. Each candidate
+carries its real H1 (`threadTitle`) / `torrentTitle`, and `fast-oracle` renders
+a forum case whose id is `post-N` (N>0) as a **reply** (an OP placeholder above
+it) so `isOriginalPost` is false and the H1-only-for-OP rule is graded honestly
+across the corpus's 732 replies. Run:
 
 ```sh
 rm -f tests/fixtures/hdbits/curation/.scratch/new-out.json
