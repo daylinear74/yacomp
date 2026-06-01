@@ -103,3 +103,65 @@ strong adjacent title
   → else → suppress
 titled but indivisible → drop-odd-shot picker at the chosen column count
 ```
+
+---
+
+# Implementation progress & how to continue
+
+This spec is being implemented as an **incremental refactor** of the existing
+parser (NOT a rewrite), each step gated by the corpus sweep against the faithful
+baseline (`.scratch/_baseline.json`). **Ship gate per step: 0 losses** (excluding
+`grids<0` flakiness) — but a LOSS that removes a genuine false positive
+(prose / quote / file-list) is a *win*; eyeball each one.
+
+## Done
+
+- **Step 1 — spec.** This file.
+- **Step 2 — faithful sweep harness.** `fast-oracle` now renders a forum case
+  whose id is `post-N` (N>0) as a **reply** (an OP placeholder above it), so
+  `isOriginalPost` is false and the H1-only-for-OP rule is graded honestly across
+  the corpus's **732 replies**. Baseline re-cut on this harness: 29 replies
+  correctly stopped borrowing the topic H1, 0 real regressions. (`fast-oracle`
+  and the baseline are gitignored — they live in the handoff zip.)
+- **Step 3a (partial) — the `asColumnTitles` predicate.** In `src/grid/names.ts`:
+  `looksLikeProse` moved here (re-exported from parser.ts so any strategy can
+  guard with it); `asColumnTitles(text)` is THE column-title predicate — **no
+  length cap** (a 6-col title runs long, 2245), `isNonSourceLabel` + **whole-line
+  prose** (with the `v.`/`vs.` separator masked so 0288 footnotes survive) +
+  explicit separator + `looksLikeNames` + per-part prose; `isQuoteAttribution`
+  also catches a leading `User wrote:` (1009). `nameLabelInfoFromBoldTags` routes
+  through it → the **1009** quote FP is gone, 0 regressions (commit `4f2c517`).
+
+## Next (in order)
+
+- **3a-continued — route the remaining candidate producers through
+  `asColumnTitles`.** Bold-tags are done; still un-routed: `leadingComparisonNames`
+  (parser.ts), the `findComparisonNames` sub-scanners (`namesFromLeadingText`,
+  `namesFromSiblings`, color-spans), and the per-group-label path. Routing these
+  fixes the remaining known FPs — **0117** (comma-prose "For some reason, D+ added
+  black bars…") and **0049/0050** (exotica torrent *file-lists*, not comparisons)
+  — and is where the scattered guards finally collapse to one call site. Do it
+  **one producer at a time, sweep after each**: a careless routing nicks a ruling
+  (2245's long 6-col title and 0288's `v.` footnotes were both near-misses in 3a).
+- **3b — per-block collect→select.** Replace the precedence ladder in `parseGrid`
+  with: collect all candidates (per-group labels · adjacent lines skipping doc
+  blocks · H1 if OP) → `asColumnTitles` each → select (strong adjacent owns the
+  count; H1 the safe default; more-cols breaks *adjacent* ties; divisibility
+  decides clean-grid vs picker, NOT the count). Multi-section (057), the
+  parent-title case, and `cmpThreadLargestBlock` should fall out of this and
+  become deletable.
+- **3c — demote slow.pics.** Shrink the enrichment/rescue in `setupHDBitsCore` to
+  a "this is a comparison" signal + a last-resort title/count source for the ~1%
+  of cases with no local candidate.
+
+## Validate a step
+
+```sh
+rm -f tests/fixtures/hdbits/curation/.scratch/new-out.json
+python3 tests/fixtures/hdbits/curation/.scratch/sweep-driver.py   # ~12 min
+# diff new-out.json vs _baseline.json (the snippet is in HANDOFF.md → "The corpus sweep")
+```
+
+Also run `bun test tests/unit` and `bunx playwright test` (the unit + e2e gate the
+rulings). Re-baseline (`cp new-out.json _baseline.json`) only after every delta is
+reviewed and accepted.
