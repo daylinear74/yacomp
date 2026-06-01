@@ -6,9 +6,12 @@ import type { GridCell, Grid } from "./types";
 import {
   hasVsOrPipe, hasExplicitComparison, splitNames, looksLikeNames,
   findComparisonNames, namesFromLeadingStructuredLabels, namesFromHeadings, isOriginalPost,
-  namesFromSiblingInfo,
+  namesFromSiblingInfo, looksLikeProse, asColumnTitles,
   foldTrailingSize, isNonSourceLabel, isUrlLabel, isFooterLabel, tidyName, isMultiSourceLabel,
 } from "./names";
+
+// Re-exported from names.ts (moved there so name strategies can guard with it).
+export { looksLikeProse };
 
 export function hdbFull(src: string): string {
   return src.replace(
@@ -272,19 +275,6 @@ const VS_CONTINUATION_RE = /^\s*(?:vs?\.|\|)\s/i;
  *  sentence boundary (".", "!", "?" then a capitalised word) or an absurd length
  *  marks prose. Long release names ("…7.1 (33454 kbps) (with NGU Sharp)") have
  *  no sentence boundary, so they pass. */
-export function looksLikeProse(parts: string[]): boolean {
-  // A sentence boundary (".", "!", "?" then a capitalised word) or a comma
-  // followed by a lowercase sentence connector (", the latter is better, but…")
-  // marks prose. A length cap is deliberately NOT used — legit release names run
-  // long ("Beetlejuice 1988 2160p UHD BluRay HEVC TrueHD Atmos 7.1 (71.2mb/s) …")
-  // and a comma before a CAPITAL ("Disc Title: X, The", "DE, ES, FR") is fine.
-  return parts.some((p) => {
-    const t = p.trim();
-    return /[.!?]["')\]]?\s+[A-Z]/.test(t) ||
-      /,\s+(?:the|a|an|but|and|so|or|latter|former|it|this|which|that)\b/.test(t);
-  });
-}
-
 /** Highest-precedence label source: a leading line (before the first screenshot)
  *  that carries an explicit "vs"/"v."/"|" separator. Per project ruling, such a
  *  line always wins over per-group comma labels and NOTE:/nb: preamble prose. It

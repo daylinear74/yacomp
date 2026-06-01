@@ -6,7 +6,7 @@
 import { describe, test, expect } from "bun:test";
 import {
   splitNames, looksLikeNames, stripAsymmetricTitle,
-  isFooterLabel, hasExplicitComparison, isMultiSourceLabel,
+  isFooterLabel, hasExplicitComparison, isMultiSourceLabel, asColumnTitles,
 } from "../../src/grid/names";
 import { looksLikeProse } from "../../src/grid/parser";
 
@@ -124,6 +124,25 @@ describe("ruling: a paragraph mentioning a comparison is prose, not a title (200
     expect(looksLikeProse(["E01 (DE, ES, FR)"])).toBe(false);
     expect(looksLikeProse(["GER (16,885 kbps)"])).toBe(false);
   });
+});
+
+describe("asColumnTitles: the one column-title predicate (MODEL.md)", () => {
+  test("keeps a clean vs/| comparison title", () => {
+    expect(asColumnTitles("Source vs Encode")).toEqual(["Source", "Encode"]);
+    expect(asColumnTitles("GER (16,885 kbps) | USA (26,900 kbps)"))
+      .toEqual(["GER (16,885 kbps)", "USA (26,900 kbps)"]);
+  });
+  test("keeps the 0288 v. footnote ruling (v. is a separator, not a sentence end)", () =>
+    expect(asColumnTitles("720p WEB-DL* v. 1080p WEB-DL v. Capture"))
+      .toEqual(["720p WEB-DL*", "1080p WEB-DL", "Capture"]));
+  test("drops comma-prose (0117 — whole-line check, since splitting hides it)", () =>
+    expect(asColumnTitles("For some reason, D+ added black bars, but Amazon abandoned them, my comparison is not with the capture.")).toBeNull());
+  test("drops vs-prose (2007 — sentence boundary inside a part)", () =>
+    expect(asColumnTitles("UK vs. DE: There are lots of parts on DE. For reference, a straight TV")).toBeNull());
+  test("drops a leading 'User wrote:' quote attribution (1009)", () =>
+    expect(asColumnTitles("bananajoe25 wrote:Handmaid 1080p Blu-ray vs Handmaid 2160p WEB-DL")).toBeNull());
+  test("drops a single name (no separator → not a comparison title)", () =>
+    expect(asColumnTitles("GBR Blu-ray")).toBeNull());
 });
 
 describe("ruling: footer / external-comparison labels (007, 2503)", () => {

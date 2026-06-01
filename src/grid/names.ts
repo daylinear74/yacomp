@@ -65,7 +65,10 @@ const LEADING_TAG_RE = /^\s*\[[^\]]*\]\s*/;
 
 // A forum quote attribution ("Username wrote:") — not a source label.
 export function isQuoteAttribution(text: string): boolean {
-  return /\bwrote\s*:?\s*$/i.test(text.trim());
+  const t = text.trim();
+  // "… wrote:" at the end (a `p.sub` quote header) OR a leading "User wrote:"
+  // prefix folded onto the quoted line ("bananajoe25 wrote:The Handmaid's…", 1009).
+  return /\bwrote\s*:?\s*$/i.test(t) || /^\S+\s+wrote\s*:/i.test(t);
 }
 // A field-label heading ("Short description:", "Long description:") — not a
 // source label; the real comparison line usually follows it.
@@ -95,6 +98,46 @@ export function isNonSourceLabel(text: string): boolean {
     isFooterLabel(text) ||
     isUrlLabel(text)
   );
+}
+
+/** Prose detector (lives here so any name strategy can guard with it). A
+ *  sentence boundary (".", "!", "?" then a capital) or a comma followed by a
+ *  lowercase sentence connector marks prose. No length cap — legit release names
+ *  run long, and a comma before a CAPITAL/digit (region lists, bitrates) is fine.
+ *  Re-exported from parser.ts for back-compat. */
+export function looksLikeProse(parts: string[]): boolean {
+  return parts.some((p) => {
+    const t = p.trim();
+    return /[.!?]["')\]]?\s+[A-Z]/.test(t) ||
+      /,\s+(?:the|a|an|but|and|so|or|latter|former|it|this|which|that)\b/.test(t);
+  });
+}
+
+/** THE column-title predicate (MODEL.md). Turn one candidate line into validated
+ *  column titles, or null. This is the single place that answers "is this a real
+ *  comparison title?" — short, has an explicit separator, splits into
+ *  source-like names, and is NOT prose / a quote attribution / a field or footer
+ *  label / a URL. Strategies route candidates through this instead of
+ *  re-deriving a partial guard set (the missing `looksLikeProse` is what let
+ *  0117's "For some reason, D+ added black bars…" split into bogus columns, and a
+ *  mid-string "user wrote:" is what produced 1009). */
+export function asColumnTitles(text: string): string[] | null {
+  const t = text.trim();
+  // No length cap: a legit 6-column title with bitrates runs long (2245), and
+  // prose is rejected semantically below, not by length.
+  if (!t) return null;
+  // Whole-line prose check BEFORE splitting: when the separator is a comma,
+  // splitting removes the comma-connector signal from each part, so the
+  // per-part check below would miss it (0117). Mask the "v."/"vs." separator
+  // first — its period otherwise reads as a sentence boundary ("… v. Capture"),
+  // which would wrongly flag the 0288 footnote ruling as prose.
+  const prosePeek = t.replace(/\s+v(?:s\.?|\.)\s+/gi, " ");
+  if (isNonSourceLabel(t) || looksLikeProse([prosePeek])) return null;
+  if (!hasVsOrPipe(t)) return null;
+  const names = splitNames(t);
+  if (names.length < 2) return null;
+  if (!looksLikeNames(names) || looksLikeProse(names)) return null;
+  return names;
 }
 
 function cleanNamePart(text: string): string {
@@ -358,12 +401,10 @@ export function hasExplicitComparison(text: string): boolean {
 export function nameLabelInfoFromBoldTags(tags: Element[]): NameLabelInfo | null {
   for (let i = tags.length - 1; i >= 0; i--) {
     if (tags[i].closest("a")) continue;
-    const text = tags[i].textContent!.trim();
-    if (isNonSourceLabel(text)) continue;
-    if (hasVsOrPipe(text)) {
-      const p = splitNames(text);
-      if (looksLikeNames(p)) return { names: p, anchorEl: tags[i] };
-    }
+    // Route through the single column-title predicate — this adds the
+    // looksLikeProse guard the old inline check lacked (0117/1009 false positives).
+    const names = asColumnTitles(tags[i].textContent!);
+    if (names) return { names, anchorEl: tags[i] };
   }
   return null;
 }
