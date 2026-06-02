@@ -55,6 +55,9 @@ export interface YacompConfig {
   // PTP inline image grid: load the comparison's shots at PTP's thumbnail
   // (/t/) or full (/i/) resolution. Non-PTP-hosted URLs are shown as-is.
   ptpGridImageSize: "thumbnail" | "full";
+  // What clicking a PTP grid tile does: open the yacomp viewer at that image,
+  // or open the full image in a new browser tab.
+  ptpGridClick: "viewer" | "tab";
   enabledSites: Record<SiteKey, boolean>;
   filterCycle: FilterModeId[];
   gammaCycle: GammaPresetId[];
@@ -84,6 +87,7 @@ export const DEFAULTS: Readonly<YacompConfig> = {
   uiChromeMode: "default" as const,
   uiHideDelay: 1000,
   ptpGridImageSize: "thumbnail" as const,
+  ptpGridClick: "viewer" as const,
   enabledSites: ALL_SITES_ENABLED,
   filterCycle: [...FILTER_MODE_IDS],
   gammaCycle: [...GAMMA_PRESET_IDS],
@@ -170,6 +174,10 @@ export function validate(raw: Record<string, unknown>): YacompConfig {
       raw.ptpGridImageSize === "thumbnail" || raw.ptpGridImageSize === "full"
         ? raw.ptpGridImageSize
         : DEFAULTS.ptpGridImageSize,
+    ptpGridClick:
+      raw.ptpGridClick === "viewer" || raw.ptpGridClick === "tab"
+        ? raw.ptpGridClick
+        : DEFAULTS.ptpGridClick,
     enabledSites: validateEnabledSites(raw.enabledSites),
     filterCycle: validateOrderedIdList(raw.filterCycle, FILTER_MODE_IDS, DEFAULTS.filterCycle),
     gammaCycle: validateOrderedIdList(raw.gammaCycle, GAMMA_PRESET_IDS, DEFAULTS.gammaCycle),
@@ -215,6 +223,7 @@ export function closeBtnPosition(): "auto" | "left" | "right" | "hide" { return 
 export function uiChromeMode(): "always" | "default" | "autohide" { return config.uiChromeMode; }
 export function uiHideDelay(): number { return config.uiHideDelay; }
 export function ptpGridImageSize(): "thumbnail" | "full" { return config.ptpGridImageSize; }
+export function ptpGridClick(): "viewer" | "tab" { return config.ptpGridClick; }
 
 export function siteEnabled(key: SiteKey): boolean { return config.enabledSites[key]; }
 export function filterCycle(): readonly FilterModeId[] { return config.filterCycle; }

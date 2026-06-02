@@ -3,7 +3,7 @@
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
 import { injectCSS, injectPTPGridCSS } from "../ui/css";
-import { ptpGridImageSize } from "../config";
+import { ptpGridImageSize, ptpGridClick } from "../config";
 import { openWithDummyWrapper } from "../viewer";
 import type { Grid, GridCell } from "../grid";
 
@@ -82,28 +82,33 @@ function gridImageUrls(grid: Grid): string[] {
   return grid.rows.flatMap((row) => row.map((cell) => cell.full));
 }
 
-const GRID_ICON_SVG =
-  '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">' +
-  '<rect x="1" y="1" width="6" height="6" rx="1"></rect>' +
-  '<rect x="9" y="1" width="6" height="6" rx="1"></rect>' +
-  '<rect x="1" y="9" width="6" height="6" rx="1"></rect>' +
-  '<rect x="9" y="9" width="6" height="6" rx="1"></rect></svg>';
+// Single-glyph "fold a grid" affordance.
+const GRID_ICON = "▦"; // ▦
 
-function populatePTPGrid(gridEl: HTMLElement, urls: string[]): void {
+function populatePTPGrid(gridEl: HTMLElement, grid: Grid): void {
+  const urls = gridImageUrls(grid);
   const tiles = ptpGridTiles(urls, ptpGridImageSize() === "thumbnail");
   const frag = document.createDocumentFragment();
-  for (const tile of tiles) {
+  tiles.forEach((tile, i) => {
     const a = document.createElement("a");
-    a.href = tile.href;
+    a.href = tile.href; // full image — used when "open in new tab" is chosen
     a.target = "_blank";
     a.rel = "noreferrer";
+    const row = Math.floor(i / grid.numCols);
+    const col = i % grid.numCols;
+    a.addEventListener("click", (e) => {
+      // Config is read live, so changing the setting affects open grids too.
+      if (ptpGridClick() === "tab") return; // let the anchor open a new tab
+      e.preventDefault();
+      openWithDummyWrapper({ ...grid, initialRow: row, initialCol: col });
+    });
     const img = document.createElement("img");
     img.className = "_scf_ptp_grid_img";
     img.loading = "lazy";
     img.src = tile.src;
     a.appendChild(img);
     frag.appendChild(a);
-  }
+  });
   gridEl.appendChild(frag);
 }
 
@@ -120,8 +125,6 @@ function addPTPGridToggle(link: GridLink): void {
   if (!grid) return;
   link._scfPtpGrid = true;
 
-  const urls = gridImageUrls(grid);
-
   const toggle = document.createElement("a");
   toggle.href = "#";
   toggle.className = "_scf_ptp_grid_toggle";
@@ -129,7 +132,7 @@ function addPTPGridToggle(link: GridLink): void {
   toggle.setAttribute("role", "button");
   toggle.setAttribute("aria-label", "Toggle image grid");
   toggle.setAttribute("aria-expanded", "false");
-  toggle.innerHTML = GRID_ICON_SVG;
+  toggle.textContent = GRID_ICON;
 
   const gridEl = document.createElement("div");
   gridEl.className = "_scf_ptp_grid";
@@ -144,7 +147,7 @@ function addPTPGridToggle(link: GridLink): void {
     // Lazy: a comparison can carry 50+ shots — only fetch once first expanded.
     if (open && !populated) {
       populated = true;
-      populatePTPGrid(gridEl, urls);
+      populatePTPGrid(gridEl, grid);
     }
   });
 

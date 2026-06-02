@@ -83,6 +83,11 @@ describe("validate — discriminated unions", () => {
     expect(validate({ ptpGridImageSize: "thumbnail" }).ptpGridImageSize).toBe("thumbnail");
     expect(validate({ ptpGridImageSize: "tiny" }).ptpGridImageSize).toBe(DEFAULTS.ptpGridImageSize);
   });
+  test("ptpGridClick only accepts viewer/tab", () => {
+    expect(validate({ ptpGridClick: "tab" }).ptpGridClick).toBe("tab");
+    expect(validate({ ptpGridClick: "viewer" }).ptpGridClick).toBe("viewer");
+    expect(validate({ ptpGridClick: "nope" }).ptpGridClick).toBe(DEFAULTS.ptpGridClick);
+  });
   test("zoomPercentBase only accepts 'original' or 'fit'", () => {
     expect(validate({ zoomPercentBase: "fit" }).zoomPercentBase).toBe("fit");
     expect(validate({ zoomPercentBase: "natural" }).zoomPercentBase).toBe(
