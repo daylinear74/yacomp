@@ -52,6 +52,11 @@ fixture in `tests/fixtures/hdbits/cases/` (full DOM through `setupHDBitsCore`).
    `namesFromHeadings`; tested via the `forum.reply` fixture slot (cases 101 OP /
    102 reply). NOTE: real multi-post pages aren't fully reproduced by the
    synthetic 2-post fixture — see UNVERIFIED.md.
+3. **Uploader section labels are structural, not source names.** `SUMMARY`,
+   `NOTES`, and `LOGS` headings, including decorated forms like `SUMMARY: ...`,
+   are rejected as labels. On torrent pages, when these labels are the only
+   apparent count signal for a recognized screenshot block, use the count only
+   to fall back to `Source 1..N`; never display them as names (`0315`/`0316`).
 
 ## Rule A — explicit-comparison line wins (IMPLEMENTED)
 A leading line that carries an **explicit** comparison separator

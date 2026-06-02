@@ -103,11 +103,13 @@ export function isFieldLabel(text: string): boolean {
   return /\bdescription\s*:?\s*$/i.test(text.trim());
 }
 // A section/footer/structural heading ("See also:", "Slowpics:", "Note:",
-// "Quote", "Hidden text", "Spoiler") — never a source label.
-const FOOTER_LABEL_RE = /^(?:see\s+also|slow\s?\.?\s?pics?|comparisons?|screenshots?|more\s+screens?|notes?|edit|update|p\.?\s?s\.?|quote|hidden\s+text|spoilers?|click\s+to\s+\w+)\s*:?\s*$/i;
+// "Summary:", "Logs:", "Quote", "Hidden text", "Spoiler") — never a source label.
+const FOOTER_LABEL_RE = /^(?:see\s+also|slow\s?\.?\s?pics?|comparisons?|screenshots?|more\s+screens?|notes?|summary|logs?|edit|update|p\.?\s?s\.?|quote|hidden\s+text|spoilers?|click\s+to\s+\w+)\s*:?\s*$/i;
+const DECORATED_STRUCTURAL_LABEL_RE = /^(?:summary|notes?|logs?)\s*[:：].*$/i;
 export function isFooterLabel(text: string): boolean {
   const t = text.trim();
   if (/^encode\s+notes?\b/i.test(t)) return true;
+  if (DECORATED_STRUCTURAL_LABEL_RE.test(t)) return true;
   return FOOTER_LABEL_RE.test(t);
 }
 // A leftover BBCode tag ("[/size]", "[color=red]", "[b]") — never part of a
@@ -303,6 +305,7 @@ export function asColumnTitles(text: string): string[] | null {
   if (!hasVsOrPipe(t)) return null;
   const names = splitNames(t);
   if (names.length < 2) return null;
+  if (names.some(isNonSourceLabel)) return null;
   if (looksLikeCutOnlyLabels(names)) return null;
   if (looksLikeToneMappingSettings(names)) return null;
   if (!looksLikeNames(names) || looksLikeProse(names)) return null;
@@ -712,6 +715,7 @@ export function namesFromColorSpans(container: Element): string[] | null {
   if (colorSpans.length >= 2) {
     const csNames = colorSpans
       .map((s) => s.textContent!.trim())
+      .filter((text) => !isNonSourceLabel(text))
       .filter(Boolean);
     if (csNames.length >= 2) {
       const names = asColumnTitles(csNames.join(" | "));

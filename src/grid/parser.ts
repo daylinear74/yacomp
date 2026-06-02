@@ -800,6 +800,19 @@ function flatEncodeNotesSourceNames(container: Element, groups: GridCell[][], to
   return genericSourceNames(2);
 }
 
+function structuralColorLabelSourceNames(container: Element, groups: GridCell[][], total: number): string[] | null {
+  if (!isTorrentPage() || total < 4) return null;
+  const labels = [...container.querySelectorAll('span[style*="color"]')]
+    .map((span) => (span.textContent || "").trim())
+    .filter(Boolean);
+  if (labels.length < 2) return null;
+  if (!labels.every(isNonSourceLabel)) return null;
+  const stableCount = stableGridColumnCount(groups);
+  const count = stableCount && total % stableCount === 0 ? stableCount : labels.length;
+  if (total % count !== 0) return null;
+  return genericSourceNames(count);
+}
+
 function leadingStructuredLabelInfo(container: Element, groups: GridCell[][]): { names: string[]; anchorEl: Element } | null {
   const numCols = stableGridColumnCount(groups);
   if (!numCols) return null;
@@ -1120,6 +1133,9 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   if (!names) {
     names = flatEncodeNotesSourceNames(container, groups, total);
   }
+  if (!names) {
+    names = structuralColorLabelSourceNames(container, groups, total);
+  }
   if (!names && !detailsLinkComparisonOnly && hasLocalNonNameHeading(groupLabels)) {
     // The group label is a non-name heading — a section divider ("Video
     // Bitrate", "General") or a gallery caption. The real column title may sit
@@ -1253,7 +1269,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
       if (!strongs.length) continue;
       const candidates = [...strongs]
         .map((s) => s.textContent!.trim())
-        .filter((t) => t && !/^(comparison|preview|screenshots?)$/i.test(t));
+        .filter((t) => t && !/^(comparison|preview|screenshots?)$/i.test(t) && !isNonSourceLabel(t));
       if (candidates.length === shaped.numCols) {
         names = candidates;
         break;

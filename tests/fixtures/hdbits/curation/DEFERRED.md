@@ -11,8 +11,6 @@ the `MODEL.md` collect-then-select refactor is further along.
 | Case | Current reason to defer | Likely future work |
 | --- | --- | --- |
 | `0119-topic-53821` | Chaotic prose labels; user explicitly allowed ignore. | Revisit only if a broader prose-label rejection pass handles it cleanly. |
-| `0315-torrent-781192` | Torrent fixture is an uploader page fragment; current parser sees `SUMMARY / NOTES / LOGS` as columns. User agreed not to broaden parser logic for this singleton shape. | Revisit only if more uploader-page fragments appear in the torrent dump. |
-| `0316-torrent-781285` | Same uploader-page fragment shape as `0315`. | Revisit only if more uploader-page fragments appear in the torrent dump. |
 | `0343-topic-59566` | User wants topic `GBR vs GER`, but the OP has local per-section labels. Forcing H1 over local labels is high risk. | Re-evaluate after per-block candidate ranking can distinguish section notes from source labels. |
 | `0732-topic-65938` | Old baseline split a release line and `video size` metadata as two columns. This is likely a false positive, but it is kept deferred until the source-label model is reviewed. | Decide whether release-vs-size losses should be accepted as false-positive removals in the next baseline pass. |
 | `0784-topic-66637` | Same release-line vs `video size` metadata shape as `0732`. | Decide together with `0732`. |
@@ -47,6 +45,9 @@ The local review marks files should keep these entries as `deferred` whenever
 they appear in gain/name/loss review pages. Cases that no longer appear in a
 review page still remain tracked here.
 
-As of 2026-06-02, the full-corpus baseline is not ready to update: gain/name
-have no wrong rows, but loss review still has unresolved `wrong` rows where the
-baseline/original behavior was marked correct.
+As of 2026-06-02, `0315`/`0316` are no longer deferred: uploader-page
+`SUMMARY`/`NOTES`/`LOGS` color labels are rejected as structural labels, and the
+recognized torrent screenshot grid falls back to numbered `Source 1..N` names.
+The full-corpus baseline is not ready to update: gain/name have no wrong rows,
+but loss review still has unresolved `wrong` rows where the baseline/original
+behavior was marked correct.

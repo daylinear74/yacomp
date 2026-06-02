@@ -138,8 +138,9 @@ baseline (`.scratch/_baseline.json`). **Ship gate per step: 0 losses** (excludin
   color spans, inline structured labels, and per-group comparison labels. This
   pass also added guarded torrent gallery fallback and many regression fixtures
   for prose/file-list/BDInfo/technical-settings false positives. Torrent-page
-  review is converged except the documented uploader-page singleton deferrals
-  (`0315`/`0316`).
+  review now treats uploader-page `SUMMARY`/`NOTES`/`LOGS` labels as structural
+  labels; recognized grids in that shape fall back to numbered `Source 1..N`
+  names (`0315`/`0316`).
 
 ## Next (in order)
 

@@ -328,6 +328,13 @@ describe("column-title producers route through asColumnTitles (MODEL.md 3a-conti
       "UK vs. DE: There are lots of parts on DE. For reference, a straight TV capture is included.",
       "Not a source",
     ))).toBeNull());
+
+  test("color spans drop structural uploader section labels before screenshot grids (0315/0316)", () =>
+    expect(namesFromColorSpans(fakeColorContainer(
+      "SUMMARY: ????️",
+      "NOTES: ????️",
+      "LOGS: ????",
+    ))).toBeNull());
 });
 
 describe("ruling: footer / external-comparison labels (007, 2503)", () => {
