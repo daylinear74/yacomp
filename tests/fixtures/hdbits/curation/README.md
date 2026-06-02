@@ -46,6 +46,12 @@ new cases.
     to triage and action this backlog.**
   - `skipped` — redundant shape; its behavior is already represented.
 - `01-*.ts` … `06-*.ts`, `oracle.ts` — the pipeline (below).
+- `gain-review.ts` — a local diff-review UI generator for comparing a saved
+  baseline sweep against the current parser sweep. The generated review files and
+  marks stay under `.scratch/` and are not committed.
+- `DEFERRED.md` — committed rationale for reviewed cases that should stay marked
+  `deferred` because a broad parser change would be riskier than the isolated
+  fixture.
 - `.scratch/` — intermediate artifacts, gitignored.
 
 ## How a future agent resumes
@@ -82,6 +88,56 @@ renders each candidate in the real fixture chrome, runs the actual
 userscript (`test-entry.ts`) in headless chromium — the same path the
 e2e suite uses — and reports the resulting grid count and per-grid
 source names. Those become each case's `expected_grids` / `expected_names`.
+
+### `gain-review.ts` — diff review UI
+
+`gain-review.ts` is a local review tool for triaging parser changes against the
+large dump corpus. It reads:
+
+- `.scratch/_baseline.json` — the accepted/reference sweep.
+- `.scratch/new-out.json` — the current parser sweep.
+
+It writes only gitignored review artifacts under `.scratch/`:
+
+- `gain-review.*` — rows where the current parser detects more grids.
+- `name-review.*` — rows where grid counts are unchanged but source names differ.
+- `loss-review.*` — rows where the current parser detects fewer grids.
+
+Each `*.marks.json` stores local review state (`correct`, `wrong`, `deferred`,
+`pending`) and each `*.summary.json` stores the current counts. These files are
+for local curation and should not be committed.
+
+Generate all three review pages from the repo root:
+
+```
+bun tests/fixtures/hdbits/curation/gain-review.ts --all
+```
+
+Or generate one page:
+
+```
+bun tests/fixtures/hdbits/curation/gain-review.ts --kind=name
+```
+
+Serve the review UI when you need browser-based marking and persistent saves:
+
+```
+bun tests/fixtures/hdbits/curation/gain-review.ts --serve --host=127.0.0.1 --port=4187
+```
+
+Open:
+
+- `http://127.0.0.1:4187/gain`
+- `http://127.0.0.1:4187/name`
+- `http://127.0.0.1:4187/loss`
+
+Append `?scope=torrents` to show only torrent-page entries, for example
+`http://127.0.0.1:4187/name?scope=torrents`. When saving from a scoped page,
+only entries in that scope are updated; marks for other entries are preserved.
+
+Use `deferred` for cases that are understood but intentionally not fixed yet
+because the generalized parser change is likely to harm more common shapes. Add
+the durable rationale to `DEFERRED.md`; keep transient UI marks in `.scratch/`.
 
 ### Dedup
 
