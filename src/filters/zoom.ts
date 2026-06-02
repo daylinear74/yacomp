@@ -5,7 +5,7 @@
 import { zoomScaleFactor, zoomPercentBase, verboseZoom } from "../config";
 import { showToast, type ToastLine } from "../ui/toast";
 import { getShadowRoot } from "../ui/shadow";
-import type { Comp } from "../viewer/types";
+import type { Comp, RowData } from "../viewer/types";
 
 export let zoomMode: "fit" | "1:1" | "custom" = "fit";
 export let zoomWidth = 0; // px, used for '1:1' and 'custom'
@@ -191,14 +191,49 @@ function restoreZoomAnchor(anchor: CapturedZoomAnchor): void {
   if (anchor.comp.updateRowNav) anchor.comp.updateRowNav(anchor.currentRowIdx);
 }
 
+/** Size one row to its ACTIVE column's native pixel width at 1:1 — each image at
+ *  its own resolution, so a comparison that mixes resolutions across rows (057:
+ *  785px bitrate charts alongside 1920px screenshots) no longer squashes every
+ *  row to one shared width. If the active image hasn't measured yet (lazy /
+ *  deferred), set a fallback now and finish once it loads, guarded so a column
+ *  switch in the meantime can't apply a stale width. */
+function size1to1Row(rd: RowData, comp: Comp): void {
+  const img = rd.imgs[comp.currentCol];
+  if (img?.naturalWidth) {
+    rd.rowDiv.style.width = `${img.naturalWidth}px`;
+    return;
+  }
+  rd.rowDiv.style.width = rd.sizer?.naturalWidth ? `${rd.sizer.naturalWidth}px` : "100vw";
+  img?.addEventListener(
+    "load",
+    () => {
+      if (zoomMode === "1:1" && rd.imgs[comp.currentCol] === img && img.naturalWidth) {
+        rd.rowDiv.style.width = `${img.naturalWidth}px`;
+      }
+    },
+    { once: true },
+  );
+}
+
+/** Scroll-in / deliberate-switch hook (row.ts): size a row to its active column
+ *  once that image lands. No-op outside 1:1. A mouse-sweep does NOT call this —
+ *  it loads the swept-to column width-neutrally — so the scale stays put during
+ *  the compare gesture; only a deliberate switch (refit1to1 → applyZoom) re-fits. */
+export function size1to1RowOnLoad(rd: RowData, comp: Comp): void {
+  if (zoomMode !== "1:1") return;
+  size1to1Row(rd, comp);
+}
+
 export function applyZoom(anchors: CapturedZoomAnchor[] = []): void {
   for (const comp of activeComps) {
-    const rows = comp.compDiv.querySelectorAll("._scf_comp_row") as NodeListOf<HTMLElement>;
     if (zoomMode === "fit") {
-      for (const row of rows) row.style.width = "100vw";
+      for (const rd of comp.allRowData) rd.rowDiv.style.width = "100vw";
       comp.compDiv.classList.remove("_scf_zoomed");
+    } else if (zoomMode === "1:1") {
+      for (const rd of comp.allRowData) size1to1Row(rd, comp);
+      comp.compDiv.classList.add("_scf_zoomed");
     } else {
-      for (const row of rows) row.style.width = zoomWidth + "px";
+      for (const rd of comp.allRowData) rd.rowDiv.style.width = `${zoomWidth}px`;
       comp.compDiv.classList.add("_scf_zoomed");
     }
   }
@@ -307,31 +342,21 @@ export function doZoomFit(): void {
 }
 
 export function doZoom1to1(opts: { silent?: boolean } = {}): void {
-  const apply = (): boolean => {
-    const w = activeColumnNaturalWidth();
-    if (!w) return false;
-    const anchors = captureActiveZoomAnchors();
-    zoomWidth = w;
-    zoomMode = "1:1";
-    applyZoom(anchors);
-    if (!opts.silent) showToast(zoomToast());
-    return true;
-  };
-  if (apply()) return;
-  // The active column's image hasn't measured yet (lazy-loaded) — re-apply when
-  // it lands, falling back to the column-0 sizer.
-  const comp = activeComps[activeComps.length - 1];
-  const probe = comp?.allRowData[comp.currentRow]?.imgs[comp.currentCol]
-    ?? (getShadowRoot().querySelector("._scf_comp_sizer") as HTMLImageElement | null);
-  probe?.addEventListener("load", () => apply(), { once: true });
+  const anchors = opts.silent ? [] : captureActiveZoomAnchors();
+  zoomMode = "1:1";
+  // Keep a representative width as the zoom-in/out base; 1:1 itself renders
+  // per-row in applyZoom and ignores this. Rows whose active image hasn't
+  // measured yet fall back to the sizer/fit-width and are corrected per-row
+  // once that image loads.
+  zoomWidth = activeColumnNaturalWidth() || zoomWidth;
+  applyZoom(anchors);
+  if (!opts.silent) showToast(zoomToast());
 }
 
-/** Re-fit 1:1 to the active column after a column switch, so each column renders
- *  at its own native resolution. No-op outside 1:1 or when the width is unchanged
- *  (same-resolution columns don't jank). */
+/** Re-apply 1:1 per-row after a deliberate column switch (each row to the new
+ *  column's native width). No-op outside 1:1. */
 export function refit1to1(): void {
   if (zoomMode !== "1:1") return;
-  const w = activeColumnNaturalWidth();
-  if (w && w === zoomWidth) return;
-  doZoom1to1({ silent: true });
+  zoomWidth = activeColumnNaturalWidth() || zoomWidth;
+  applyZoom();
 }

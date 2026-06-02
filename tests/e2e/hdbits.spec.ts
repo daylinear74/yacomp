@@ -286,6 +286,35 @@ test("hdbits: a mouse-sweep across columns does NOT resize 1:1 (re-fit is delibe
   expect(await width()).toBe("200px"); // still column A's width — no resize on sweep
 });
 
+test("hdbits: 1:1 sizes each ROW to its own native width (mixed-resolution rows are not squashed)", async ({ page }) => {
+  // The real 057 bug: a comparison mixes a narrow bitrate-chart row with wide
+  // screenshot rows. Stub sizes by ROW — r0* (row 0) 200px, r1* (row 1) 400px —
+  // uniform within each row's columns. A single global 1:1 width squashed the
+  // wide row to the narrow row's width; per-row sizing must keep each native.
+  await page.route(/[ti]\.hdbits\.org/, (route) => {
+    const w = /r1/.test(route.request().url()) ? 400 : 200;
+    void route.fulfill({
+      contentType: "image/svg+xml",
+      body: `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="100"><rect width="${w}" height="100" fill="#333"/></svg>`,
+    });
+  });
+  await page.goto("/hdbits/case/117-zoom-mixed-row-dims");
+  await page.waitForFunction(
+    () => (window as unknown as { __yacomp_test_ready?: boolean }).__yacomp_test_ready === true,
+    undefined,
+    { timeout: 5000 },
+  );
+  await page.locator("._scf_comp_link").first().click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  const rows = page.locator("._scf_comp_row");
+  const rowWidth = (i: number) => rows.nth(i).evaluate((el) => (el as HTMLElement).style.width);
+  await page.keyboard.press("KeyO");
+  // Each row at its OWN native width — the wide row keeps 400px instead of being
+  // squashed to the narrow row's 200px (or vice-versa).
+  await expect.poll(() => rowWidth(0)).toBe("200px");
+  await expect.poll(() => rowWidth(1)).toBe("400px");
+});
+
 for (const { file, meta } of cases) {
   test(`hdbits: ${file}`, async ({ page }) => {
     await stubHdbitsImages(page);
