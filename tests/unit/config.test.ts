@@ -78,6 +78,11 @@ describe("validate — discriminated unions", () => {
     expect(validate({ uiChromeMode: "autohide" }).uiChromeMode).toBe("autohide");
     expect(validate({ uiChromeMode: "nope" }).uiChromeMode).toBe(DEFAULTS.uiChromeMode);
   });
+  test("ptpGridImageSize only accepts thumbnail/full", () => {
+    expect(validate({ ptpGridImageSize: "full" }).ptpGridImageSize).toBe("full");
+    expect(validate({ ptpGridImageSize: "thumbnail" }).ptpGridImageSize).toBe("thumbnail");
+    expect(validate({ ptpGridImageSize: "tiny" }).ptpGridImageSize).toBe(DEFAULTS.ptpGridImageSize);
+  });
   test("zoomPercentBase only accepts 'original' or 'fit'", () => {
     expect(validate({ zoomPercentBase: "fit" }).zoomPercentBase).toBe("fit");
     expect(validate({ zoomPercentBase: "natural" }).zoomPercentBase).toBe(

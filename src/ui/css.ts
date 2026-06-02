@@ -22,6 +22,47 @@ export function injectTriggerLinkCSS(): void {
   document.head.appendChild(style);
 }
 
+// PTP inline image grid (lives in the host page, beside the native "Show
+// comparison" link), so it styles into document.head rather than the viewer's
+// isolated shadow root.
+export function injectPTPGridCSS(): void {
+  if (document.getElementById("_scf_ptp_grid_css_")) return;
+  const style = document.createElement("style");
+  style.id = "_scf_ptp_grid_css_";
+  style.textContent = `
+    ._scf_ptp_grid_toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      vertical-align: middle;
+      margin-left: 6px;
+      cursor: pointer;
+      color: inherit;
+      text-decoration: none;
+      opacity: .7;
+    }
+    ._scf_ptp_grid_toggle:hover,
+    ._scf_ptp_grid_toggle._scf_open { opacity: 1; }
+    ._scf_ptp_grid_toggle svg { width: 1.1em; height: 1.1em; display: block; }
+    ._scf_ptp_grid {
+      display: none;
+      gap: 6px;
+      margin: 8px 0;
+      max-width: 100%;
+    }
+    ._scf_ptp_grid._scf_open { display: grid; }
+    ._scf_ptp_grid a { display: block; line-height: 0; }
+    ._scf_ptp_grid img {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 3px;
+      background: rgba(127,127,127,.12);
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 export function injectCSS(): void {
   const root = getShadowRoot();
   if (root.getElementById("_scf_css_")) return;

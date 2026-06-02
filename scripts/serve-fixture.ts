@@ -1,8 +1,9 @@
 // Dev/test server for the yacomp fixtures.
 //
-// Serves two fixture suites under one port:
+// Serves three fixture suites under one port:
 //
 //   /              — viewer dev fixture (tests/fixtures/viewer/basic.html)
+//   /ptp           — PTP inline image-grid fixture (tests/fixtures/ptp/basic.html)
 //   /hdbits/case/* — HDBits parser regression cases
 //                    (tests/fixtures/hdbits/cases/*.html)
 //
@@ -14,6 +15,7 @@
 const PORT = 4173;
 const VIEWER_DIR = "tests/fixtures/viewer";
 const HDBITS_DIR = "tests/fixtures/hdbits";
+const PTP_DIR = "tests/fixtures/ptp";
 
 const DEFAULT_TORRENT_TITLE = "Demo Movie 2025 1080p BluRay x264-DemoEncoder";
 const DEFAULT_THREAD_TITLE = "Demo comparison thread";
@@ -51,6 +53,11 @@ const viewerJs = await bundleEntry(`${VIEWER_DIR}/fixture-entry.ts`);
 // ─── hdbits fixtures ────────────────────────────────────────────────────────
 
 const hdbitsJs = await bundleEntry(`${HDBITS_DIR}/test-entry.ts`);
+
+// ─── ptp fixture ────────────────────────────────────────────────────────────
+
+const ptpHtml = await Bun.file(`${PTP_DIR}/basic.html`).text();
+const ptpJs = await bundleEntry(`${PTP_DIR}/ptp-entry.ts`);
 const torrentTemplate = await Bun.file(`${HDBITS_DIR}/templates/torrent.html`).text();
 const forumTemplate = await Bun.file(`${HDBITS_DIR}/templates/forum.html`).text();
 
@@ -242,6 +249,14 @@ const server = Bun.serve({
     }
     if (url.pathname === "/hdbits-test-entry.js") {
       return new Response(hdbitsJs, {
+        headers: { "content-type": "application/javascript" },
+      });
+    }
+    if (url.pathname === "/ptp") {
+      return new Response(ptpHtml, { headers: { "content-type": "text/html" } });
+    }
+    if (url.pathname === "/ptp-entry.js") {
+      return new Response(ptpJs, {
         headers: { "content-type": "application/javascript" },
       });
     }

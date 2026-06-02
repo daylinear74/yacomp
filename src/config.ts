@@ -52,6 +52,9 @@ export interface YacompConfig {
   //               when the cursor is near them.
   uiChromeMode: "always" | "default" | "autohide";
   uiHideDelay: number;
+  // PTP inline image grid: load the comparison's shots at PTP's thumbnail
+  // (/t/) or full (/i/) resolution. Non-PTP-hosted URLs are shown as-is.
+  ptpGridImageSize: "thumbnail" | "full";
   enabledSites: Record<SiteKey, boolean>;
   filterCycle: FilterModeId[];
   gammaCycle: GammaPresetId[];
@@ -80,6 +83,7 @@ export const DEFAULTS: Readonly<YacompConfig> = {
   closeBtnPosition: "auto" as const,
   uiChromeMode: "default" as const,
   uiHideDelay: 1000,
+  ptpGridImageSize: "thumbnail" as const,
   enabledSites: ALL_SITES_ENABLED,
   filterCycle: [...FILTER_MODE_IDS],
   gammaCycle: [...GAMMA_PRESET_IDS],
@@ -162,6 +166,10 @@ export function validate(raw: Record<string, unknown>): YacompConfig {
         ? raw.uiChromeMode
         : DEFAULTS.uiChromeMode,
     uiHideDelay: clampNum(raw.uiHideDelay, 200, 5000, DEFAULTS.uiHideDelay),
+    ptpGridImageSize:
+      raw.ptpGridImageSize === "thumbnail" || raw.ptpGridImageSize === "full"
+        ? raw.ptpGridImageSize
+        : DEFAULTS.ptpGridImageSize,
     enabledSites: validateEnabledSites(raw.enabledSites),
     filterCycle: validateOrderedIdList(raw.filterCycle, FILTER_MODE_IDS, DEFAULTS.filterCycle),
     gammaCycle: validateOrderedIdList(raw.gammaCycle, GAMMA_PRESET_IDS, DEFAULTS.gammaCycle),
@@ -206,6 +214,7 @@ export function verboseZoom(): boolean { return config.verboseZoom; }
 export function closeBtnPosition(): "auto" | "left" | "right" | "hide" { return config.closeBtnPosition; }
 export function uiChromeMode(): "always" | "default" | "autohide" { return config.uiChromeMode; }
 export function uiHideDelay(): number { return config.uiHideDelay; }
+export function ptpGridImageSize(): "thumbnail" | "full" { return config.ptpGridImageSize; }
 
 export function siteEnabled(key: SiteKey): boolean { return config.enabledSites[key]; }
 export function filterCycle(): readonly FilterModeId[] { return config.filterCycle; }
