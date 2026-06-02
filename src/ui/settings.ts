@@ -8,12 +8,16 @@ import {
   SITE_KEYS, SITE_LABELS, type SiteKey,
   FILTER_MODE_IDS, type FilterModeId,
   GAMMA_PRESET_IDS, type GammaPresetId,
+  shortcutPairFor, setShortcutPair, resetShortcuts, findShortcutConflict,
 } from "../config";
 import { injectCSS } from "./css";
 import { getShadowRoot } from "./shadow";
 import { showToast } from "./toast";
 import { activeComps, zoomToast } from "../filters/zoom";
 import { refreshPTPGridToggles } from "../sites/ptp";
+import { formatShortcut, keyEventToShortcut, type Shortcut } from "../shortcuts/types";
+import { ACTIONS, actionMeta, type ActionId } from "../shortcuts/registry";
+import { setShortcutCapturing } from "../shortcuts/capture-state";
 
 type Renderer = () => void;
 
@@ -271,6 +275,9 @@ const SITES_TOOLTIP =
   "Per-site toggle. Disabling stops yacomp from injecting on that site without uninstalling.";
 const FILTER_CYCLE_TOOLTIP =
   "Visual filters reachable via F / Shift+F. Uncheck to skip; drag enabled rows to reorder.";
+const SHORTCUTS_TOOLTIP =
+  "Click a field, then press a key (modifiers included) or pick a mouse button. Every action needs a main shortcut; the extra is optional (× clears it). Esc cancels capture; a duplicate binding is rejected.";
+
 const GAMMA_CYCLE_TOOLTIP =
   "Gamma-mismatch presets reachable via G / Shift+G. Uncheck to skip; drag enabled rows to reorder.";
 
@@ -622,12 +629,193 @@ function buildOrderedList<T extends string>(
   return container;
 }
 
+// ── Shortcuts editor ─────────────────────────────────────────────────────────
+
+let activeShortcutCapture: (() => void) | null = null;
+
+function startShortcutCapture(
+  wrap: HTMLElement,
+  btn: HTMLButtonElement,
+  id: ActionId,
+  slot: "main" | "extra",
+  refreshAll: () => void,
+): void {
+  activeShortcutCapture?.(); // cancel any in-flight capture
+  setShortcutCapturing(true);
+  btn.classList.add("_scf_capturing");
+  btn.textContent = "Press a key…";
+
+  const chips = document.createElement("div");
+  chips.className = "_scf_shortcut_chips";
+  const gestures: { g: "click" | "dblclick" | "middle" | "back" | "forward"; label: string }[] = [
+    { g: "click", label: "Click" },
+    { g: "dblclick", label: "2×" },
+    { g: "middle", label: "Mid" },
+    { g: "back", label: "Back" },
+    { g: "forward", label: "Fwd" },
+  ];
+  for (const { g, label } of gestures) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "_scf_shortcut_chip";
+    chip.textContent = label;
+    chip.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      commit({ t: "mouse", g });
+    });
+    chips.appendChild(chip);
+  }
+  wrap.appendChild(chips);
+
+  function commit(sc: Shortcut): void {
+    const conflict = findShortcutConflict(sc, id, slot);
+    cleanup();
+    if (conflict) {
+      showToast("Already bound to " + actionMeta(conflict).label);
+      refreshAll();
+      return;
+    }
+    const cur = shortcutPairFor(id);
+    setShortcutPair(
+      id,
+      slot === "main" ? { main: sc, extra: cur.extra } : { main: cur.main, extra: sc },
+    );
+    refreshAll();
+    if (id === "viewer.close") for (const c of activeComps) c.updateCloseBtn?.();
+  }
+
+  function onKey(e: KeyboardEvent): void {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (e.key === "Escape") { cleanup(); refreshAll(); return; }
+    // Wait for the real key — a lone modifier press isn't a binding.
+    if (/^(?:Shift|Control|Alt|Meta)(?:Left|Right)$/.test(e.code)) return;
+    commit(keyEventToShortcut(e));
+  }
+
+  function onOutside(e: Event): void {
+    if (!wrap.contains(e.target as Node)) { cleanup(); refreshAll(); }
+  }
+
+  function cleanup(): void {
+    activeShortcutCapture = null;
+    setShortcutCapturing(false);
+    btn.classList.remove("_scf_capturing");
+    chips.remove();
+    window.removeEventListener("keydown", onKey, true);
+    // Listener lives on the shadow root: a document-level one would see events
+    // retargeted to the host, making every in-panel click look "outside".
+    getShadowRoot().removeEventListener("mousedown", onOutside, true);
+  }
+
+  activeShortcutCapture = () => { cleanup(); refreshAll(); };
+  window.addEventListener("keydown", onKey, true);
+  // Defer so the click that started capture doesn't immediately cancel it.
+  setTimeout(() => getShadowRoot().addEventListener("mousedown", onOutside, true), 0);
+}
+
+function buildCaptureField(
+  id: ActionId,
+  slot: "main" | "extra",
+  refreshAll: () => void,
+  refreshFns: Renderer[],
+): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "_scf_shortcut_field";
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "_scf_shortcut_btn";
+
+  const isExtra = slot === "extra";
+  const clear = document.createElement("button");
+  clear.type = "button";
+  clear.className = "_scf_shortcut_clear";
+  clear.textContent = "×";
+  clear.title = "Clear";
+  clear.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const cur = shortcutPairFor(id);
+    setShortcutPair(id, { main: cur.main, extra: null });
+    refreshAll();
+  });
+
+  function render(): void {
+    const pair = shortcutPairFor(id);
+    const sc = slot === "main" ? pair.main : pair.extra;
+    btn.textContent = formatShortcut(sc);
+    btn.classList.toggle("_scf_shortcut_empty", sc == null);
+    if (isExtra) clear.style.display = sc ? "" : "none";
+  }
+  refreshFns.push(render);
+  render();
+
+  btn.addEventListener("click", () => startShortcutCapture(wrap, btn, id, slot, refreshAll));
+
+  wrap.appendChild(btn);
+  if (isExtra) wrap.appendChild(clear);
+  return wrap;
+}
+
+const SHORTCUT_GROUPS = ["Zoom", "Navigate", "Display", "Adjust", "Viewer"] as const;
+
+function buildShortcutsEditor(renderers: Renderer[]): HTMLElement {
+  const container = document.createElement("div");
+  container.className = "_scf_shortcuts";
+
+  const refreshFns: Renderer[] = [];
+  const refreshAll = (): void => { for (const f of refreshFns) f(); };
+
+  for (const group of SHORTCUT_GROUPS) {
+    const heading = document.createElement("div");
+    heading.className = "_scf_shortcuts_subhead";
+    heading.textContent = group;
+    container.appendChild(heading);
+
+    for (const meta of ACTIONS.filter((a) => a.group === group)) {
+      const row = document.createElement("div");
+      row.className = "_scf_shortcut_row";
+      const label = document.createElement("span");
+      label.className = "_scf_settings_label";
+      label.textContent = meta.label;
+      const fields = document.createElement("div");
+      fields.className = "_scf_shortcut_fields";
+      fields.append(
+        buildCaptureField(meta.id, "main", refreshAll, refreshFns),
+        buildCaptureField(meta.id, "extra", refreshAll, refreshFns),
+      );
+      row.append(label, fields);
+      container.appendChild(row);
+    }
+  }
+
+  const resetRow = document.createElement("div");
+  resetRow.className = "_scf_shortcut_reset_row";
+  const resetBtn = document.createElement("button");
+  resetBtn.type = "button";
+  resetBtn.className = "_scf_settings_reset";
+  resetBtn.textContent = "Reset shortcuts";
+  resetBtn.addEventListener("click", () => {
+    resetShortcuts();
+    refreshAll();
+    for (const c of activeComps) c.updateCloseBtn?.();
+  });
+  resetRow.appendChild(resetBtn);
+  container.appendChild(resetRow);
+
+  renderers.push(refreshAll);
+  return container;
+}
+
 function close(): void {
   if (overlay) {
     overlay.remove();
     overlay = null;
     tooltipController = null;
   }
+  // Drop any half-finished capture so its global listeners don't linger.
+  activeShortcutCapture?.();
 }
 
 const TOOLTIP_GAP = 6;
@@ -729,6 +917,10 @@ export function openSettings(): void {
   // Gamma Check Cycle group
   body.appendChild(buildGroupLabel("Gamma Check Cycle", GAMMA_CYCLE_TOOLTIP));
   body.appendChild(buildOrderedList(GAMMA_PRESET_IDS, GAMMA_PRESET_LABELS, "gammaCycle", renderers));
+
+  // Shortcuts editor
+  body.appendChild(buildGroupLabel("Shortcuts", SHORTCUTS_TOOLTIP));
+  body.appendChild(buildShortcutsEditor(renderers));
 
   // Footer
   const footer = document.createElement("div");

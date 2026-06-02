@@ -909,6 +909,115 @@ test("R persistently force-hides the row nav on top of the chrome mode", async (
   await expect.poll(forceHidden).toBe(false);
 });
 
+test("shortcuts: double-click-to-close closes the viewer and hides the close button", async ({ page }) => {
+  await openViewer(page, {
+    config: {
+      shortcuts: { "viewer.close": { main: { t: "key", code: "Escape" }, extra: { t: "mouse", g: "dblclick" } } },
+    },
+  });
+  // Close is reachable by a canvas double-click → the button is redundant.
+  await expect(page.locator("._scf_close_btn")).toBeHidden();
+  const box = (await page.locator("._scf_comp").boundingBox())!;
+  await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(page.locator("._scf_comp")).not.toBeVisible();
+});
+
+test("shortcuts: single-click-to-close works and removes the close button", async ({ page }) => {
+  await openViewer(page, {
+    config: { shortcuts: { "viewer.close": { main: { t: "mouse", g: "click" }, extra: null } } },
+  });
+  await expect(page.locator("._scf_close_btn")).toBeHidden();
+  const box = (await page.locator("._scf_comp").boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(page.locator("._scf_comp")).not.toBeVisible();
+});
+
+test("shortcuts: by default a canvas click does NOT close and the close button stays", async ({ page }) => {
+  await openViewer(page);
+  await expect(page.locator("._scf_close_btn")).toBeVisible();
+  const box = (await page.locator("._scf_comp").boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(120);
+  await expect(page.locator("._scf_comp")).toBeVisible();
+});
+
+async function openSettingsModal(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    (window as unknown as { __yacomp: YacompTestHooks }).__yacomp.openSettings();
+  });
+  await expect(page.locator("._scf_settings_overlay")).toBeVisible();
+}
+
+test("settings: rebinding 1:1 to a new key works end-to-end", async ({ page }) => {
+  await openViewer(page, { config: { defaultZoomMode: "fit" } });
+  const comp = page.locator("._scf_comp");
+  await expect(comp).not.toHaveClass(/_scf_zoomed/);
+
+  await openSettingsModal(page);
+  const mainBtn = page
+    .locator("._scf_shortcut_row", { hasText: "Actual size" })
+    .locator("._scf_shortcut_btn").first();
+  await expect(mainBtn).toHaveText("O");
+  await mainBtn.click();
+  await expect(mainBtn).toHaveText("Press a key…");
+  await page.keyboard.press("KeyP");
+  await expect(mainBtn).toHaveText("P");
+
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(page.locator("._scf_settings_overlay")).toHaveCount(0);
+  // P now triggers 1:1.
+  await page.keyboard.press("KeyP");
+  await expect(comp).toHaveClass(/_scf_zoomed/);
+});
+
+test("settings: a duplicate binding is rejected (hard-locked)", async ({ page }) => {
+  await openViewer(page);
+  await openSettingsModal(page);
+  const zoomIn = page
+    .locator("._scf_shortcut_row", { hasText: "Zoom in" })
+    .locator("._scf_shortcut_btn").first();
+  await expect(zoomIn).toHaveText("=");
+  await zoomIn.click();
+  await page.keyboard.press("KeyO"); // already bound to Actual size (1:1)
+  await expect(zoomIn).toHaveText("="); // unchanged
+});
+
+test("settings: clearing an extra binding removes it", async ({ page }) => {
+  await openViewer(page);
+  await openSettingsModal(page);
+  const row = page.locator("._scf_shortcut_row", { hasText: "Previous source" });
+  const extra = row.locator("._scf_shortcut_btn").nth(1);
+  await expect(extra).toHaveText("H");
+  await row.locator("._scf_shortcut_clear").click();
+  await expect(extra).toHaveText("—");
+});
+
+test("settings: binding close to a mouse gesture hides the close button live", async ({ page }) => {
+  await openViewer(page);
+  await expect(page.locator("._scf_close_btn")).toBeVisible();
+  await openSettingsModal(page);
+  const closeExtra = page
+    .locator("._scf_shortcut_row", { hasText: "Close viewer" })
+    .locator("._scf_shortcut_btn").nth(1);
+  await closeExtra.click();
+  await page.locator("._scf_shortcut_chip", { hasText: "2×" }).click();
+  await expect(closeExtra).toHaveText("Double-click");
+  await expect(page.locator("._scf_close_btn")).toBeHidden();
+});
+
+test("settings: Reset shortcuts restores defaults", async ({ page }) => {
+  await openViewer(page);
+  await openSettingsModal(page);
+  const mainBtn = page
+    .locator("._scf_shortcut_row", { hasText: "Actual size" })
+    .locator("._scf_shortcut_btn").first();
+  await mainBtn.click();
+  await page.keyboard.press("KeyP");
+  await expect(mainBtn).toHaveText("P");
+  await page.getByRole("button", { name: "Reset shortcuts", exact: true }).click();
+  await expect(mainBtn).toHaveText("O");
+});
+
 test("settings: PTP custom-label inputs appear only under the Custom button style", async ({ page }) => {
   await openViewer(page);
   await page.evaluate(() => {

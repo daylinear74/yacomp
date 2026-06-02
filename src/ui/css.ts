@@ -691,6 +691,73 @@ export function injectCSS(): void {
       outline: none;
       border-color: rgba(255,255,255,.4);
     }
+    ._scf_shortcuts { display: flex; flex-direction: column; gap: 2px; }
+    ._scf_shortcuts_subhead {
+      margin: 9px 0 2px;
+      font: 700 11px/1 system-ui, sans-serif;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: rgba(255,255,255,.45);
+    }
+    ._scf_shortcut_row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 3px 0;
+    }
+    ._scf_shortcut_fields { display: flex; align-items: center; gap: 6px; }
+    ._scf_shortcut_field { position: relative; display: inline-flex; align-items: center; gap: 2px; }
+    ._scf_shortcut_btn {
+      min-width: 78px;
+      padding: 4px 8px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 6px;
+      background: rgba(0,0,0,.25);
+      color: #fff;
+      font: 600 12px/1.2 system-ui, sans-serif;
+      cursor: pointer;
+      text-align: center;
+    }
+    ._scf_shortcut_btn:hover { border-color: rgba(255,255,255,.34); }
+    ._scf_shortcut_btn._scf_shortcut_empty { color: rgba(255,255,255,.38); }
+    ._scf_shortcut_btn._scf_capturing {
+      border-color: #8ab4f8;
+      color: #8ab4f8;
+      box-shadow: 0 0 0 2px rgba(138,180,248,.25);
+    }
+    ._scf_shortcut_clear {
+      border: none; background: none; cursor: pointer;
+      color: rgba(255,255,255,.5);
+      font: 700 14px/1 system-ui, sans-serif;
+      padding: 0 2px;
+    }
+    ._scf_shortcut_clear:hover { color: #fff; }
+    ._scf_shortcut_chips {
+      position: absolute;
+      top: calc(100% + 4px);
+      right: 0;
+      z-index: 5;
+      display: flex;
+      gap: 3px;
+      padding: 4px;
+      border: 1px solid rgba(255,255,255,.2);
+      border-radius: 6px;
+      background: #202020;
+      box-shadow: 0 4px 14px rgba(0,0,0,.5);
+    }
+    ._scf_shortcut_chip {
+      padding: 3px 6px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 4px;
+      background: transparent;
+      color: rgba(255,255,255,.8);
+      font: 600 11px/1 system-ui, sans-serif;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    ._scf_shortcut_chip:hover { background: rgba(255,255,255,.14); color: #fff; }
+    ._scf_shortcut_reset_row { display: flex; justify-content: flex-end; margin-top: 8px; }
     ._scf_settings_toggle {
       position: relative;
       width: 38px;

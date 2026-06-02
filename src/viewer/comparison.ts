@@ -30,6 +30,7 @@ import { createToolbar } from "./toolbar";
 import { normalizeGridInitialPosition, normalizeGridInitialZoom } from "./initial-state";
 import { createCloseBtn } from "./close-btn";
 import { createAutoHide } from "./auto-hide";
+import { setupCompMouseShortcuts } from "../keyboard";
 import {
   createDefaultVisibleColumns,
   pointerVisibleColumn,
@@ -136,6 +137,8 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   const wheelZoomGesture: WheelZoomGestureState = { anchor: null, resetTimer: null };
 
   const { drag, onDragMove, onDragEnd } = setupDragHandlers(compDiv);
+  // Canvas mouse-gesture shortcuts (e.g. click / double-click to close).
+  setupCompMouseShortcuts(compDiv, drag);
 
   // Ctrl+Wheel zoom (centered on cursor)
   compDiv.addEventListener("wheel", (e) => {

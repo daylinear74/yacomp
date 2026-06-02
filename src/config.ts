@@ -2,6 +2,12 @@
 // ║  User configuration — persistent settings via GM_getValue / GM_setValue  ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
+import {
+  isValidShortcut, mouseShortcutMatches, shortcutsEqual,
+  type Shortcut, type ShortcutPair,
+} from "./shortcuts/types";
+import { ACTIONS, defaultPair, isActionId, type ActionId } from "./shortcuts/registry";
+
 export const SITE_KEYS = [
   "bhd", "comppics", "frds", "gpw", "hdbits", "ptp", "slowpics", "ssd",
   "blutopia", "aither",
@@ -67,6 +73,9 @@ export interface YacompConfig {
   enabledSites: Record<SiteKey, boolean>;
   filterCycle: FilterModeId[];
   gammaCycle: GammaPresetId[];
+  // Customizable shortcuts (③): only user OVERRIDES are stored, keyed by action
+  // id. The effective binding is the override or the registry default.
+  shortcuts: Partial<Record<ActionId, ShortcutPair>>;
 }
 
 const STORAGE_KEY = "yacomp_config";
@@ -100,6 +109,7 @@ export const DEFAULTS: Readonly<YacompConfig> = {
   enabledSites: ALL_SITES_ENABLED,
   filterCycle: [...FILTER_MODE_IDS],
   gammaCycle: [...GAMMA_PRESET_IDS],
+  shortcuts: {},
 };
 
 function clampNum(val: unknown, min: number, max: number, fallback: number): number {
@@ -141,6 +151,21 @@ function validateOrderedIdList<T extends string>(
     }
   }
   return result;
+}
+
+function validateShortcuts(raw: unknown): Partial<Record<ActionId, ShortcutPair>> {
+  const out: Partial<Record<ActionId, ShortcutPair>> = {};
+  if (typeof raw !== "object" || raw === null) return out;
+  for (const [id, val] of Object.entries(raw as Record<string, unknown>)) {
+    if (!isActionId(id)) continue;
+    if (typeof val !== "object" || val === null) continue;
+    const v = val as Record<string, unknown>;
+    // A binding must have a valid `main`; `extra` is optional.
+    if (!isValidShortcut(v.main)) continue;
+    const extra = isValidShortcut(v.extra) ? (v.extra as Shortcut) : null;
+    out[id] = { main: v.main as Shortcut, extra };
+  }
+  return out;
 }
 
 export function validate(raw: Record<string, unknown>): YacompConfig {
@@ -205,6 +230,7 @@ export function validate(raw: Record<string, unknown>): YacompConfig {
     enabledSites: validateEnabledSites(raw.enabledSites),
     filterCycle: validateOrderedIdList(raw.filterCycle, FILTER_MODE_IDS, DEFAULTS.filterCycle),
     gammaCycle: validateOrderedIdList(raw.gammaCycle, GAMMA_PRESET_IDS, DEFAULTS.gammaCycle),
+    shortcuts: validateShortcuts(raw.shortcuts),
   };
 }
 
@@ -253,6 +279,49 @@ export function ptpGridToggleCollapsed(): string { return config.ptpGridToggleCo
 export function ptpGridToggleExpanded(): string { return config.ptpGridToggleExpanded; }
 
 export function siteEnabled(key: SiteKey): boolean { return config.enabledSites[key]; }
+
+/** Effective binding for an action: the user override or the registry default. */
+export function shortcutPairFor(id: ActionId): ShortcutPair {
+  return config.shortcuts[id] ?? defaultPair(id);
+}
+
+/** True when "close viewer" is bound (main or extra) to a canvas click /
+ *  double-click — in which case the close button is redundant and hidden. */
+export function closeUsesCanvasClick(): boolean {
+  const p = shortcutPairFor("viewer.close");
+  return [p.main, p.extra].some(
+    (s) => s != null && (mouseShortcutMatches(s, "click") || mouseShortcutMatches(s, "dblclick")),
+  );
+}
+
+/** Persist a full binding pair for one action (settings editor). */
+export function setShortcutPair(id: ActionId, pair: ShortcutPair): void {
+  saveConfig({ shortcuts: { ...config.shortcuts, [id]: pair } });
+}
+
+/** Restore every shortcut to its registry default. */
+export function resetShortcuts(): void {
+  saveConfig({ shortcuts: {} });
+}
+
+/** The other action already using `sc` (any slot), or null — for hard-locking
+ *  duplicate bindings. The (excludeId, excludeSlot) being edited is ignored. */
+export function findShortcutConflict(
+  sc: Shortcut,
+  excludeId: ActionId,
+  excludeSlot: "main" | "extra",
+): ActionId | null {
+  for (const meta of ACTIONS) {
+    const p = shortcutPairFor(meta.id);
+    if (!(meta.id === excludeId && excludeSlot === "main") && shortcutsEqual(p.main, sc)) {
+      return meta.id;
+    }
+    if (!(meta.id === excludeId && excludeSlot === "extra") && p.extra && shortcutsEqual(p.extra, sc)) {
+      return meta.id;
+    }
+  }
+  return null;
+}
 export function filterCycle(): readonly FilterModeId[] { return config.filterCycle; }
 export function gammaCycle(): readonly GammaPresetId[] { return config.gammaCycle; }
 export function getConfig(): Readonly<YacompConfig> { return config; }

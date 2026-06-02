@@ -127,6 +127,36 @@ describe("validate — boolean fields", () => {
   });
 });
 
+describe("validate — shortcuts", () => {
+  test("keeps valid overrides, drops unknown ids and malformed entries", () => {
+    const result = validate({
+      shortcuts: {
+        "zoom.in": { main: { t: "key", code: "KeyZ" }, extra: { t: "mouse", g: "back" } },
+        "nope.action": { main: { t: "key", code: "KeyX" } }, // unknown id
+        "zoom.out": { extra: { t: "key", code: "KeyQ" } }, // missing required main
+        "zoom.fit": { main: { t: "key", code: "" } }, // invalid main
+      } as unknown as Record<string, unknown>,
+    }).shortcuts;
+    expect(result["zoom.in"]).toEqual({
+      main: { t: "key", code: "KeyZ" }, extra: { t: "mouse", g: "back" },
+    });
+    expect(result).not.toHaveProperty("nope.action");
+    expect(result).not.toHaveProperty("zoom.out");
+    expect(result).not.toHaveProperty("zoom.fit");
+  });
+  test("extra falls back to null when absent or invalid", () => {
+    const r = validate({
+      shortcuts: {
+        "zoom.in": { main: { t: "key", code: "KeyZ" }, extra: { t: "mouse", g: "bad" } },
+      } as unknown as Record<string, unknown>,
+    }).shortcuts;
+    expect(r["zoom.in"]).toEqual({ main: { t: "key", code: "KeyZ" }, extra: null });
+  });
+  test("defaults to no overrides", () => {
+    expect(validate({}).shortcuts).toEqual({});
+  });
+});
+
 describe("validate — enabledSites", () => {
   test("defaults all sites to enabled when missing", () => {
     const sites = validate({}).enabledSites;
