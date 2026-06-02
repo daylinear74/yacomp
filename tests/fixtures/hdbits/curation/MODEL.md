@@ -139,8 +139,9 @@ baseline (`.scratch/_baseline.json`). **Ship gate per step: 0 losses** (excludin
   pass also added guarded torrent gallery fallback and many regression fixtures
   for prose/file-list/BDInfo/technical-settings false positives. Torrent-page
   review now treats uploader-page `SUMMARY`/`NOTES`/`LOGS` labels as structural
-  labels; recognized grids in that shape fall back to numbered `Source 1..N`
-  names (`0315`/`0316`).
+  labels, so they do not create comparisons or column names by themselves
+  (`0315`/`0316`). It also reads the nearest text-only label immediately before
+  a screenshot block (`0432`/`0437`).
 
 ## Next (in order)
 

@@ -800,23 +800,56 @@ function flatEncodeNotesSourceNames(container: Element, groups: GridCell[][], to
   return genericSourceNames(2);
 }
 
-function structuralColorLabelSourceNames(container: Element, groups: GridCell[][], total: number): string[] | null {
-  if (!isTorrentPage() || total < 4) return null;
-  const labels = [...container.querySelectorAll('span[style*="color"]')]
-    .map((span) => (span.textContent || "").trim())
-    .filter(Boolean);
-  if (labels.length < 2) return null;
-  if (!labels.every(isNonSourceLabel)) return null;
-  const stableCount = stableGridColumnCount(groups);
-  const count = stableCount && total % stableCount === 0 ? stableCount : labels.length;
-  if (total % count !== 0) return null;
-  return genericSourceNames(count);
-}
-
 function leadingStructuredLabelInfo(container: Element, groups: GridCell[][]): { names: string[]; anchorEl: Element } | null {
   const numCols = stableGridColumnCount(groups);
   if (!numCols) return null;
   return namesFromLeadingStructuredLabels(container, numCols);
+}
+
+function isNearbyComparisonSectionHeading(text: string): boolean {
+  return /^(?:comparisons?|zoned scenes?)\s*:?\s*$/i.test(text.replace(/\s+/g, " ").trim());
+}
+
+function isAllowedComparisonHeadingInterlude(text: string): boolean {
+  const t = text.replace(/\s+/g, " ").trim();
+  return /^(?:or|note:.*)$/i.test(t) || isFooterLabel(t);
+}
+
+function hasPreviousSiblingComparisonSectionHeading(node: ChildNode): boolean {
+  let interludes = 0;
+  for (let prev: ChildNode | null = node.previousSibling; prev; prev = prev.previousSibling) {
+    if (prev.nodeType === 8) continue;
+    if (prev.nodeName === "BR") continue;
+    const text = (prev.textContent || "").trim();
+    if (!text) continue;
+    if (prev.nodeType === 1 && (prev as Element).querySelector?.("img")) return false;
+    if (isNearbyComparisonSectionHeading(text)) return true;
+    if (isAllowedComparisonHeadingInterlude(text) && ++interludes <= 4) continue;
+    return false;
+  }
+  return false;
+}
+
+function previousSiblingColumnTitleInfo(container: Element): { names: string[]; anchorEl: ChildNode | null } | null {
+  if (!isTorrentPage()) return null;
+  for (let node: ChildNode | null = container.previousSibling; node; node = node.previousSibling) {
+    if (node.nodeType === 8) continue;
+    if (node.nodeName === "BR") continue;
+    const text = (node.textContent || "").trim();
+    if (!text) continue;
+    if (!hasExplicitComparison(text) || !hasPreviousSiblingComparisonSectionHeading(node)) return null;
+    if (node.nodeType === 1) {
+      const el = node as Element;
+      if (el.querySelector?.("img")) return null;
+      const names = asColumnTitles(text);
+      if (names) return { names, anchorEl: el };
+      return null;
+    }
+    const names = asColumnTitles(text);
+    if (names) return { names, anchorEl: node };
+    return null;
+  }
+  return null;
 }
 
 function hasLocalNonNameHeading(groupLabels: (string | null)[]): boolean {
@@ -1134,7 +1167,11 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     names = flatEncodeNotesSourceNames(container, groups, total);
   }
   if (!names) {
-    names = structuralColorLabelSourceNames(container, groups, total);
+    const previous = previousSiblingColumnTitleInfo(container);
+    if (previous && total % previous.names.length === 0) {
+      names = previous.names;
+      anchorEl = previous.anchorEl;
+    }
   }
   if (!names && !detailsLinkComparisonOnly && hasLocalNonNameHeading(groupLabels)) {
     // The group label is a non-name heading — a section divider ("Video

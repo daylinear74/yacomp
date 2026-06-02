@@ -46,8 +46,8 @@ they appear in gain/name/loss review pages. Cases that no longer appear in a
 review page still remain tracked here.
 
 As of 2026-06-02, `0315`/`0316` are no longer deferred: uploader-page
-`SUMMARY`/`NOTES`/`LOGS` color labels are rejected as structural labels, and the
-recognized torrent screenshot grid falls back to numbered `Source 1..N` names.
+`SUMMARY`/`NOTES`/`LOGS` color labels are rejected as structural labels and do
+not create a comparison by themselves.
 The full-corpus baseline is not ready to update: gain/name have no wrong rows,
 but loss review still has unresolved `wrong` rows where the baseline/original
 behavior was marked correct.
