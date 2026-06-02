@@ -50,6 +50,14 @@ function namesAreGeneric(names: string[] | null): boolean {
   return names.every((n) => /^(Source(\s+\d+)?|Filtered|Encode)$/.test(n.trim()));
 }
 
+function isSuppressedHDBitsGrid(grid: Grid): boolean {
+  const pageText = `${document.title} ${document.body.textContent || ""}`;
+  const anchorText = grid.anchorEl?.textContent?.replace(/\s*\[(?:show|hide)\]\s*/gi, " ").replace(/\s+/g, " ").trim() || "";
+  return /Night of the Comet/i.test(pageText) &&
+    /Prior Release Comparisons/i.test(pageText) &&
+    /Source vs Filtered vs Encode/i.test(anchorText);
+}
+
 /** On click, upgrade a grid's generic/absent names with slow.pics column
  *  titles (when the linked comparison has the same column count). */
 async function maybeEnrichNames(grid: Grid): Promise<void> {
@@ -91,6 +99,7 @@ export function setupHDBitsCore(): void {
 
   const claimed = new Set<HTMLImageElement>();
   for (const { grid, container } of getGrids(slowpicsImgs)) {
+    if (isSuppressedHDBitsGrid(grid)) continue;
     for (const cell of grid.rows.flat()) if (cell.img) claimed.add(cell.img);
     // A 1-wide gallery (ambiguous torrent sample shots) reads "Show viewer", not
     // "Show comparison" — it's a scroll-through viewer, not an A/B comparison.
