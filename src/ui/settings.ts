@@ -153,6 +153,16 @@ const GROUPS: SettingGroup[] = [
         format: (v) => (v / 1000).toFixed(1) + "s",
         onSave: () => { for (const c of activeComps) c.syncAutoHide?.(); },
       },
+      {
+        type: "radio",
+        key: "ptpGridImageSize",
+        label: "PTP image grid",
+        tooltip: "Resolution for the inline image grid toggled beside PTP's \"Show comparison\" link. Thumbnail loads PTP's /t/ previews (light); Full loads the /i/ originals. Non-PTP-hosted images are shown as-is.",
+        options: [
+          { label: "Thumbnail", value: "thumbnail" },
+          { label: "Full", value: "full" },
+        ],
+      },
     ],
   },
   {

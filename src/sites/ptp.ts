@@ -2,7 +2,8 @@
 // ║  PTP comparison hijack                                                    ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
-import { injectCSS } from "../ui/css";
+import { injectCSS, injectPTPGridCSS } from "../ui/css";
+import { ptpGridImageSize } from "../config";
 import { openWithDummyWrapper } from "../viewer";
 import type { Grid, GridCell } from "../grid";
 
@@ -46,6 +47,117 @@ export function parsePTPOnclick(onclick: string): Grid | null {
     return { rows, numCols, names };
   } catch (_) {
     return null;
+  }
+}
+
+// ── Inline image grid (the "old-school" folding grid beside Show comparison) ──
+
+// PTP image hosting serves the full screenshot at /i/<id>.<ext> and a thumbnail
+// at /t/<id>.<ext>. Anchored to the passthepopcorn.me host so a comparison that
+// links to some other image host is left untouched.
+const PTP_FULL_IMAGE_RE = /^(https?:\/\/(?:[^/]+\.)?passthepopcorn\.me)\/i\//i;
+
+/** Thumbnail (/t/) form of a PTP image URL; non-PTP URLs are returned as-is. */
+export function ptpThumbUrl(full: string): string {
+  return full.replace(PTP_FULL_IMAGE_RE, "$1/t/");
+}
+
+export interface PTPGridTile {
+  /** Always the full image — the tile links out to it in a new tab. */
+  href: string;
+  /** What renders inline: the thumbnail (default) or the full image. */
+  src: string;
+}
+
+/** Tile descriptors for the inline grid, in the comparison's image order. */
+export function ptpGridTiles(urls: string[], useThumbnail: boolean): PTPGridTile[] {
+  return urls.map((full) => ({
+    href: full,
+    src: useThumbnail ? ptpThumbUrl(full) : full,
+  }));
+}
+
+/** Flatten a parsed grid's cells back to the original image-URL order. */
+function gridImageUrls(grid: Grid): string[] {
+  return grid.rows.flatMap((row) => row.map((cell) => cell.full));
+}
+
+const GRID_ICON_SVG =
+  '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">' +
+  '<rect x="1" y="1" width="6" height="6" rx="1"></rect>' +
+  '<rect x="9" y="1" width="6" height="6" rx="1"></rect>' +
+  '<rect x="1" y="9" width="6" height="6" rx="1"></rect>' +
+  '<rect x="9" y="9" width="6" height="6" rx="1"></rect></svg>';
+
+function populatePTPGrid(gridEl: HTMLElement, urls: string[]): void {
+  const tiles = ptpGridTiles(urls, ptpGridImageSize() === "thumbnail");
+  const frag = document.createDocumentFragment();
+  for (const tile of tiles) {
+    const a = document.createElement("a");
+    a.href = tile.href;
+    a.target = "_blank";
+    a.rel = "noreferrer";
+    const img = document.createElement("img");
+    img.className = "_scf_ptp_grid_img";
+    img.loading = "lazy";
+    img.src = tile.src;
+    a.appendChild(img);
+    frag.appendChild(a);
+  }
+  gridEl.appendChild(frag);
+}
+
+type GridLink = HTMLElement & { _scfPtpGrid?: boolean };
+
+/** Add a folding image-grid toggle (and its lazily-built grid) beside one PTP
+ *  "Show comparison" link. No-op if the onclick can't be parsed or the link was
+ *  already processed. */
+function addPTPGridToggle(link: GridLink): void {
+  if (link._scfPtpGrid) return;
+  const onclick = link.getAttribute("onclick");
+  if (!onclick) return;
+  const grid = parsePTPOnclick(onclick);
+  if (!grid) return;
+  link._scfPtpGrid = true;
+
+  const urls = gridImageUrls(grid);
+
+  const toggle = document.createElement("a");
+  toggle.href = "#";
+  toggle.className = "_scf_ptp_grid_toggle";
+  toggle.title = "Toggle image grid";
+  toggle.setAttribute("role", "button");
+  toggle.setAttribute("aria-label", "Toggle image grid");
+  toggle.setAttribute("aria-expanded", "false");
+  toggle.innerHTML = GRID_ICON_SVG;
+
+  const gridEl = document.createElement("div");
+  gridEl.className = "_scf_ptp_grid";
+  gridEl.style.gridTemplateColumns = `repeat(${grid.numCols}, 1fr)`;
+
+  let populated = false;
+  toggle.addEventListener("click", (e) => {
+    e.preventDefault();
+    const open = gridEl.classList.toggle("_scf_open");
+    toggle.classList.toggle("_scf_open", open);
+    toggle.setAttribute("aria-expanded", String(open));
+    // Lazy: a comparison can carry 50+ shots — only fetch once first expanded.
+    if (open && !populated) {
+      populated = true;
+      populatePTPGrid(gridEl, urls);
+    }
+  });
+
+  // Order ends up: <link> <toggle> <grid>.
+  link.insertAdjacentElement("afterend", gridEl);
+  link.insertAdjacentElement("afterend", toggle);
+}
+
+/** Scan a subtree for PTP comparison links and attach a grid toggle to each. */
+export function injectPTPGrids(root: ParentNode = document): void {
+  injectPTPGridCSS();
+  for (const link of root.querySelectorAll('a[onclick*="ScreenshotComparisonToggleShow"]')) {
+    addPTPGridToggle(link as GridLink);
   }
 }
 
@@ -100,6 +212,22 @@ function hijackPTPComparison(ptpContainer: HTMLElement): void {
 export function setupPTP(): void {
   if (!/passthepopcorn/i.test(location.hostname)) return;
   injectCSS();
+
+  // Inline image-grid toggles beside each "Show comparison" link. Server-side
+  // posts are present at load; the observer below catches AJAX-loaded ones.
+  injectPTPGrids(document);
+  new MutationObserver((mutations) => {
+    for (const { addedNodes } of mutations) {
+      for (const node of addedNodes) {
+        if ((node as Element).nodeType !== 1) continue;
+        const el = node as Element & { matches?: (s: string) => boolean };
+        if (el.matches?.('a[onclick*="ScreenshotComparisonToggleShow"]')) {
+          addPTPGridToggle(el as GridLink);
+        }
+        injectPTPGrids(el);
+      }
+    }
+  }).observe(document.body, { childList: true, subtree: true });
 
   // Primary: intercept comparison trigger clicks in capture phase
   // so the event never reaches PTP's inline onclick handler
