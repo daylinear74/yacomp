@@ -27,6 +27,7 @@ import { visibleColumnOffset } from "./viewer/source-visibility";
 import { getShadowRoot } from "./ui/shadow";
 import { ACTIONS, type ActionId } from "./shortcuts/registry";
 import { keyShortcutMatchesEvent, mouseShortcutMatches, type MouseShortcut } from "./shortcuts/types";
+import { isShortcutCapturing } from "./shortcuts/capture-state";
 import type { DragState } from "./viewer/drag";
 import type { Comp } from "./viewer/types";
 
@@ -302,7 +303,7 @@ export function setupKeyboard(hostname?: string): void {
   window.addEventListener(
     "keydown",
     (e) => {
-      if (isEditing()) return;
+      if (isShortcutCapturing() || isEditing()) return;
       const hasComp = activeComps.length > 0;
       if (!hasComp && !siteBehaviorEnabled(hostname)) return;
 
@@ -341,7 +342,7 @@ export function setupKeyboard(hostname?: string): void {
   window.addEventListener(
     "keyup",
     (e) => {
-      if (isEditing()) return;
+      if (isShortcutCapturing() || isEditing()) return;
       const hasComp = activeComps.length > 0;
       if (!hasComp && !siteBehaviorEnabled(hostname)) return;
 

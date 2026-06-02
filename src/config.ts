@@ -2,8 +2,11 @@
 // ║  User configuration — persistent settings via GM_getValue / GM_setValue  ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
-import { isValidShortcut, mouseShortcutMatches, type Shortcut, type ShortcutPair } from "./shortcuts/types";
-import { defaultPair, isActionId, type ActionId } from "./shortcuts/registry";
+import {
+  isValidShortcut, mouseShortcutMatches, shortcutsEqual,
+  type Shortcut, type ShortcutPair,
+} from "./shortcuts/types";
+import { ACTIONS, defaultPair, isActionId, type ActionId } from "./shortcuts/registry";
 
 export const SITE_KEYS = [
   "bhd", "comppics", "frds", "gpw", "hdbits", "ptp", "slowpics", "ssd",
@@ -289,6 +292,35 @@ export function closeUsesCanvasClick(): boolean {
   return [p.main, p.extra].some(
     (s) => s != null && (mouseShortcutMatches(s, "click") || mouseShortcutMatches(s, "dblclick")),
   );
+}
+
+/** Persist a full binding pair for one action (settings editor). */
+export function setShortcutPair(id: ActionId, pair: ShortcutPair): void {
+  saveConfig({ shortcuts: { ...config.shortcuts, [id]: pair } });
+}
+
+/** Restore every shortcut to its registry default. */
+export function resetShortcuts(): void {
+  saveConfig({ shortcuts: {} });
+}
+
+/** The other action already using `sc` (any slot), or null — for hard-locking
+ *  duplicate bindings. The (excludeId, excludeSlot) being edited is ignored. */
+export function findShortcutConflict(
+  sc: Shortcut,
+  excludeId: ActionId,
+  excludeSlot: "main" | "extra",
+): ActionId | null {
+  for (const meta of ACTIONS) {
+    const p = shortcutPairFor(meta.id);
+    if (!(meta.id === excludeId && excludeSlot === "main") && shortcutsEqual(p.main, sc)) {
+      return meta.id;
+    }
+    if (!(meta.id === excludeId && excludeSlot === "extra") && p.extra && shortcutsEqual(p.extra, sc)) {
+      return meta.id;
+    }
+  }
+  return null;
 }
 export function filterCycle(): readonly FilterModeId[] { return config.filterCycle; }
 export function gammaCycle(): readonly GammaPresetId[] { return config.gammaCycle; }
