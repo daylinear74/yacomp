@@ -15,6 +15,8 @@ import {
 export { looksLikeProse };
 
 export function hdbFull(src: string): string {
+  const imagePage = src.match(/^(https?:)?\/\/img\.hdbits\.org\/([^/?#]+)(?:[?#].*)?$/i);
+  if (imagePage) return `${imagePage[1] ?? ""}//i.hdbits.org/${imagePage[2]}.png`;
   return src.replace(
     /\/\/t(\.hdbits\.org\/[^.?]+)\.jpg(\?.*)?$/i,
     "//i$1.png",

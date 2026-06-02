@@ -254,6 +254,11 @@ test("hdbits: sibling heading sections place triggers under matching titles", as
 
 test("hdbits: forum manual custom comparison builds a Source N grid from selected screenshots", async ({ page }) => {
   await stubHdbitsImages(page);
+  const requested = new Set<string>();
+  page.on("request", (request) => {
+    const url = request.url();
+    if (/manual0[1-4]|img\.hdbits\.org|i\.hdbits\.org/.test(url)) requested.add(url);
+  });
   await page.goto("/hdbits/case/154-forum-post-manual-custom-comparison");
   await waitForHdbitsReady(page);
 
@@ -274,6 +279,8 @@ test("hdbits: forum manual custom comparison builds a Source N grid from selecte
 
   await expect(page.locator("._scf_comp")).toBeVisible();
   await expect(page.locator("._scf_comp_row")).toHaveCount(2);
+  await expect.poll(() => [...requested].some((url) => url.includes("https://i.hdbits.org/manual01.png"))).toBe(true);
+  expect([...requested].some((url) => url.includes("https://img.hdbits.org/manual01"))).toBe(false);
   await page.keyboard.press("Digit1");
   const names = (await page.locator("._scf_comp_label span").allTextContents())
     .map((t) => t.replace(/^\d+\.\s*/, "").trim())

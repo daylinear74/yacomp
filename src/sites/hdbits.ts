@@ -321,9 +321,20 @@ function isSelectableForumImage(img: HTMLImageElement): boolean {
 }
 
 function forumImageFullUrl(img: HTMLImageElement): string {
+  const src = img.currentSrc || img.src;
+  if (/\/\/t\.hdbits\.org\//i.test(src)) return hdbFull(src);
+
   const link = img.closest("a[href]") as HTMLAnchorElement | null;
-  if (link && !/^javascript:/i.test(link.href)) return link.href;
-  return /\/\/t\.hdbits\.org\//i.test(img.src) ? hdbFull(img.src) : (img.currentSrc || img.src);
+  if (link && !/^javascript:/i.test(link.href)) {
+    if (/\/\/img\.hdbits\.org\//i.test(link.href)) {
+      // Saved local forum pages only have the downloaded thumbnail asset; keep
+      // that preview loadable, while real HDBits pages use the actual full file.
+      if (/\/hdbits\/saved-assets\//.test(src)) return src;
+      return hdbFull(link.href);
+    }
+    if (/\.(jpe?g|png|webp|gif|avif|bmp)(\?|$)/i.test(link.href)) return link.href;
+  }
+  return src;
 }
 
 function forumManualCell(img: HTMLImageElement): GridCell {
