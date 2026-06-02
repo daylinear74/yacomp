@@ -47,8 +47,8 @@ fixture in `tests/fixtures/hdbits/cases/` (full DOM through `setupHDBitsCore`).
    …" is NOT a title (guarded by `looksLikeProse`).
 2. **H1 / topic-title extraction applies ONLY to the original poster (first
    post)**, never to replies. A reply infers titles from its own body text only;
-   if it has none, fall back to defaults (`Source 1..N`, or
-   `Source / Filtered / Encode` for 3 columns). DONE — `isOriginalPost` gates
+   if it has none, fall back to numbered defaults (`Source 1..N`). DONE —
+   `isOriginalPost` gates
    `namesFromHeadings`; tested via the `forum.reply` fixture slot (cases 101 OP /
    102 reply). NOTE: real multi-post pages aren't fully reproduced by the
    synthetic 2-post fixture — see UNVERIFIED.md.

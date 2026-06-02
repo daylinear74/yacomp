@@ -116,8 +116,8 @@ sections' images wrapped in ONE big `<strong>`:
 Fixed since:
 - **Spurious 2-col grid** — DONE via `isMultiSourceLabel` (transpose path now
   skips a label that is itself a multi-source list); also rescued 13 grids.
-- **3-col `Source/Filtered/Encode` default** — DONE (a 3-wide comparison with no
-  usable source label defaults to Source/Filtered/Encode; cases 055/063 updated).
+- **3-col numbered default** — DONE (a 3-wide comparison with no usable source
+  label defaults to `Source 1` / `Source 2` / `Source 3`; cases 055/063 updated).
 
 Still open:
 - **Duplicate grid** — DONE. `getGrids` now threads a claimed-image set through

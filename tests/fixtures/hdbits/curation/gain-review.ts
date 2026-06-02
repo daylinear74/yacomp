@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 
 export type ReviewStatus = "pending" | "correct" | "wrong" | "deferred";
 export type ReviewKind = "gain" | "name" | "loss";
-export type ReviewScope = "all" | "torrents";
+export type ReviewScope = "all" | "torrents" | "non-torrents";
 export type GridNames = (string[] | null)[] | null;
 
 export interface SweepRow {
@@ -58,6 +58,8 @@ interface BuildEntriesOptions {
 interface WriteOptions {
   repoRoot?: string;
   scratchDir?: string;
+  baselineFile?: string;
+  newFile?: string;
   now?: string;
 }
 
@@ -72,6 +74,7 @@ interface ReviewPayload {
 }
 
 const DEFAULT_SCRATCH = "tests/fixtures/hdbits/curation/.scratch";
+const TORRENT_FIXTURE_PREFIX = "yacomp-torrents-fixtures-";
 const REVIEW_FILES: Record<ReviewKind, {
   title: string;
   html: string;
@@ -195,10 +198,14 @@ export function buildLossReviewEntries(options: BuildEntriesOptions): GainReview
   return buildReviewEntries(options, (previous, next) => next.grids < previous.grids);
 }
 
+export function isTorrentFixtureId(id: string): boolean {
+  return id.startsWith(TORRENT_FIXTURE_PREFIX);
+}
+
 export function filterReviewEntriesByScope<T extends { id: string }>(entries: T[], scope: ReviewScope): T[] {
-  return scope === "torrents"
-    ? entries.filter((entry) => entry.id.startsWith("yacomp-torrents-fixtures-"))
-    : entries;
+  if (scope === "torrents") return entries.filter((entry) => isTorrentFixtureId(entry.id));
+  if (scope === "non-torrents") return entries.filter((entry) => !isTorrentFixtureId(entry.id));
+  return entries;
 }
 
 export function mergeGainMarks(entries: { id: string }[], existing: GainMarks, now: string): GainMarks {
@@ -261,7 +268,9 @@ function jsJson(value: unknown): string {
 }
 
 function scopedTitle(title: string, scope: ReviewScope): string {
-  return scope === "torrents" ? `${title} (Torrents only)` : title;
+  if (scope === "torrents") return `${title} (Torrents only)`;
+  if (scope === "non-torrents") return `${title} (Non-torrents only)`;
+  return title;
 }
 
 function scopedPayload(payload: ReviewPayload, scope: ReviewScope, now = payload.generatedAt): ReviewPayload {
@@ -624,12 +633,23 @@ function renderGainReviewHtml(payload: ReviewPayload): string {
 `;
 }
 
+function resolveDataFile(repoRoot: string, scratchDir: string, value: string | undefined, fallback: string): string {
+  const file = value ?? fallback;
+  return file.includes("/") || file.includes("\\") ? resolve(repoRoot, file) : join(scratchDir, file);
+}
+
 function buildPayload(kind: ReviewKind, options: WriteOptions = {}): ReviewPayload {
   const repoRoot = resolve(options.repoRoot ?? process.cwd());
   const scratchDir = resolve(repoRoot, options.scratchDir ?? DEFAULT_SCRATCH);
   const now = options.now ?? new Date().toISOString();
-  const baselineRows = readJsonFile<SweepRow[]>(join(scratchDir, "_baseline.json"), []);
-  const newRows = readJsonFile<SweepRow[]>(join(scratchDir, "new-out.json"), []);
+  const baselineRows = readJsonFile<SweepRow[]>(
+    resolveDataFile(repoRoot, scratchDir, options.baselineFile, "_baseline.json"),
+    [],
+  );
+  const newRows = readJsonFile<SweepRow[]>(
+    resolveDataFile(repoRoot, scratchDir, options.newFile, "new-out.json"),
+    [],
+  );
   const entries = kind === "gain"
     ? buildGainReviewEntries({ repoRoot, baselineRows, newRows })
     : kind === "loss"
@@ -689,10 +709,16 @@ function readPayloadFromDisk(kind: ReviewKind, scratchDir: string, scope: Review
   return scopedPayload(payload, scope, summary.generatedAt);
 }
 
-async function serveGainReview(repoRoot: string, scratchDir: string, port: number, hostname: string): Promise<void> {
-  writeGainReviewFiles({ repoRoot, scratchDir });
-  writeNameReviewFiles({ repoRoot, scratchDir });
-  writeLossReviewFiles({ repoRoot, scratchDir });
+async function serveGainReview(
+  repoRoot: string,
+  scratchDir: string,
+  port: number,
+  hostname: string,
+  options: WriteOptions = {},
+): Promise<void> {
+  writeGainReviewFiles({ ...options, repoRoot, scratchDir });
+  writeNameReviewFiles({ ...options, repoRoot, scratchDir });
+  writeLossReviewFiles({ ...options, repoRoot, scratchDir });
 
   const server = Bun.serve({
     hostname,
@@ -796,7 +822,9 @@ function reviewScopeFromUrl(url: URL): ReviewScope {
 }
 
 function reviewScopeFromValue(value: string | null): ReviewScope {
-  return value === "torrents" ? "torrents" : "all";
+  if (value === "torrents") return "torrents";
+  if (value === "non-torrents" || value === "forums") return "non-torrents";
+  return "all";
 }
 
 function argValue(prefix: string, fallback: string): string {
@@ -809,14 +837,19 @@ if (import.meta.main) {
   const scratchDir = resolve(repoRoot, argValue("--scratch=", DEFAULT_SCRATCH));
   const port = Number(argValue("--port=", "4187"));
   const hostname = argValue("--host=", "127.0.0.1");
+  const baselineFile = argValue("--baseline=", "_baseline.json");
+  const newFile = argValue("--new=", "new-out.json");
   if (Bun.argv.includes("--serve")) {
-    await serveGainReview(repoRoot, scratchDir, Number.isFinite(port) ? port : 4187, hostname);
+    await serveGainReview(repoRoot, scratchDir, Number.isFinite(port) ? port : 4187, hostname, {
+      baselineFile,
+      newFile,
+    });
   } else {
     const kinds: ReviewKind[] = Bun.argv.includes("--all")
       ? ["gain", "name", "loss"]
       : [reviewKindFromValue(argValue("--kind=", "gain"))];
     for (const kind of kinds) {
-      const payload = writeReviewFiles(kind, { repoRoot, scratchDir });
+      const payload = writeReviewFiles(kind, { repoRoot, scratchDir, baselineFile, newFile });
       const files = REVIEW_FILES[kind];
       if (payload.entries.length > 0) {
         console.log(`${kind.toUpperCase()} review generated: ${join(scratchDir, files.html)} (${payload.entries.length} rows)`);

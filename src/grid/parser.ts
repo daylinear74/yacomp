@@ -362,6 +362,72 @@ function leadingVsLabelInfo(container: Element): { names: string[]; anchorEl: El
   return null;
 }
 
+function leadingDetailsLinkLabelInfo(
+  container: Element,
+  groups: GridCell[][],
+): { names: string[] | null; anchorEl: Element | null } | null {
+  const expectedCount = stableGridColumnCount(groups) ?? groups[0]?.length ?? null;
+  if (!expectedCount || expectedCount < 2) return null;
+
+  type Line = { text: string; anchors: HTMLAnchorElement[]; anchorEl: Element | null };
+  const lines: Line[] = [{ text: "", anchors: [], anchorEl: null }];
+  const current = (): Line => lines[lines.length - 1];
+  const pushLine = (): void => {
+    if (current().text.trim() || current().anchors.length) {
+      lines.push({ text: "", anchors: [], anchorEl: null });
+    }
+  };
+  const addDetailsAnchors = (node: Element): void => {
+    const anchors = node.matches("a[href*='details.php']")
+      ? [node as HTMLAnchorElement]
+      : [...node.querySelectorAll<HTMLAnchorElement>("a[href*='details.php']")];
+    for (const anchor of anchors) {
+      if (anchor.querySelector("img")) continue;
+      current().anchors.push(anchor);
+      current().anchorEl = anchor;
+    }
+  };
+
+  for (const node of container.childNodes) {
+    if (node.nodeType === 8) continue;
+    if (node.nodeName === "BR") {
+      pushLine();
+      continue;
+    }
+    if (node.nodeType === 1) {
+      const el = node as Element;
+      if (el.matches("a") && el.querySelector('img[src*="//t.hdbits.org/"]')) break;
+      if (el.querySelector('a img[src*="//t.hdbits.org/"], img[src*="//t.hdbits.org/"]')) break;
+      addDetailsAnchors(el);
+      current().text += el.textContent || "";
+      if (/^(?:DIV|P|PRE|TABLE|BLOCKQUOTE|UL|OL)$/.test(el.nodeName)) pushLine();
+      continue;
+    }
+    current().text += node.textContent || "";
+  }
+
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i];
+    if (line.anchors.length !== expectedCount) continue;
+    const hasExplicitDetailsComparison = /\bvs?\.?\b|\|/i.test(line.text);
+    const fullLineNames = asColumnTitles(line.text);
+    if (hasExplicitDetailsComparison && fullLineNames?.length === expectedCount) {
+      return { names: fullLineNames, anchorEl: line.anchorEl };
+    }
+    const names = line.anchors
+      .map((anchor) => tidyName(anchor.textContent || ""))
+      .filter((name) => name && !isUrlLabel(name));
+    const hasOnlyBareLinkLabels = !/[,:;]|\bvs?\.?\b|\|/i.test(line.text);
+    if (hasOnlyBareLinkLabels && names.length === expectedCount && looksLikeNames(names)) {
+      return { names, anchorEl: line.anchorEl };
+    }
+    if (hasExplicitDetailsComparison) {
+      return { names: null, anchorEl: line.anchorEl };
+    }
+  }
+  return null;
+}
+
 // Per project ruling, ONLY an explicit "vs" / "vs." / "v." / "|" separator gives
 // a leading line title-precedence. A slash, comma, dash or "×" does NOT — those
 // routinely appear inside BDInfo codec lines ("MPEG-4 AVC / 27191 kbps"), byte
@@ -795,6 +861,17 @@ function trimTrailingFooterSection(collected: GroupsResult): GroupsResult {
   };
 }
 
+function trimToLeadingColumnRun(collected: GroupsResult, numCols: number): GroupsResult {
+  let end = 0;
+  while (end < collected.groups.length && collected.groups[end].length === numCols) end++;
+  if (end <= 0 || end >= collected.groups.length) return collected;
+  return {
+    groups: collected.groups.slice(0, end),
+    groupLabels: collected.groupLabels.slice(0, end),
+    groupLabelEls: collected.groupLabelEls.slice(0, end),
+  };
+}
+
 function hasSameLinePreviousSibling(el: Element): boolean {
   for (let node = el.previousSibling; node; node = node.previousSibling) {
     if (node.nodeName === "BR") return false;
@@ -901,6 +978,28 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   const earlyLeadCmp = leadingComparisonNames(container);
   const hasWholeContainerLeadCmp =
     !!earlyLeadCmp && earlyLeadCmp.reliable && earlyTotal % earlyLeadCmp.names.length === 0;
+  const leadingDetails = hasWholeContainerLeadCmp ? null : leadingDetailsLinkLabelInfo(container, groups);
+  if (leadingDetails?.names) {
+    const leadingRun = trimToLeadingColumnRun(collected, leadingDetails.names.length);
+    const leadingImages = leadingRun.groups.flat();
+    const shaped = reshapeGrid(leadingRun.groups, leadingImages, leadingDetails.names);
+    if (shaped) {
+      const restStart = leadingRun.groups.length;
+      const restGrids = restStart < groups.length
+        ? buildMultiCompGrids(
+          groups.slice(restStart),
+          groupLabels.slice(restStart),
+          groupLabelEls.slice(restStart),
+        )
+        : null;
+      return [{
+        rows: shaped.gridRows,
+        numCols: shaped.numCols,
+        names: finalizeNames(leadingDetails.names),
+        anchorEl: leadingDetails.anchorEl,
+      }, ...(restGrids ?? [])];
+    }
+  }
   const multiComp = buildMultiCompGrids(groups, groupLabels, groupLabelEls, !hasWholeContainerLeadCmp);
   if (multiComp && (!hasWholeContainerLeadCmp || multiComp.length > 1)) return multiComp;
 
@@ -926,6 +1025,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   // block looked like a comparison but couldn't be titled cleanly, so a
   // torrent-page gallery fallback can offer a 1-wide viewer.
   let ambiguousTitle = false;
+  let detailsLinkComparisonOnly = false;
   const leadCmp = earlyLeadCmp;
   if (leadCmp && leadCmp.reliable && total % leadCmp.names.length === 0) {
     names = leadCmp.names;
@@ -951,6 +1051,19 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     const anyNonSource = labels.some(isNonSourceLabel);
     if (!allNumeric && !anyMultiSource && !anyNonSource) {
       names = stripAsymmetricTitle(cleanPerSourceGroupLabels(labels));
+    }
+  }
+  if (!names) {
+    const details = leadingDetailsLinkLabelInfo(container, groups);
+    if (details?.names) {
+      names = details.names;
+      anchorEl = details.anchorEl;
+      collected = trimToLeadingColumnRun({ groups, groupLabels, groupLabelEls }, names.length);
+      ({ groups, groupLabels, groupLabelEls } = collected);
+      total = groups.flat().length;
+    } else if (details) {
+      detailsLinkComparisonOnly = true;
+      anchorEl = details.anchorEl;
     }
   }
   if (!names) {
@@ -1007,7 +1120,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   if (!names) {
     names = flatEncodeNotesSourceNames(container, groups, total);
   }
-  if (!names && hasLocalNonNameHeading(groupLabels)) {
+  if (!names && !detailsLinkComparisonOnly && hasLocalNonNameHeading(groupLabels)) {
     // The group label is a non-name heading — a section divider ("Video
     // Bitrate", "General") or a gallery caption. The real column title may sit
     // in the PARENT, on the line directly before this container: a multi-section
@@ -1055,7 +1168,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   if (!names) {
     names = findComparisonNames(container);
   }
-  if (!names && !ambiguousTitle && hasRejectedLeadingColumnTitle(container)) {
+  if (!names && !detailsLinkComparisonOnly && !ambiguousTitle && hasRejectedLeadingColumnTitle(container)) {
     const h1 = isOriginalPost(container) ? namesFromHeadings() : null;
     if (h1 && total % h1.length === 0 && looksLikeNames(h1)) {
       names = h1;
@@ -1153,14 +1266,11 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     if (hasSourceColor) names = ["Source", ...names];
   }
 
-  // No usable source label: fall back to defaults. By HDBits convention a
-  // 3-wide comparison is Source / Filtered / Encode; any other width is just
-  // numbered Source 1 … Source N.
+  // No usable source label: fall back to numbered defaults so review sweeps and
+  // the viewer never surface a blank source list for a recognized comparison.
   let finalNames = finalizeNames(names);
   if (!finalNames) {
-    finalNames = shaped.numCols === 3
-      ? ["Source", "Filtered", "Encode"]
-      : Array.from({ length: shaped.numCols }, (_, i) => `Source ${i + 1}`);
+    finalNames = Array.from({ length: shaped.numCols }, (_, i) => `Source ${i + 1}`);
   }
 
   return [{ rows: shaped.gridRows, numCols: shaped.numCols, names: finalNames, anchorEl }];

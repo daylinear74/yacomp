@@ -97,6 +97,10 @@ describe("HDBits gain review generation", () => {
     expect(filterReviewEntriesByScope(entries, "torrents").map((entry) => entry.id)).toEqual([
       "yacomp-torrents-fixtures-2026-05-28/cases-bootstrapped/0431-torrent-812458-desc-demo.html",
     ]);
+    expect(filterReviewEntriesByScope(entries, "non-torrents").map((entry) => entry.id)).toEqual([
+      "yacomp-fixtures-2026-05-28/cases-bootstrapped/0431-topic-61180-post-0-demo.html",
+      "corpus/fixture.html",
+    ]);
   });
 
   test("extracts the original HDBits URL only when it was recorded in notes", () => {

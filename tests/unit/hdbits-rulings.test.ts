@@ -217,6 +217,26 @@ vs Nerve.2016.1080p.AMZN.WEB-DL.DDP5.1.H.264-FiBERHD`))
   test("splits visual wide-space column headings (0431/0247)", () =>
     expect(asColumnTitles("Source                                Encode                                HDTV"))
       .toEqual(["Source", "Encode", "HDTV"]));
+  test("keeps source titles with parenthesized processing settings from loss-review originals", () => {
+    expect(asColumnTitles("tK | ITA | ITA with Tweak(bright=-7)"))
+      .toEqual(["tK", "ITA", "ITA with Tweak(bright=-7)"]);
+    expect(asColumnTitles("Here's NOR vs NOR ColorYUV(levels=\"TV->PC\") vs ITA vs FRA"))
+      .toEqual(["Here's NOR", "NOR ColorYUV(levels=\"TV->PC\")", "ITA", "FRA"]);
+    expect(asColumnTitles("JPN vs USA [smoothlevels(gamma=0.88)]"))
+      .toEqual(["JPN", "USA [smoothlevels(gamma=0.88)]"]);
+    expect(asColumnTitles("NOR(25248 kbps) vs USA(29997 kbps) vs GER(gamma=1.09) vs GER(32983 kbps)"))
+      .toEqual(["NOR(25248 kbps)", "USA(29997 kbps)", "GER(gamma=1.09)", "GER(32983 kbps)"]);
+    expect(asColumnTitles("Paris vs Bern (with no surface) vs Bern (with 50% surface) vs Bern (with 100% surface = 'Bern' from previous test)"))
+      .toEqual([
+        "Paris",
+        "Bern (with no surface)",
+        "Bern (with 50% surface)",
+        "Bern (with 100% surface = 'Bern' from previous test)",
+      ]);
+  });
+  test("keeps short source aliases joined with equals when a real comparison separator is present", () =>
+    expect(asColumnTitles("CEE=EUR vs. FRA"))
+      .toEqual(["CEE=EUR", "FRA"]));
   test("drops comma-prose (0117 — whole-line check, since splitting hides it)", () =>
     expect(asColumnTitles("For some reason, D+ added black bars, but Amazon abandoned them, my comparison is not with the capture.")).toBeNull());
   test("drops comma-prose with capitalized sentence subjects", () =>

@@ -97,6 +97,12 @@ large dump corpus. It reads:
 - `.scratch/_baseline.json` — the accepted/reference sweep.
 - `.scratch/new-out.json` — the current parser sweep.
 
+It can also read split sweep files with `--baseline=` and `--new=`. The current
+handoff split is:
+
+- `.scratch/_baseline-torrents.json` / `.scratch/new-out-torrents.json`
+- `.scratch/_baseline-non-torrents.json` / `.scratch/new-out-non-torrents.json`
+
 It writes only gitignored review artifacts under `.scratch/`:
 
 - `gain-review.*` — rows where the current parser detects more grids.
@@ -111,6 +117,17 @@ Generate all three review pages from the repo root:
 
 ```
 bun tests/fixtures/hdbits/curation/gain-review.ts --all
+```
+
+Generate review pages for a split sweep by pointing the tool at the split data
+files. Use a separate review scratch directory when you want independent marks
+for the split:
+
+```
+bun tests/fixtures/hdbits/curation/gain-review.ts --all \
+  --scratch=tests/fixtures/hdbits/curation/.scratch/review-torrents \
+  --baseline=tests/fixtures/hdbits/curation/.scratch/_baseline-torrents.json \
+  --new=tests/fixtures/hdbits/curation/.scratch/new-out-torrents.json
 ```
 
 Or generate one page:
@@ -134,10 +151,26 @@ Open:
 Append `?scope=torrents` to show only torrent-page entries, for example
 `http://127.0.0.1:4187/name?scope=torrents`. When saving from a scoped page,
 only entries in that scope are updated; marks for other entries are preserved.
+Append `?scope=non-torrents` for forum/non-torrent entries.
+
+The tracked sweep driver defaults to the torrent corpus:
+
+```
+python3 tests/fixtures/hdbits/curation/sweep-driver.py
+```
+
+Run non-torrents only when explicitly requested:
+
+```
+python3 tests/fixtures/hdbits/curation/sweep-driver.py --scope=non-torrents
+```
 
 Use `deferred` for cases that are understood but intentionally not fixed yet
 because the generalized parser change is likely to harm more common shapes. Add
 the durable rationale to `DEFERRED.md`; keep transient UI marks in `.scratch/`.
+If a row note says the original/baseline output is right, keep it marked
+`wrong` until the parser is fixed or the owner explicitly accepts a changed
+baseline; do not move those rows to `deferred` just to clear the review.
 
 ### Dedup
 

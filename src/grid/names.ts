@@ -10,6 +10,7 @@ const META_RE = /^(\d{4}|\d+\s*min(?:\/[a-z]+)?|[a-z]{3,9}\s+\d{1,2},?\s*\d{4}|\
 // Resolutions like "1080p"/"2160p" are also not matched.
 const PURE_MEDIAINFO_VALUE_RE = /^\(?\s*[\d.,]+\s*-?\s*(?:kbps|mbps|kb\/s|mb\/s|k?hz|fps)\s*\)?$/i;
 const BITRATE_NOTE_RE = /^\(?\s*~?[\d\s.,]+\s*(?:kbps|mbps|kb\/s|mb\/s)\s*\)?$/i;
+const SOURCE_ALIAS_ASSIGNMENT_RE = /^[A-Z0-9]{1,4}\s*=\s*[A-Z0-9]{1,4}$/;
 export function looksLikeNames(parts: string[]): boolean {
   if (parts.length < 2) return false;
   if (looksLikeTechnicalParts(parts)) return false;
@@ -28,7 +29,11 @@ function looksLikeTechnicalParts(parts: string[]): boolean {
   if (trimmed.length < 2) return false;
   if (trimmed.filter((part) => TECH_ASSIGNMENT_RE.test(part)).length >= 2) return true;
   if (trimmed.some((part) => /^:\s*\S/.test(part))) return true;
-  if (trimmed.some((part) => GENERIC_ASSIGNMENT_RE.test(part)) && trimmed.every((part) => !SOURCE_TAIL_TOKEN_RE.test(part))) return true;
+  const hasBareGenericAssignment = (part: string): boolean =>
+    !SOURCE_ALIAS_ASSIGNMENT_RE.test(part) && GENERIC_ASSIGNMENT_RE.test(maskBracketed(part));
+  const hasSourceIdentity = (part: string): boolean =>
+    SOURCE_TAIL_TOKEN_RE.test(part) || REGION_LEADING_TOKEN_RE.test(part) || SOURCE_ALIAS_ASSIGNMENT_RE.test(part);
+  if (trimmed.some(hasBareGenericAssignment) && trimmed.every((part) => !hasSourceIdentity(part))) return true;
   if (trimmed.some((part) => MEDIAINFO_FIELD_RE.test(part)) && trimmed.every((part) => !SOURCE_TAIL_TOKEN_RE.test(part))) return true;
   return trimmed.every((part) => /^(?:format settings|reference frames(?:\s*:.*)?|input\s*=.*|output\s*=.*)$/i.test(part));
 }

@@ -148,6 +148,9 @@ baseline (`.scratch/_baseline.json`). **Ship gate per step: 0 losses** (excludin
   rows where the original/baseline behavior was marked right. Do **not** copy
   `.scratch/new-out.json` over `.scratch/_baseline.json` until those are fixed or
   deliberately moved to `deferred` with a durable reason in `DEFERRED.md`.
+  If a row note says `ori is right` or otherwise says the original/baseline
+  output is right, keep it in `wrong` until the parser is fixed or the owner
+  explicitly accepts a changed baseline.
 - **3b — per-block collect→select.** Replace the precedence ladder in `parseGrid`
   with: collect all candidates (per-group labels · adjacent lines skipping doc
   blocks · H1 if OP) → `asColumnTitles` each → select (strong adjacent owns the
@@ -162,11 +165,14 @@ baseline (`.scratch/_baseline.json`). **Ship gate per step: 0 losses** (excludin
 ## Validate a step
 
 ```sh
-rm -f tests/fixtures/hdbits/curation/.scratch/new-out.json
-python3 tests/fixtures/hdbits/curation/.scratch/sweep-driver.py   # ~12 min
-# diff new-out.json vs _baseline.json (the snippet is in HANDOFF.md → "The corpus sweep")
+rm -f tests/fixtures/hdbits/curation/.scratch/new-out-torrents.json
+python3 tests/fixtures/hdbits/curation/sweep-driver.py
+# default scope is torrents; diff new-out-torrents.json vs _baseline-torrents.json
 ```
 
+Run the non-torrent/forum sweep only when explicitly requested:
+`python3 tests/fixtures/hdbits/curation/sweep-driver.py --scope=non-torrents`.
+
 Also run `bun test tests/unit` and `bunx playwright test` (the unit + e2e gate the
-rulings). Re-baseline (`cp new-out.json _baseline.json`) only after every delta is
+rulings). Re-baseline a split file only after every delta in that split is
 reviewed and accepted.
