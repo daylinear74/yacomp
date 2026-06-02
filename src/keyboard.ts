@@ -1,5 +1,5 @@
 // ╔═══════════════════════════════════════════════════════════════════════════╗
-// ║  Keyboard — window capture phase                                          ║
+// ║  Keyboard / shortcut dispatch — window capture phase                       ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
 import { cycleMode, cur } from "./filters/modes";
@@ -7,7 +7,7 @@ import {
   BC_MIN, BC_MAX, isDefault, adjustBrightness, brightnessAdjustmentLabel,
   hasAdjustments, resetAdjustments,
 } from "./filters/brightness";
-import { bcStep } from "./config";
+import { bcStep, shortcutPairFor } from "./config";
 import { siteBehaviorEnabled } from "./sites/current-site";
 import {
   cycleGammaMismatchCheck,
@@ -25,6 +25,8 @@ import {
 import { openSlowPicsViewer } from "./sites/slowpics";
 import { visibleColumnOffset } from "./viewer/source-visibility";
 import { getShadowRoot } from "./ui/shadow";
+import { ACTIONS, type ActionId } from "./shortcuts/registry";
+import { keyShortcutMatchesEvent } from "./shortcuts/types";
 import type { Comp } from "./viewer/types";
 
 export function sourceNameForColumn(
@@ -82,16 +84,177 @@ function hasCompAdjustments(): boolean {
   return false;
 }
 
+function lastComp(): Comp | undefined {
+  return activeComps[activeComps.length - 1];
+}
+
+// ── Action handlers ──────────────────────────────────────────────────────────
+
+function navColumn(delta: number): void {
+  const c = lastComp();
+  if (!c) return;
+  const offset = visibleColumnOffset(c.visibleCols, c.currentCol);
+  const next = (offset + delta + c.visibleCols.length) % c.visibleCols.length;
+  c.setColumn(c.visibleCols[next]);
+}
+
+function navRow(delta: number): void {
+  const c = lastComp();
+  if (c) c.setRow(c.currentRow + delta);
+}
+
+function adjustBracket(code: "BracketLeft" | "BracketRight", shiftKey: boolean): void {
+  const c = lastComp();
+  if (!c) return;
+  const toast = applyBracketAdjustment(c, { code, shiftKey });
+  if (!toast) return;
+  syncAll();
+  showToast(toast);
+}
+
+function cycleGamma(dir: 1 | -1): void {
+  const c = lastComp();
+  if (!c) return;
+  const col = c.currentCol;
+  const next = cycleGammaMismatchCheck(c.colGammaCheck[col], dir);
+  c.colGammaCheck[col] = next;
+  syncAll();
+  if (next) {
+    showToast([
+      { text: sourceNameForColumn(c, col), size: "small", muted: true },
+      { text: "Gamma mismatch check", size: "normal" },
+      { text: gammaMismatchCheckValueLabel(next), size: "large" },
+      { text: gammaMismatchCheckName(next), size: "small" },
+      { text: gammaMismatchCheckPowLabel(next), size: "tiny", muted: true },
+    ]);
+  } else {
+    showToast("Gamma mismatch check OFF");
+  }
+}
+
+function resetAdjustmentsAction(all: boolean): void {
+  const c = lastComp();
+  if (!c) return;
+  if (all) {
+    c.colBrightness.fill(1.0);
+    c.colGammaCheck.fill(null);
+    c.colContrast.fill(1.0);
+    syncAll();
+    showToast("↺ Reset all adjustments");
+  } else {
+    const col = c.currentCol;
+    c.colBrightness[col] = 1.0;
+    c.colGammaCheck[col] = null;
+    c.colContrast[col] = 1.0;
+    syncAll();
+    showToast("↺ Reset Source " + (col + 1) + " adjustments");
+  }
+}
+
+function closeViewer(source: "key" | "mouse"): void {
+  // Keyboard close resets pending adjustments first (then closes on a second
+  // press); a mouse gesture always just closes.
+  if (source === "key" && hasCompAdjustments()) {
+    resetAdjustments();
+    const c = lastComp();
+    if (c) {
+      c.colBrightness.fill(1.0);
+      c.colGammaCheck.fill(null);
+      c.colContrast.fill(1.0);
+    }
+    syncAll();
+    showToast(cur().toast);
+    return;
+  }
+  lastComp()?.close();
+}
+
+interface ActionCtx {
+  source: "key" | "mouse";
+}
+
+const HANDLERS: Record<ActionId, (ctx: ActionCtx) => void> = {
+  "zoom.in": () => doZoomIn(),
+  "zoom.out": () => doZoomOut(),
+  "zoom.fit": () => doZoomFit(),
+  "zoom.oneToOne": () => doZoom1to1(),
+
+  "nav.colPrev": () => navColumn(-1),
+  "nav.colNext": () => navColumn(1),
+  "nav.rowPrev": () => navRow(-1),
+  "nav.rowNext": () => navRow(1),
+
+  "display.canvas": () => {
+    toggleFillCanvas();
+    applyFillCanvas();
+    for (const comp of activeComps) comp.updateFillCanvasBtn?.();
+    showToast(fillCanvasEnabled ? "Canvas: Fill" : "Canvas: Fit");
+  },
+  "display.minimap": () => {
+    toggleNavMap();
+    for (const comp of activeComps) comp.updateNavMap?.();
+    showToast(navMapEnabled ? "Minimap ON" : "Minimap OFF");
+  },
+  "display.rowNav": () => {
+    const nav = getShadowRoot().querySelector("._scf_row_nav") as HTMLElement | null;
+    if (!nav) return;
+    const hidden = nav.classList.toggle("_scf_ui_force_hidden");
+    showToast("Row nav: " + (hidden ? "off" : "on"));
+    if (!hidden) lastComp()?.revealRowNav?.();
+  },
+  "display.bgLoad": () => {
+    const c = lastComp();
+    if (!c) return;
+    const next = !c.bgLoadAll();
+    c.setBgLoadAll(next);
+    showToast("Lazy load: " + (next ? "bg (load all)" : "viewport only"));
+    if (next) c.triggerBgLoad();
+  },
+
+  "filter.next": () => { cycleMode(1); syncAll(); showToast(cur().toast); },
+  "filter.prev": () => { cycleMode(-1); syncAll(); showToast(cur().toast); },
+  "gamma.next": () => cycleGamma(1),
+  "gamma.prev": () => cycleGamma(-1),
+  "bright.up": () => adjustBracket("BracketRight", false),
+  "bright.down": () => adjustBracket("BracketLeft", false),
+  "contrast.up": () => adjustBracket("BracketRight", true),
+  "contrast.down": () => adjustBracket("BracketLeft", true),
+  "adjust.resetSource": () => resetAdjustmentsAction(false),
+  "adjust.resetAll": () => resetAdjustmentsAction(true),
+
+  "viewer.close": (ctx) => closeViewer(ctx.source),
+};
+
+/** Run the action whose main/extra binding matches this event, in the given
+ *  phase. Returns true if one fired. First registered action wins. */
+function dispatchKey(e: KeyboardEvent, phase: "down" | "up"): boolean {
+  const hasComp = activeComps.length > 0;
+  for (const meta of ACTIONS) {
+    if ((meta.phase ?? "down") !== phase) continue;
+    if (!hasComp && !meta.siteLevel) continue;
+    const pair = shortcutPairFor(meta.id);
+    if (
+      keyShortcutMatchesEvent(pair.main, e) ||
+      (pair.extra != null && keyShortcutMatchesEvent(pair.extra, e))
+    ) {
+      e.preventDefault();
+      HANDLERS[meta.id]({ source: "key" });
+      return true;
+    }
+  }
+  return false;
+}
+
 export function setupKeyboard(hostname?: string): void {
   window.addEventListener(
     "keydown",
     (e) => {
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (isEditing()) return;
-      if (activeComps.length === 0 && !siteBehaviorEnabled(hostname)) return;
+      const hasComp = activeComps.length > 0;
+      if (!hasComp && !siteBehaviorEnabled(hostname)) return;
 
-      // V: open viewer on slow.pics / comp.pics (before comp-only guard)
-      if (e.code === "KeyV" && activeComps.length === 0) {
+      // V: open viewer on slow.pics / comp.pics (no viewer open yet).
+      if (e.code === "KeyV" && !hasComp && !e.ctrlKey && !e.altKey && !e.metaKey) {
         const btn = document.querySelector<HTMLElement>("[data-yacomp-comppics]");
         if (btn) {
           e.preventDefault();
@@ -106,124 +269,18 @@ export function setupKeyboard(hostname?: string): void {
         return;
       }
 
-      if (activeComps.length === 0) return;
-
-      switch (e.code) {
-        case "Escape":
+      // Fixed digit jumps 1–9 → that source (not customizable).
+      if (hasComp && /^Digit[1-9]$/.test(e.code) && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        const comp = lastComp();
+        const idx = parseInt(e.code.charAt(5), 10) - 1;
+        if (comp && idx < comp.visibleCols.length) {
           e.preventDefault();
-          if (hasCompAdjustments()) {
-            resetAdjustments();
-            const comp = activeComps[activeComps.length - 1];
-            if (comp) {
-              comp.colBrightness.fill(1.0);
-              comp.colGammaCheck.fill(null);
-              comp.colContrast.fill(1.0);
-            }
-            syncAll();
-            showToast(cur().toast);
-          } else {
-            activeComps[activeComps.length - 1].close();
-          }
-          break;
-
-        case "Minus": // zoom out
-          e.preventDefault();
-          doZoomOut();
-          break;
-
-        case "Equal": // zoom in (= / +)
-          e.preventDefault();
-          doZoomIn();
-          break;
-
-        case "Digit0": // fit to width
-          e.preventDefault();
-          doZoomFit();
-          break;
-
-        case "KeyO": // 1:1
-          e.preventDefault();
-          doZoom1to1();
-          break;
-
-        case "ArrowLeft":
-        case "KeyH": {
-          e.preventDefault();
-          const comp = activeComps[activeComps.length - 1];
-          const offset = visibleColumnOffset(comp.visibleCols, comp.currentCol);
-          const next = (offset - 1 + comp.visibleCols.length) % comp.visibleCols.length;
-          comp.setColumn(comp.visibleCols[next]);
-          break;
+          comp.setColumn(comp.visibleCols[idx]);
         }
-
-        case "ArrowRight":
-        case "KeyL": {
-          e.preventDefault();
-          const comp = activeComps[activeComps.length - 1];
-          const offset = visibleColumnOffset(comp.visibleCols, comp.currentCol);
-          const next = (offset + 1) % comp.visibleCols.length;
-          comp.setColumn(comp.visibleCols[next]);
-          break;
-        }
-
-        case "ArrowUp":
-        case "KeyK": {
-          e.preventDefault();
-          const comp = activeComps[activeComps.length - 1];
-          comp.setRow(comp.currentRow - 1);
-          break;
-        }
-
-        case "ArrowDown":
-        case "KeyJ": {
-          e.preventDefault();
-          const comp = activeComps[activeComps.length - 1];
-          comp.setRow(comp.currentRow + 1);
-          break;
-        }
-
-        case "Digit1":
-        case "Digit2":
-        case "Digit3":
-        case "Digit4":
-        case "Digit5":
-        case "Digit6":
-        case "Digit7":
-        case "Digit8":
-        case "Digit9": {
-          const comp = activeComps[activeComps.length - 1];
-          if (!comp) break;
-          const idx = parseInt(e.code.charAt(5), 10) - 1;
-          if (idx < comp.visibleCols.length) {
-            e.preventDefault();
-            comp.setColumn(comp.visibleCols[idx]);
-          }
-          break;
-        }
-
-        case "KeyM": {
-          if (activeComps.length === 0) break;
-          e.preventDefault();
-          toggleNavMap();
-          for (const comp of activeComps) {
-            if (comp.updateNavMap) comp.updateNavMap();
-          }
-          showToast(navMapEnabled ? "Minimap ON" : "Minimap OFF");
-          break;
-        }
-
-        case "BracketLeft":
-        case "BracketRight": {
-          const comp = activeComps[activeComps.length - 1];
-          if (!comp) break;
-          const toast = applyBracketAdjustment(comp, e);
-          if (!toast) break;
-          e.preventDefault();
-          syncAll();
-          showToast(toast);
-          break;
-        }
+        return;
       }
+
+      dispatchKey(e, "down");
     },
     true,
   );
@@ -231,99 +288,22 @@ export function setupKeyboard(hostname?: string): void {
   window.addEventListener(
     "keyup",
     (e) => {
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (isEditing()) return;
-      if (activeComps.length === 0 && !siteBehaviorEnabled(hostname)) return;
+      const hasComp = activeComps.length > 0;
+      if (!hasComp && !siteBehaviorEnabled(hostname)) return;
 
-      if (e.key === "Escape" && activeComps.length === 0 && hasAdjustments()) {
+      // No viewer open: Escape clears page-level filter adjustments.
+      if (
+        e.key === "Escape" && !hasComp && hasAdjustments() &&
+        !e.ctrlKey && !e.altKey && !e.metaKey
+      ) {
         resetAdjustments();
         syncAll();
         showToast(cur().toast);
         return;
       }
 
-      // F / Shift+F: cycle filter modes
-      if (e.code === "KeyF") {
-        cycleMode(e.shiftKey ? -1 : 1);
-        syncAll();
-        showToast(cur().toast);
-        return;
-      }
-
-      // B: toggle background-load mode for active comparison
-      if (e.code === "KeyB" && activeComps.length > 0) {
-        const comp = activeComps[activeComps.length - 1];
-        const next = !comp.bgLoadAll();
-        comp.setBgLoadAll(next);
-        showToast("Lazy load: " + (next ? "bg (load all)" : "viewport only"));
-        if (next) comp.triggerBgLoad();
-        return;
-      }
-
-      // C: toggle canvas fill/fit mode
-      if (e.code === "KeyC" && activeComps.length > 0) {
-        toggleFillCanvas();
-        applyFillCanvas();
-        for (const comp of activeComps) comp.updateFillCanvasBtn?.();
-        showToast(fillCanvasEnabled ? "Canvas: Fill" : "Canvas: Fit");
-        return;
-      }
-
-      // R: persistently hide / show the row nav sidebar. This is a manual
-      // override on top of auto-hide — force-hidden stays gone regardless of
-      // activity; re-showing hands it back to the auto-hide controller.
-      if (e.code === "KeyR" && activeComps.length > 0) {
-        const nav = getShadowRoot().querySelector("._scf_row_nav") as HTMLElement | null;
-        if (nav) {
-          const hidden = nav.classList.toggle("_scf_ui_force_hidden");
-          showToast("Row nav: " + (hidden ? "off" : "on"));
-          if (!hidden) activeComps[activeComps.length - 1]?.revealRowNav?.();
-        }
-        return;
-      }
-
-      // G / Shift+G: cycle gamma mismatch check presets for current source
-      if (e.code === "KeyG" && activeComps.length > 0) {
-        const comp = activeComps[activeComps.length - 1];
-        const col = comp.currentCol;
-        const next = cycleGammaMismatchCheck(comp.colGammaCheck[col], e.shiftKey ? -1 : 1);
-        comp.colGammaCheck[col] = next;
-        syncAll();
-        const srcName = sourceNameForColumn(comp, col);
-        if (next) {
-          showToast([
-            { text: srcName, size: "small", muted: true },
-            { text: "Gamma mismatch check", size: "normal" },
-            { text: gammaMismatchCheckValueLabel(next), size: "large" },
-            { text: gammaMismatchCheckName(next), size: "small" },
-            { text: gammaMismatchCheckPowLabel(next), size: "tiny", muted: true },
-          ]);
-        } else {
-          showToast("Gamma mismatch check OFF");
-        }
-        return;
-      }
-
-      // \ : reset current source adjustments; Shift+\ : reset all sources
-      if (e.code === "Backslash") {
-        const comp = activeComps[activeComps.length - 1];
-        if (!comp) return;
-        if (e.shiftKey) {
-          comp.colBrightness.fill(1.0);
-          comp.colGammaCheck.fill(null);
-          comp.colContrast.fill(1.0);
-          syncAll();
-          showToast("↺ Reset all adjustments");
-        } else {
-          const col = comp.currentCol;
-          comp.colBrightness[col] = 1.0;
-          comp.colGammaCheck[col] = null;
-          comp.colContrast[col] = 1.0;
-          syncAll();
-          showToast("↺ Reset Source " + (col + 1) + " adjustments");
-        }
-        return;
-      }
+      dispatchKey(e, "up");
     },
     true,
   );

@@ -2,6 +2,9 @@
 // ║  User configuration — persistent settings via GM_getValue / GM_setValue  ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
+import { isValidShortcut, type Shortcut, type ShortcutPair } from "./shortcuts/types";
+import { defaultPair, isActionId, type ActionId } from "./shortcuts/registry";
+
 export const SITE_KEYS = [
   "bhd", "comppics", "frds", "gpw", "hdbits", "ptp", "slowpics", "ssd",
   "blutopia", "aither",
@@ -67,6 +70,9 @@ export interface YacompConfig {
   enabledSites: Record<SiteKey, boolean>;
   filterCycle: FilterModeId[];
   gammaCycle: GammaPresetId[];
+  // Customizable shortcuts (③): only user OVERRIDES are stored, keyed by action
+  // id. The effective binding is the override or the registry default.
+  shortcuts: Partial<Record<ActionId, ShortcutPair>>;
 }
 
 const STORAGE_KEY = "yacomp_config";
@@ -100,6 +106,7 @@ export const DEFAULTS: Readonly<YacompConfig> = {
   enabledSites: ALL_SITES_ENABLED,
   filterCycle: [...FILTER_MODE_IDS],
   gammaCycle: [...GAMMA_PRESET_IDS],
+  shortcuts: {},
 };
 
 function clampNum(val: unknown, min: number, max: number, fallback: number): number {
@@ -141,6 +148,21 @@ function validateOrderedIdList<T extends string>(
     }
   }
   return result;
+}
+
+function validateShortcuts(raw: unknown): Partial<Record<ActionId, ShortcutPair>> {
+  const out: Partial<Record<ActionId, ShortcutPair>> = {};
+  if (typeof raw !== "object" || raw === null) return out;
+  for (const [id, val] of Object.entries(raw as Record<string, unknown>)) {
+    if (!isActionId(id)) continue;
+    if (typeof val !== "object" || val === null) continue;
+    const v = val as Record<string, unknown>;
+    // A binding must have a valid `main`; `extra` is optional.
+    if (!isValidShortcut(v.main)) continue;
+    const extra = isValidShortcut(v.extra) ? (v.extra as Shortcut) : null;
+    out[id] = { main: v.main as Shortcut, extra };
+  }
+  return out;
 }
 
 export function validate(raw: Record<string, unknown>): YacompConfig {
@@ -205,6 +227,7 @@ export function validate(raw: Record<string, unknown>): YacompConfig {
     enabledSites: validateEnabledSites(raw.enabledSites),
     filterCycle: validateOrderedIdList(raw.filterCycle, FILTER_MODE_IDS, DEFAULTS.filterCycle),
     gammaCycle: validateOrderedIdList(raw.gammaCycle, GAMMA_PRESET_IDS, DEFAULTS.gammaCycle),
+    shortcuts: validateShortcuts(raw.shortcuts),
   };
 }
 
@@ -253,6 +276,11 @@ export function ptpGridToggleCollapsed(): string { return config.ptpGridToggleCo
 export function ptpGridToggleExpanded(): string { return config.ptpGridToggleExpanded; }
 
 export function siteEnabled(key: SiteKey): boolean { return config.enabledSites[key]; }
+
+/** Effective binding for an action: the user override or the registry default. */
+export function shortcutPairFor(id: ActionId): ShortcutPair {
+  return config.shortcuts[id] ?? defaultPair(id);
+}
 export function filterCycle(): readonly FilterModeId[] { return config.filterCycle; }
 export function gammaCycle(): readonly GammaPresetId[] { return config.gammaCycle; }
 export function getConfig(): Readonly<YacompConfig> { return config; }
