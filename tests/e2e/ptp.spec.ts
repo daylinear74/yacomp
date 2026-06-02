@@ -103,8 +103,8 @@ test("ptp: the toggle is a single ▦ glyph by default", async ({ page }) => {
   await expect(page.locator("._scf_ptp_grid_toggle")).toHaveText("▦");
 });
 
-test("ptp: collapsed/expanded toggle labels are configurable (▶/▼ pair)", async ({ page }) => {
-  await openPtp(page, { ptpGridToggleCollapsed: "▶", ptpGridToggleExpanded: "▼" });
+test("ptp: the ▶/▼ preset swaps the toggle glyph on fold", async ({ page }) => {
+  await openPtp(page, { ptpGridToggleStyle: "triangles" });
   // The settings UI refreshes already-rendered toggles on save; drive it directly.
   await page.evaluate(() => {
     (window as unknown as { __yacomp: { refreshGridToggles: () => void } })
@@ -116,6 +116,22 @@ test("ptp: collapsed/expanded toggle labels are configurable (▶/▼ pair)", as
   await expect(toggle).toHaveText("▼"); // expanded
   await toggle.click();
   await expect(toggle).toHaveText("▶"); // collapsed again
+});
+
+test("ptp: the Custom style uses the free-text labels", async ({ page }) => {
+  await openPtp(page, {
+    ptpGridToggleStyle: "custom",
+    ptpGridToggleCollapsed: "[+]",
+    ptpGridToggleExpanded: "[-]",
+  });
+  await page.evaluate(() => {
+    (window as unknown as { __yacomp: { refreshGridToggles: () => void } })
+      .__yacomp.refreshGridToggles();
+  });
+  const toggle = page.locator("._scf_ptp_grid_toggle");
+  await expect(toggle).toHaveText("[+]");
+  await toggle.click();
+  await expect(toggle).toHaveText("[-]");
 });
 
 test("ptp: grid images have square (un-rounded) corners", async ({ page }) => {

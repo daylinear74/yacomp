@@ -58,8 +58,10 @@ export interface YacompConfig {
   // What clicking a PTP grid tile does: open the yacomp viewer at that image,
   // or open the full image in a new browser tab.
   ptpGridClick: "viewer" | "tab";
-  // The PTP grid toggle's label, by fold state. Defaults "▦"/"▦" (one glyph);
-  // set to e.g. "▶"/"▼" for an open/closed pair, or any text.
+  // The PTP grid toggle's label style: a preset glyph/word pair, or "custom"
+  // to use the free-text labels below.
+  ptpGridToggleStyle: "grid" | "triangles" | "text" | "custom";
+  // Custom toggle labels, by fold state — used only when the style is "custom".
   ptpGridToggleCollapsed: string;
   ptpGridToggleExpanded: string;
   enabledSites: Record<SiteKey, boolean>;
@@ -92,6 +94,7 @@ export const DEFAULTS: Readonly<YacompConfig> = {
   uiHideDelay: 1000,
   ptpGridImageSize: "thumbnail" as const,
   ptpGridClick: "viewer" as const,
+  ptpGridToggleStyle: "grid" as const,
   ptpGridToggleCollapsed: "▦",
   ptpGridToggleExpanded: "▦",
   enabledSites: ALL_SITES_ENABLED,
@@ -192,6 +195,11 @@ export function validate(raw: Record<string, unknown>): YacompConfig {
       raw.ptpGridClick === "viewer" || raw.ptpGridClick === "tab"
         ? raw.ptpGridClick
         : DEFAULTS.ptpGridClick,
+    ptpGridToggleStyle:
+      raw.ptpGridToggleStyle === "grid" || raw.ptpGridToggleStyle === "triangles" ||
+      raw.ptpGridToggleStyle === "text" || raw.ptpGridToggleStyle === "custom"
+        ? raw.ptpGridToggleStyle
+        : DEFAULTS.ptpGridToggleStyle,
     ptpGridToggleCollapsed: validateLabel(raw.ptpGridToggleCollapsed, DEFAULTS.ptpGridToggleCollapsed),
     ptpGridToggleExpanded: validateLabel(raw.ptpGridToggleExpanded, DEFAULTS.ptpGridToggleExpanded),
     enabledSites: validateEnabledSites(raw.enabledSites),
@@ -240,6 +248,7 @@ export function uiChromeMode(): "always" | "default" | "autohide" { return confi
 export function uiHideDelay(): number { return config.uiHideDelay; }
 export function ptpGridImageSize(): "thumbnail" | "full" { return config.ptpGridImageSize; }
 export function ptpGridClick(): "viewer" | "tab" { return config.ptpGridClick; }
+export function ptpGridToggleStyle(): "grid" | "triangles" | "text" | "custom" { return config.ptpGridToggleStyle; }
 export function ptpGridToggleCollapsed(): string { return config.ptpGridToggleCollapsed; }
 export function ptpGridToggleExpanded(): string { return config.ptpGridToggleExpanded; }
 
