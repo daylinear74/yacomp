@@ -228,6 +228,64 @@ test("hdbits: sibling heading sections place triggers under matching titles", as
   ]);
 });
 
+test("hdbits: 1:1 renders each column at its own native width and re-fits on a deliberate (keyboard) switch", async ({ page }) => {
+  // Size-varying stub: column-A images are 200px wide, column-B 400px.
+  await page.route(/[ti]\.hdbits\.org/, (route) => {
+    const w = /cB/.test(route.request().url()) ? 400 : 200;
+    void route.fulfill({
+      contentType: "image/svg+xml",
+      body: `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="100"><rect width="${w}" height="100" fill="#333"/></svg>`,
+    });
+  });
+  await page.goto("/hdbits/case/116-zoom-mixed-dims");
+  await page.waitForFunction(
+    () => (window as unknown as { __yacomp_test_ready?: boolean }).__yacomp_test_ready === true,
+    undefined,
+    { timeout: 5000 },
+  );
+  await page.locator("._scf_comp_link").first().click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  const rowWidth = () =>
+    page.locator("._scf_comp_row").first().evaluate((el) => (el as HTMLElement).style.width);
+  // Enter 1:1 — column 0 (A) active → its 200px native width, not a global lock.
+  await page.keyboard.press("KeyO");
+  await expect.poll(rowWidth).toBe("200px");
+  // Switch to column 1 (B) → re-fits to 400px (each column its own resolution).
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(rowWidth).toBe("400px");
+  // Back to A → 200px again.
+  await page.keyboard.press("ArrowLeft");
+  await expect.poll(rowWidth).toBe("200px");
+});
+
+test("hdbits: a mouse-sweep across columns does NOT resize 1:1 (re-fit is deliberate-only)", async ({ page }) => {
+  await page.route(/[ti]\.hdbits\.org/, (route) => {
+    const w = /cB/.test(route.request().url()) ? 400 : 200;
+    void route.fulfill({
+      contentType: "image/svg+xml",
+      body: `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="100"><rect width="${w}" height="100" fill="#333"/></svg>`,
+    });
+  });
+  await page.goto("/hdbits/case/116-zoom-mixed-dims");
+  await page.waitForFunction(
+    () => (window as unknown as { __yacomp_test_ready?: boolean }).__yacomp_test_ready === true,
+    undefined,
+    { timeout: 5000 },
+  );
+  await page.locator("._scf_comp_link").first().click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  const row = page.locator("._scf_comp_row").first();
+  const width = () => row.evaluate((el) => (el as HTMLElement).style.width);
+  await page.keyboard.press("KeyO");
+  await expect.poll(width).toBe("200px"); // column A native
+  // Sweep the pointer into column 1's region (right half of the centered row) —
+  // mouseSwitch toggles the visible column but must NOT re-fit (stable scale).
+  const box = await row.boundingBox();
+  await page.mouse.move(box!.x + box!.width - 8, box!.y + box!.height / 2);
+  await expect.poll(() => row.evaluate((el) => (el as HTMLElement).dataset.col)).toBe("1");
+  expect(await width()).toBe("200px"); // still column A's width — no resize on sweep
+});
+
 for (const { file, meta } of cases) {
   test(`hdbits: ${file}`, async ({ page }) => {
     await stubHdbitsImages(page);

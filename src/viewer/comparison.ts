@@ -15,6 +15,7 @@ import {
 import {
   zoomMode, zoomWidth, setZoomMode, setZoomWidth,
   applyZoom, calcZoom, snapZoom, captureZoomAnchor, zoomToast, navMapEnabled,
+  doZoom1to1, refit1to1,
   fillCanvasEnabled, applyFillCanvas, setFillCanvas, setNavMap,
   activeComps, addComp, removeComp,
   type CapturedZoomAnchor,
@@ -322,6 +323,10 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     if (col < 0 || col >= grid.numCols) return;
     if (!comp.visibleCols.includes(col)) return;
     switchColumn(col);
+    // A DELIBERATE column move (keyboard / column-nav) re-fits 1:1 to this
+    // column's native width; the mouse-sweep (raw switchColumn) does not, so
+    // sweeping to compare stays at one stable scale instead of resizing.
+    refit1to1();
   };
 
   comp.setSourceVisible = (col: number, visible: boolean) => {
@@ -443,14 +448,9 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   if (initialZoom.mode === "custom") {
     applyZoom();
   } else if (cfgZoomMode() === "1:1") {
-    const apply1to1 = () => {
-      if (!row0Sizer.naturalWidth) return;
-      setZoomWidth(row0Sizer.naturalWidth);
-      setZoomMode("1:1");
-      applyZoom();
-    };
-    if (row0Sizer.complete && row0Sizer.naturalWidth) apply1to1();
-    else row0Sizer.addEventListener("load", apply1to1, { once: true });
+    // 1:1 from the ACTIVE column's native width (doZoom1to1 waits for its image
+    // to measure); silent so opening doesn't pop a zoom toast.
+    doZoom1to1({ silent: true });
   }
   rowNav.updateRowNav(initialPosition.row);
   if (initialPosition.row !== 0) {
