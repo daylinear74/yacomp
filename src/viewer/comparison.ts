@@ -29,6 +29,7 @@ import { createFillCanvasBtn } from "./fill-canvas-btn";
 import { createToolbar } from "./toolbar";
 import { normalizeGridInitialPosition, normalizeGridInitialZoom } from "./initial-state";
 import { createCloseBtn } from "./close-btn";
+import { createAutoHide } from "./auto-hide";
 import {
   createDefaultVisibleColumns,
   pointerVisibleColumn,
@@ -126,7 +127,9 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     shadowRoot.appendChild(labelEl);
   }
   labelEl.innerHTML = "";
-  labelEl.style.opacity = "0";
+  // Visibility is owned by the auto-hide controller (created below); the label
+  // starts hidden until the first reveal.
+  labelEl.classList.add("_scf_ui_autohidden");
 
   const compDiv = document.createElement("div") as HTMLDivElement;
   compDiv.className = "_scf_comp";
@@ -212,7 +215,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
         labelEl!.appendChild(document.createTextNode("\u00a0 "));
       }
     }
-    labelEl!.style.opacity = "1";
+    comp.revealColumnNav?.();
     // Update nav map thumbnail for new column (only when zoomed)
     if (compDiv.classList.contains("_scf_zoomed")) {
       const rd = allRowData[comp.currentRow || 0];
@@ -277,10 +280,6 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     row0Sizer.addEventListener("load", () => setTimeout(triggerBgLoad, 200), { once: true });
     setTimeout(triggerBgLoad, 3000);
   }
-
-  compDiv.addEventListener("mouseleave", () => {
-    labelEl!.style.opacity = "0";
-  });
 
   const origContainerDisplay = container.style.display;
   const origBtnDisplay = btn.style.display;
@@ -377,6 +376,20 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   const closeBtn = createCloseBtn(() => comp.close());
   comp.updateCloseBtn = closeBtn.updatePosition;
 
+  // Auto-hide chrome controller (① auto-hide UI) — fades the label, row nav,
+  // close button and toolbar after a spell of no activity; reveals on action.
+  const autoHide = createAutoHide({
+    compDiv,
+    labelEl,
+    rowNavEl: rowNav.rowNavEl,
+    closeBtnEl: closeBtn.closeBtnEl,
+    toolbarEl: toolbar.toolbarEl,
+    fillCanvasBtnEl: fillCanvasBtn.fillCanvasBtnEl,
+  });
+  comp.revealColumnNav = autoHide.revealColumnNav;
+  comp.revealRowNav = autoHide.revealRowNav;
+  comp.syncFillCanvasVisibility = autoHide.syncFillCanvasVisibility;
+
   if (initialPosition.col !== 0) switchColumn(initialPosition.col);
 
   comp.setRow = (rowIdx: number) => {
@@ -384,6 +397,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     comp.currentRow = rowIdx;
     allRowData[rowIdx].rowDiv.scrollIntoView({ behavior: "smooth", block: "center" });
     rowNav.updateRowNav(rowIdx);
+    comp.revealRowNav?.();
     showToast("Row " + (rowIdx + 1) + " / " + comp.numRows);
   };
 
@@ -422,11 +436,14 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     fillCanvasBtn.cleanup();
     closeBtn.cleanup();
     toolbar.cleanup();
+    autoHide.cleanup();
     document.body.style.overflow = "";
     container.style.display = origContainerDisplay;
     btn.style.display = origBtnDisplay;
 
-    labelEl!.style.opacity = "0";
+    // Label persists in the shadow root (reused by id) — leave it hidden so it
+    // doesn't flash on the next open until the first reveal.
+    labelEl!.classList.add("_scf_ui_autohidden");
     labelEl!.innerHTML = "";
 
     setZoomMode("fit");

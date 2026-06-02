@@ -52,6 +52,12 @@ describe("validate — numeric clamping", () => {
     expect(validate({ lazyLoadMargin: -10 }).lazyLoadMargin).toBe(0);
     expect(validate({ lazyLoadMargin: 5000 }).lazyLoadMargin).toBe(2000);
   });
+  test("clamps uiHideDelay to [200, 5000] and falls back when invalid", () => {
+    expect(validate({ uiHideDelay: 1500 }).uiHideDelay).toBe(1500);
+    expect(validate({ uiHideDelay: 50 }).uiHideDelay).toBe(200);
+    expect(validate({ uiHideDelay: 99999 }).uiHideDelay).toBe(5000);
+    expect(validate({ uiHideDelay: NaN }).uiHideDelay).toBe(DEFAULTS.uiHideDelay);
+  });
 });
 
 describe("validate — discriminated unions", () => {
@@ -87,6 +93,12 @@ describe("validate — boolean fields", () => {
   test("boolean is preserved", () => {
     expect(validate({ mouseSwitch: false }).mouseSwitch).toBe(false);
     expect(validate({ verboseZoom: true }).verboseZoom).toBe(true);
+  });
+  test("uiAlwaysShow is a boolean field with a default fallback", () => {
+    expect(validate({ uiAlwaysShow: true }).uiAlwaysShow).toBe(true);
+    expect(validate({ uiAlwaysShow: "yes" as unknown as boolean }).uiAlwaysShow).toBe(
+      DEFAULTS.uiAlwaysShow,
+    );
   });
 });
 
