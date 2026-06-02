@@ -389,6 +389,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   comp.revealColumnNav = autoHide.revealColumnNav;
   comp.revealRowNav = autoHide.revealRowNav;
   comp.syncFillCanvasVisibility = autoHide.syncFillCanvasVisibility;
+  comp.syncAutoHide = autoHide.resync;
 
   if (initialPosition.col !== 0) switchColumn(initialPosition.col);
 
