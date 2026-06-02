@@ -5,9 +5,10 @@
 import type { GridCell, Grid } from "./types";
 import {
   hasVsOrPipe, hasExplicitComparison, splitNames, looksLikeNames,
-  findComparisonNames, namesFromLeadingStructuredLabels, namesFromHeadings, isOriginalPost,
+  findComparisonNames, namesFromLeadingStructuredLabels, namesFromColorSpans, namesFromHeadings, isOriginalPost,
   namesFromSiblingInfo, looksLikeProse, asColumnTitles,
   foldTrailingSize, isNonSourceLabel, isUrlLabel, isFooterLabel, tidyName, isMultiSourceLabel,
+  stripAsymmetricTitle,
 } from "./names";
 
 // Re-exported from names.ts (moved there so name strategies can guard with it).
@@ -32,7 +33,9 @@ function collectTextLines(node: ChildNode, lines: string[]): void {
     return;
   }
   if (node.nodeType === 3) {
-    lines[lines.length - 1] += node.textContent || "";
+    const parts = (node.textContent || "").split(/\r?\n/);
+    lines[lines.length - 1] += parts[0] ?? "";
+    for (const part of parts.slice(1)) lines.push(part);
     return;
   }
   for (const child of node.childNodes) {
@@ -59,6 +62,11 @@ function labelTextFromNode(node: ChildNode): string | null {
   return t ? t.replace(/:$/, "").trim() : null;
 }
 
+function isInlineLabelNode(node: ChildNode): boolean {
+  if (node.nodeType === 3) return !/[\r\n]/.test(node.textContent || "");
+  return /^(?:A|B|STRONG|SPAN|FONT|I|U|EM|SMALL)$/.test(node.nodeName);
+}
+
 function isExternalTextLink(anchor: HTMLAnchorElement): boolean {
   return !anchor.querySelector("img") && anchor.origin !== location.origin;
 }
@@ -71,6 +79,23 @@ function isExternalTextLink(anchor: HTMLAnchorElement): boolean {
 const NON_SCREENSHOT_IMG_RE = /(?:\/\/|\.)flagcounter\.com\//i;
 function isNonScreenshotImg(img: HTMLImageElement): boolean {
   return NON_SCREENSHOT_IMG_RE.test(img.src);
+}
+
+function screenshotImagesIn(container: Element): HTMLImageElement[] {
+  return [...container.querySelectorAll("img")].filter((img) => !isNonScreenshotImg(img));
+}
+
+function hasUnclaimedScreenshotImage(container: Element, excludeImgs: Set<HTMLImageElement>): boolean {
+  return screenshotImagesIn(container).some((img) => !excludeImgs.has(img));
+}
+
+function directShowhideColumnTitle(container: Element): { label: string; el: Element } | null {
+  for (const child of container.children) {
+    if (!child.matches("label.label_showhide")) continue;
+    const label = child.textContent!.replace(/\s*\[(?:show|hide)\]\s*/gi, " ").trim();
+    if (asColumnTitles(label)) return { label, el: child };
+  }
+  return null;
 }
 
 /** Walk container's childNodes, collecting BR-separated image groups with labels.
@@ -88,6 +113,8 @@ function collectGroups(container: Element, excludeImgs: Set<HTMLImageElement>): 
   // Accumulate consecutive label nodes on the same line; a <br> ends the line so
   // the next line REPLACES the label (last line before the images wins).
   let lineBroken = true;
+  let pendingLabelInline = false;
+  let pendingWideInlineGap = false;
 
   const visit = (node: ChildNode): void => {
     if (node.nodeName === "BR") {
@@ -98,6 +125,8 @@ function collectGroups(container: Element, excludeImgs: Set<HTMLImageElement>): 
         group = [];
         pendingLabel = null;
         pendingLabelEl = null;
+        pendingLabelInline = false;
+        pendingWideInlineGap = false;
       }
       lineBroken = true;
     } else if (node.nodeName === "A") {
@@ -116,26 +145,58 @@ function collectGroups(container: Element, excludeImgs: Set<HTMLImageElement>): 
         // linked comparison, not arbitrary inline screenshots that follow it.
         pendingLabel = null;
         pendingLabelEl = null;
+        pendingLabelInline = false;
+        pendingWideInlineGap = false;
       }
     } else if (node.nodeType === 1 && (node as Element).querySelector("img")) {
-      for (const child of node.childNodes) visit(child);
+      const el = node as Element;
+      if (hasUnclaimedScreenshotImage(el, excludeImgs)) {
+        for (const child of el.childNodes) visit(child);
+      } else if (!group.length) {
+        const title = directShowhideColumnTitle(el);
+        if (title) {
+          pendingLabel = title.label;
+          pendingLabelEl = title.el;
+          pendingLabelInline = true;
+          pendingWideInlineGap = false;
+          lineBroken = false;
+        }
+      }
     } else if (!group.length && node.nodeName !== "TABLE") {
       // Technical-information tables such as BDInfo contain slash-delimited
       // codec metadata; their last line is not a label for later screenshots.
+      const rawText = node.nodeType === 3 ? node.textContent || "" : "";
+      const textNodeHasBreak = node.nodeType === 3 && /[\r\n]/.test(node.textContent || "");
       const t = labelTextFromNode(node);
       if (t) {
-        // Accumulate ONLY the "<strong>release</strong> - AC3 5.1 - size" shape:
-        // inline text immediately following a BOLD element on the same line.
-        const prevBold = pendingLabelEl?.nodeName === "STRONG" || pendingLabelEl?.nodeName === "B";
+        // Accumulate one inline label line that is split across sibling nodes,
+        // including nested bold snippets inside a parenthetical release note.
         const accumulate =
-          !!pendingLabel && !lineBroken && node.nodeType === 3 && prevBold;
+          !!pendingLabel && !lineBroken && pendingLabelInline && isInlineLabelNode(node);
         if (accumulate) {
-          pendingLabel = `${pendingLabel} ${t}`;
+          const gap = pendingWideInlineGap ? "   " : " ";
+          pendingLabel = `${pendingLabel}${gap}${t}`.replace(/\s+([),.:;!?])/g, "$1");
         } else {
           pendingLabel = t;
           pendingLabelEl = node;
+          pendingLabelInline = isInlineLabelNode(node);
         }
+        pendingWideInlineGap = false;
         lineBroken = false;
+      } else if (
+        pendingLabel &&
+        !lineBroken &&
+        pendingLabelInline &&
+        node.nodeType === 3 &&
+        !textNodeHasBreak &&
+        /^[\s\u00a0]+$/.test(rawText) &&
+        /(?:\u00a0| {3,}|\t)/.test(rawText)
+      ) {
+        pendingWideInlineGap = true;
+      }
+      if (textNodeHasBreak) {
+        lineBroken = true;
+        pendingWideInlineGap = false;
       }
     }
   };
@@ -158,12 +219,18 @@ function collectGroups(container: Element, excludeImgs: Set<HTMLImageElement>): 
  *  grid. Only an explicit vs/pipe separator counts — a dash/comma in a label is
  *  treated as part of one source name (e.g. "release - AC3 5.1 - 1.06 GiB"),
  *  so such per-group labels stay as single columns of one transposed grid. */
-function buildMultiCompGrids(groups: GridCell[][], groupLabels: (string | null)[], groupLabelEls: (ChildNode | null)[]): Grid[] | null {
+function buildMultiCompGrids(
+  groups: GridCell[][],
+  groupLabels: (string | null)[],
+  groupLabelEls: (ChildNode | null)[],
+  allowSingleLateFallback = true,
+): Grid[] | null {
   const labeledGroups = groupLabels
     .map((label, index) => ({ label, index }))
-    .filter((g): g is { label: string; index: number } => !!g.label && hasVsOrPipe(g.label));
+    .map((g) => g.label ? { ...g, names: asColumnTitles(g.label) } : { ...g, names: null })
+    .filter((g): g is { label: string; index: number; names: string[] | null } => !!g.label && hasVsOrPipe(g.label));
   if (!labeledGroups.length) return null;
-  if (groups.length > 1 && labeledGroups.length === 1) return null;
+  if (groups.length > 1 && labeledGroups.length === 1 && labeledGroups[0].index === 0) return null;
   // Single-comparison-as-per-source-groups shape: EVERY group has its own
   // label and NONE uses an explicit vs/|/ ÷ separator (the labels are single
   // source names, often "release - AC3 5.1 - size"). That is one comparison
@@ -179,15 +246,12 @@ function buildMultiCompGrids(groups: GridCell[][], groupLabels: (string | null)[
 
   const results: Grid[] = [];
   for (let i = 0; i < labeledGroups.length; i++) {
-    const { label, index } = labeledGroups[i];
+    const { label, index, names } = labeledGroups[i];
     const nextIndex = labeledGroups[i + 1]?.index ?? groups.length;
     const sectionGroups = groups.slice(index, nextIndex);
     const imgs = sectionGroups.flat();
     if (imgs.length < 2) continue;
-
-    const names = splitNames(label);
-    if (!names || !looksLikeNames(names))
-      continue;
+    if (!names) continue;
 
     const shaped = reshapeGrid(sectionGroups, imgs, names);
     if (!shaped) continue;
@@ -198,16 +262,36 @@ function buildMultiCompGrids(groups: GridCell[][], groupLabels: (string | null)[
       anchorEl: groupLabelEls[index],
     });
   }
-  return results.length ? results : null;
+  if (results.length) return results;
+
+  const singleValid = labeledGroups.filter((g) => g.names);
+  if (allowSingleLateFallback && singleValid.length === 1 && singleValid[0].index > 0) {
+    const { label, index, names } = singleValid[0];
+    const sectionGroups = groups.slice(index);
+    const imgs = sectionGroups.flat();
+    if (names && imgs.length >= 2) {
+      const shaped = reshapeGrid(sectionGroups, imgs, names);
+      if (shaped) {
+        return [{
+          rows: shaped.gridRows,
+          numCols: shaped.numCols,
+          names,
+          anchorEl: groupLabelEls[index],
+        }];
+      }
+    }
+  }
+
+  return null;
 }
 
 function singleGroupLabelInfo(groupLabels: (string | null)[], groupLabelEls: (ChildNode | null)[]): { names: string[]; anchorEl: ChildNode | null } | null {
   const labels = groupLabels
     .map((label, index) => ({ label, index }))
-    .filter((g): g is { label: string; index: number } => !!g.label && hasVsOrPipe(g.label));
+    .map((g) => g.label ? { ...g, names: asColumnTitles(g.label) } : { ...g, names: null })
+    .filter((g): g is { label: string; index: number; names: string[] } => !!g.label && !!g.names);
   if (labels.length !== 1) return null;
-  const names = splitNames(labels[0].label);
-  return looksLikeNames(names) ? { names, anchorEl: groupLabelEls[labels[0].index] } : null;
+  return { names: labels[0].names, anchorEl: groupLabelEls[labels[0].index] };
 }
 
 /** Final pass on a grid's names: drop a name set that is entirely bare numbers
@@ -216,7 +300,27 @@ function singleGroupLabelInfo(groupLabels: (string | null)[], groupLabelEls: (Ch
 function finalizeNames(names: string[] | null): string[] | null {
   if (!names || !names.length) return names;
   if (names.every((n) => /^\d+$/.test(n.trim()))) return null;
-  return names.map(tidyName);
+  return names.map((name, index) =>
+    tidyName(index > 0 ? name.replace(/^\s*v(?:s\.?|\.)\s+/i, "") : name));
+}
+
+function cleanPerSourceGroupLabel(label: string, stripIncidentalNotes = false): string {
+  let cleaned = foldTrailingSize(label).replace(/^\s*\|\s*/, "");
+  if (stripIncidentalNotes) {
+    cleaned = cleaned
+      .replace(/\s*@User\b/gi, "")
+      .replace(/\s*-\s*video size\s*:.*$/i, "")
+      .replace(/\s*-\s*nuked\b.*$/i, "");
+  }
+  cleaned = cleaned.trim();
+  const terminalSource = cleaned.match(/\(\d{4}\)\s+(?:[A-Z]{2,4}\s+)?(?:blu-?ray|bd|uhd|dvd|hd-?dvd|web-?dl|webrip|hdtv|remux)\b.*$/i);
+  if (terminalSource && looksLikeProse([cleaned])) return tidyName(terminalSource[0]);
+  return cleaned;
+}
+
+function cleanPerSourceGroupLabels(labels: string[]): string[] {
+  const stripIncidentalNotes = labels.some((label) => /\s-\s*nuked\b/i.test(label));
+  return labels.map((label) => cleanPerSourceGroupLabel(label, stripIncidentalNotes));
 }
 
 function leadingBoldLabelInfo(container: Element): { names: string[]; anchorEl: Element } | null {
@@ -252,10 +356,8 @@ function leadingVsLabelInfo(container: Element): { names: string[]; anchorEl: El
     if (!VS_LABEL_WRAPPER.has(el.nodeName)) continue;
     const isBold = el.nodeName === "STRONG" || el.nodeName === "B" || !!el.querySelector("strong, b");
     if (!isBold) continue;
-    const t = el.textContent!.trim();
-    if (!t || isNonSourceLabel(t) || !hasVsOrPipe(t)) continue;
-    const names = splitNames(t);
-    if (looksLikeNames(names)) return { names, anchorEl: el };
+    const names = asColumnTitles(el.textContent!.trim());
+    if (names) return { names, anchorEl: el };
   }
   return null;
 }
@@ -287,10 +389,15 @@ function leadingComparisonNames(container: Element): { names: string[]; anchorEl
   const mk = (): Line => ({ text: "", el: null, external: false });
   const raw: Line[] = [mk()];
   for (const node of container.childNodes) {
+    if (node.nodeType === 8) continue;
     if (node.nodeName === "BR") { raw.push(mk()); continue; }
-    if (node.nodeName === "IMG") break;
-    if (node.nodeName === "A" && (node as Element).querySelector("img")) break;
-    if (node.nodeType === 1 && (node as Element).querySelector("img")) break;
+    if (node.nodeName === "IMG") {
+      const img = node as HTMLImageElement;
+      if (/\/\/t\.hdbits\.org\//i.test(img.src)) break;
+      continue;
+    }
+    if (node.nodeName === "A" && (node as Element).querySelector('img[src*="//t.hdbits.org/"]')) break;
+    if (node.nodeType === 1 && (node as Element).querySelector('img[src*="//t.hdbits.org/"]')) break;
     const cur = raw[raw.length - 1];
     if (node.nodeName === "A") {
       const at = (node.textContent || "").trim();
@@ -302,6 +409,20 @@ function leadingComparisonNames(container: Element): { names: string[]; anchorEl
       // hyperlinked source NAME ("<a>JP (Pony Canyon) AVC…</a>") contributes.
       if (isFooterLabel(at)) { cur.external = true; continue; }
       if (isUrlLabel(at)) continue;
+    }
+    if (
+      node.nodeType === 1 &&
+      VS_LABEL_WRAPPER.has(node.nodeName) &&
+      (node as Element).querySelector("br")
+    ) {
+      const splitLines = [""];
+      collectTextLines(node, splitLines);
+      for (let j = 0; j < splitLines.length; j++) {
+        if (j > 0) raw.push(mk());
+        raw[raw.length - 1].text += splitLines[j];
+        raw[raw.length - 1].el = node;
+      }
+      continue;
     }
     cur.text += node.textContent || "";
     // Anchor the "Show comparison" link to the LAST element of the heading line
@@ -316,7 +437,9 @@ function leadingComparisonNames(container: Element): { names: string[]; anchorEl
   // Merge a continuation line ("vs. US …") into the line it continues.
   const lines: Line[] = [];
   for (const ln of raw) {
-    if (lines.length && VS_CONTINUATION_RE.test(ln.text)) {
+    const text = ln.text.trim();
+    const prevText = lines[lines.length - 1]?.text.trim() ?? "";
+    if (lines.length && text && (VS_CONTINUATION_RE.test(ln.text) || /\bv(?:s\.?|\.)\s*$/i.test(prevText))) {
       lines[lines.length - 1].text += ` ${ln.text.trim()}`;
       lines[lines.length - 1].external ||= ln.external;
       // Anchor on the LAST element of the merged heading (the trailing source),
@@ -336,19 +459,50 @@ function leadingComparisonNames(container: Element): { names: string[]; anchorEl
     if (sawExternalAfter) continue;
     // Drop a showhide affordance marker ("Source vs Encode [show]" → "… Encode").
     const t = lines[i].text.replace(/\s*\[(?:show|hide)\]\s*/gi, " ").trim();
-    if (!t || isNonSourceLabel(t) || !VS_BAR_RE.test(t)) continue;
-    const names = splitNames(t);
-    if (names.length >= 2 && looksLikeNames(names) && !looksLikeProse(names)) {
-      // A real column title is a short clean label — it never carries a URL.
-      // A "title" line that does is a slow.pics caption / external-link
-      // description folded in from a quote block (Holubice 838405): mark it
-      // UNRELIABLE so a torrent-page gallery falls back to the 1-wide viewer
-      // instead of these invented columns. (A title that merely sits AFTER a
-      // BDInfo <table> stays reliable — it carries no URL — so legit
-      // quote-adjacent comparisons like 1009/1766 are untouched.)
-      const reliable = !/https?:\/\/|\bslow\.pics/i.test(t);
-      return { names, anchorEl: lines[i].el, reliable };
+    if (!t) continue;
+    const nearestText = (from: number, step: 1 | -1): { text: string; el: ChildNode | null } | null => {
+      for (let j = from; j >= 0 && j < lines.length; j += step) {
+        const text = lines[j].text.replace(/\s*\[(?:show|hide)\]\s*/gi, " ").trim();
+        if (text) return { text, el: lines[j].el };
+      }
+      return null;
+    };
+    if (/^v(?:s\.?|\.)$/i.test(t)) {
+      const prev = nearestText(i - 1, -1);
+      const next = nearestText(i + 1, 1);
+      if (prev && next) {
+        const verticalNames = asColumnTitles(`${prev.text} vs ${next.text}`);
+        if (verticalNames) return { names: verticalNames, anchorEl: next.el, reliable: true };
+      }
+      continue;
     }
+    const trailingVs = t.match(/^(.*?)\s+v(?:s\.?|\.)$/i);
+    if (trailingVs) {
+      const next = nearestText(i + 1, 1);
+      if (next) {
+        const verticalNames = asColumnTitles(`${trailingVs[1]} vs ${next.text}`);
+        if (verticalNames) return { names: verticalNames, anchorEl: next.el, reliable: true };
+      }
+      continue;
+    }
+    if (!VS_BAR_RE.test(t)) continue;
+    const names = asColumnTitles(t);
+    if (!names) {
+      const rejectedNames = splitNames(t);
+      if (rejectedNames.length >= 2 && (lines[i].external || /https?:\/\/|slow\.pics/i.test(t))) {
+        return { names: rejectedNames, anchorEl: lines[i].el, reliable: false };
+      }
+      continue;
+    }
+    // A real column title is a short clean label — it never carries a URL.
+    // A "title" line that does is a slow.pics caption / external-link
+    // description folded in from a quote block (Holubice 838405): mark it
+    // UNRELIABLE so a torrent-page gallery falls back to the 1-wide viewer
+    // instead of these invented columns. (A title that merely sits AFTER a
+    // BDInfo <table> stays reliable — it carries no URL — so legit
+    // quote-adjacent comparisons like 1009/1766 are untouched.)
+    const reliable = !/https?:\/\/|\bslow\.pics/i.test(t);
+    return { names, anchorEl: lines[i].el, reliable };
   }
   return null;
 }
@@ -382,9 +536,9 @@ function leadingComparisonNamesBeforeContainer(container: Element): { names: str
     }
   }
   const t = text.trim();
-  if (!t || isNonSourceLabel(t) || !VS_BAR_RE.test(t)) return null;
-  const names = splitNames(t);
-  if (names.length >= 2 && looksLikeNames(names) && !looksLikeProse(names)) {
+  if (!t || !VS_BAR_RE.test(t)) return null;
+  const names = asColumnTitles(t);
+  if (names) {
     return { names, anchorEl: el };
   }
   return null;
@@ -416,7 +570,10 @@ function sourceLabelsBeforeDocBlocks(scope: Element, stopAt: Node | null): { nam
     const docBlock = !el.querySelector("img") &&
       (!!el.querySelector?.("label.label_showhide") || el.matches?.("table, p.sub"));
     if (docBlock) {
-      const t = (pending.trim() || lastLine).replace(/[:\s]+$/, "").trim();
+      const t = (pending.trim() || lastLine)
+        .replace(/[:\s]+$/, "")
+        .replace(/^\s*v(?:s\.?|\.)\s+/i, "")
+        .trim();
       if (t && isCleanSourceLabel(t) && labels[labels.length - 1] !== t) { labels.push(t); lastEl = el; }
       pending = ""; lastLine = "";
     } else if (el.querySelector?.("img")) {
@@ -463,7 +620,7 @@ function cmpThreadLargestBlock(container: Element, groups: GridCell[][]): Grid[]
   // the fallback from resurrecting an unrelated leftover block (057).
   const h1 = namesFromHeadings();
   if (!h1 || !looksLikeNames(h1)) return null;
-  const total = groups.flat().length;
+  let total = groups.flat().length;
   const block = groups.reduce((a, b) => (b.length > a.length ? b : a), groups[0]);
   if (block.length < h1.length) return null;
 
@@ -504,6 +661,43 @@ function hasSlowPicsLink(container: Element): boolean {
   return false;
 }
 
+function hasAdjacentSlowPicsLinkBeforeImage(container: Element, img: HTMLImageElement | undefined): boolean {
+  if (!img) return false;
+  const links = [...container.querySelectorAll<HTMLAnchorElement>("a[href]")].filter((a) =>
+    (/slow\.pics/i.test(a.href) || /slow\.pics/i.test(a.textContent || "")) &&
+    !!(a.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_FOLLOWING),
+  );
+  const link = links[links.length - 1];
+  if (!link) return false;
+  try {
+    const range = document.createRange();
+    range.setStartAfter(link);
+    range.setEndBefore(img);
+    return !/[A-Za-z0-9]/.test(range.toString());
+  } catch {
+    return false;
+  }
+}
+
+function hasAdjacentFooterSlowPicsLinkBeforeImage(container: Element, img: HTMLImageElement | undefined): boolean {
+  if (!img) return false;
+  const links = [...container.querySelectorAll<HTMLAnchorElement>("a[href]")].filter((a) =>
+    isFooterLabel((a.textContent || "").trim()) &&
+    (/slow\.pics/i.test(a.href) || /slow\.pics/i.test(a.textContent || "")) &&
+    !!(a.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_FOLLOWING),
+  );
+  const link = links[links.length - 1];
+  if (!link) return false;
+  try {
+    const range = document.createRange();
+    range.setStartAfter(link);
+    range.setEndBefore(img);
+    return !/[A-Za-z0-9]/.test(range.toString());
+  } catch {
+    return false;
+  }
+}
+
 function stableGridColumnCount(groups: GridCell[][]): number | null {
   const firstLen = groups[0]?.length ?? 0;
   if (
@@ -514,6 +708,30 @@ function stableGridColumnCount(groups: GridCell[][]): number | null {
     return firstLen;
   }
   return null;
+}
+
+function genericSourceNames(count: number): string[] {
+  return Array.from({ length: count }, (_, i) => `Source ${i + 1}`);
+}
+
+function textBeforeFirstScreenshot(container: Element, groups: GridCell[][]): string {
+  const img = groups[0]?.[0]?.img;
+  if (!img) return "";
+  try {
+    const range = document.createRange();
+    range.setStart(container, 0);
+    range.setEndBefore(img);
+    return range.toString();
+  } catch {
+    return "";
+  }
+}
+
+function flatEncodeNotesSourceNames(container: Element, groups: GridCell[][], total: number): string[] | null {
+  if (!isTorrentPage() || groups.length !== 1 || total < 4 || total % 2 !== 0) return null;
+  const text = textBeforeFirstScreenshot(container, groups);
+  if (!/\bencode\s+notes?\b/i.test(text)) return null;
+  return genericSourceNames(2);
 }
 
 function leadingStructuredLabelInfo(container: Element, groups: GridCell[][]): { names: string[]; anchorEl: Element } | null {
@@ -543,7 +761,7 @@ function hasPreviousSiblingPreviewHeading(container: Element): boolean {
 function trimTrailingLabeledSectionAfterSingleGridLabel(collected: GroupsResult): GroupsResult {
   const gridLabelIndexes = collected.groupLabels
     .map((label, index) => ({ label, index }))
-    .filter((g): g is { label: string; index: number } => !!g.label && hasVsOrPipe(g.label))
+    .filter((g): g is { label: string; index: number } => !!g.label && !!asColumnTitles(g.label))
     .map((g) => g.index);
   if (gridLabelIndexes.length !== 1) return collected;
 
@@ -564,6 +782,60 @@ function trimTrailingLabeledSectionAfterSingleGridLabel(collected: GroupsResult)
     groupLabels: collected.groupLabels.slice(0, sectionIndex),
     groupLabelEls: collected.groupLabelEls.slice(0, sectionIndex),
   };
+}
+
+function trimTrailingFooterSection(collected: GroupsResult): GroupsResult {
+  const sectionIndex = collected.groupLabels.findIndex((label, index) =>
+    index > 0 && !!label && isFooterLabel(label));
+  if (sectionIndex < 0) return collected;
+  return {
+    groups: collected.groups.slice(0, sectionIndex),
+    groupLabels: collected.groupLabels.slice(0, sectionIndex),
+    groupLabelEls: collected.groupLabelEls.slice(0, sectionIndex),
+  };
+}
+
+function hasSameLinePreviousSibling(el: Element): boolean {
+  for (let node = el.previousSibling; node; node = node.previousSibling) {
+    if (node.nodeName === "BR") return false;
+    if ((node.textContent || "").trim()) return true;
+  }
+  return false;
+}
+
+function hasInlineImageFormattingWrapper(container: Element): boolean {
+  return [...container.children].some((child) =>
+    /^(?:STRONG|B|I|EM|U|SPAN|FONT)$/i.test(child.tagName) &&
+    screenshotImagesIn(child).length >= 2);
+}
+
+function trimTrailingGroupsUntilDivisible(collected: GroupsResult, numCols: number): GroupsResult {
+  let { groups, groupLabels, groupLabelEls } = collected;
+  while (groups.length > 1 && groups.flat().length % numCols !== 0) {
+    groups = groups.slice(0, -1);
+    groupLabels = groupLabels.slice(0, -1);
+    groupLabelEls = groupLabelEls.slice(0, -1);
+  }
+  return { groups, groupLabels, groupLabelEls };
+}
+
+function hasRejectedLeadingColumnTitle(container: Element): boolean {
+  let leadingText = "";
+  for (const node of container.childNodes) {
+    if (node.nodeType === 8) continue;
+    if (node.nodeName === "A") {
+      if ((node as Element).querySelector("img")) break;
+      leadingText += node.textContent || "";
+    } else if (node.nodeType === 3) {
+      leadingText += node.textContent || "";
+    } else if (node.nodeName === "BR") {
+      leadingText += " ";
+    } else {
+      break;
+    }
+  }
+  const t = leadingText.trim();
+  return !!t && hasVsOrPipe(t) && !asColumnTitles(t);
 }
 
 /** Reshape groups into a grid based on name count */
@@ -625,11 +897,18 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   if (!collected) return null;
   let { groups, groupLabels, groupLabelEls } = collected;
 
-  const multiComp = buildMultiCompGrids(groups, groupLabels, groupLabelEls);
-  if (multiComp) return multiComp;
+  const earlyTotal = groups.flat().length;
+  const earlyLeadCmp = leadingComparisonNames(container);
+  const hasWholeContainerLeadCmp =
+    !!earlyLeadCmp && earlyLeadCmp.reliable && earlyTotal % earlyLeadCmp.names.length === 0;
+  const multiComp = buildMultiCompGrids(groups, groupLabels, groupLabelEls, !hasWholeContainerLeadCmp);
+  if (multiComp && (!hasWholeContainerLeadCmp || multiComp.length > 1)) return multiComp;
 
-  collected = trimTrailingLabeledSectionAfterSingleGridLabel(collected);
+  collected = trimTrailingFooterSection(trimTrailingLabeledSectionAfterSingleGridLabel(collected));
   ({ groups, groupLabels, groupLabelEls } = collected);
+  if (hasAdjacentFooterSlowPicsLinkBeforeImage(container, groups[0]?.[0]?.img)) {
+    return null;
+  }
 
   // Prefer per-group text labels over page-level headings.
   // Numeric-only labels (1, 2, 37…) are frame/row indices, not source names —
@@ -637,7 +916,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   let names: string[] | null = null;
   let anchorEl: Node | null = null;
   const siblingPreviewHeading = hasPreviousSiblingPreviewHeading(container);
-  const total = groups.flat().length;
+  let total = groups.flat().length;
   // Highest precedence: a leading line with an explicit "vs"/"v."/"|" comparison.
   // Only when its column count divides the screenshots — otherwise it is a
   // sub-section line ("2160p UHD vs 1080p BD") in a wider grid (e.g. a 3-wide
@@ -647,7 +926,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   // block looked like a comparison but couldn't be titled cleanly, so a
   // torrent-page gallery fallback can offer a 1-wide viewer.
   let ambiguousTitle = false;
-  const leadCmp = leadingComparisonNames(container);
+  const leadCmp = earlyLeadCmp;
   if (leadCmp && leadCmp.reliable && total % leadCmp.names.length === 0) {
     names = leadCmp.names;
     anchorEl = leadCmp.anchorEl;
@@ -655,13 +934,40 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     ambiguousTitle = true;
   }
   if (!names && groupLabels.length >= 2 && groupLabels.every((l) => l)) {
-    const allNumeric = groupLabels.every((l) => /^\d+$/.test(l!));
+    const usableLabels = (groupLabels as string[]).filter((label) => !isNonSourceLabel(label));
+    if (usableLabels.length === 1) {
+      const single = asColumnTitles(usableLabels[0]);
+      if (single) names = single;
+    }
+  }
+  if (!names && groupLabels.length >= 2 && groupLabels.every((l) => l)) {
+    const labels = groupLabels as string[];
+    const allNumeric = labels.every((l) => /^\d+$/.test(l));
     // Each label must be a SINGLE source for the transpose (one group per
     // source). If a label is itself a multi-source list (e.g. a section heading
     // "Source (Carlotta | FRA), Geek, TayTO (TWN)"), these groups are separate
     // comparisons, not columns — don't transpose them.
-    const anyMultiSource = (groupLabels as string[]).some(isMultiSourceLabel);
-    if (!allNumeric && !anyMultiSource) names = (groupLabels as string[]).map(foldTrailingSize);
+    const anyMultiSource = labels.some(isMultiSourceLabel);
+    const anyNonSource = labels.some(isNonSourceLabel);
+    if (!allNumeric && !anyMultiSource && !anyNonSource) {
+      names = stripAsymmetricTitle(cleanPerSourceGroupLabels(labels));
+    }
+  }
+  if (!names) {
+    const color = namesFromColorSpans(container);
+    if (color) {
+      if (total % color.length !== 0) {
+        const footerIndex = groupLabels.findIndex((label, index) =>
+          index > 0 && !!label && isFooterLabel(label));
+        if (footerIndex > 0) {
+          groups = groups.slice(0, footerIndex);
+          groupLabels = groupLabels.slice(0, footerIndex);
+          groupLabelEls = groupLabelEls.slice(0, footerIndex);
+          total = groups.flat().length;
+        }
+      }
+      if (total % color.length === 0) names = color;
+    }
   }
   if (!names) {
     const singleLabel = singleGroupLabelInfo(groupLabels, groupLabelEls);
@@ -698,6 +1004,9 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
       anchorEl = showhideLabels.anchorEl;
     }
   }
+  if (!names) {
+    names = flatEncodeNotesSourceNames(container, groups, total);
+  }
   if (!names && hasLocalNonNameHeading(groupLabels)) {
     // The group label is a non-name heading — a section divider ("Video
     // Bitrate", "General") or a gallery caption. The real column title may sit
@@ -720,6 +1029,15 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
       if (h1 && total % h1.length === 0 && looksLikeNames(h1)) {
         names = h1;
       } else {
+        if (
+          isTorrentPage() &&
+          hasSlowPicsLink(container) &&
+          !hasAdjacentSlowPicsLinkBeforeImage(container, groups[0]?.[0]?.img) &&
+          groups.length === 1 &&
+          total >= 2
+        ) {
+          return [{ rows: groups[0].map((c) => [c]), numCols: 1, names: null, anchorEl: null, gallery: true }];
+        }
         return cmpThreadLargestBlock(container, groups);
       }
     }
@@ -737,6 +1055,24 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   if (!names) {
     names = findComparisonNames(container);
   }
+  if (!names && !ambiguousTitle && hasRejectedLeadingColumnTitle(container)) {
+    const h1 = isOriginalPost(container) ? namesFromHeadings() : null;
+    if (h1 && total % h1.length === 0 && looksLikeNames(h1)) {
+      names = h1;
+      anchorEl = null;
+    } else {
+      if (
+        isTorrentPage() &&
+        hasSlowPicsLink(container) &&
+        !hasAdjacentSlowPicsLinkBeforeImage(container, groups[0]?.[0]?.img) &&
+        groups.length === 1 &&
+        total >= 2
+      ) {
+        return [{ rows: groups[0].map((c) => [c]), numCols: 1, names: null, anchorEl: null, gallery: true }];
+      }
+      return null;
+    }
+  }
   // Fall-through to the topic H1: if the chosen local label does NOT divide the
   // screenshots but the original poster's H1 title DOES, the H1 is the real
   // comparison (owner ruling, 2625: a 3-wide "GBR Blu-ray vs GER Blu-ray vs GBR
@@ -748,6 +1084,34 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
       anchorEl = null;
     }
   }
+  if (names && total % names.length !== 0 && hasInlineImageFormattingWrapper(container)) {
+    collected = trimTrailingGroupsUntilDivisible({ groups, groupLabels, groupLabelEls }, names.length);
+    ({ groups, groupLabels, groupLabelEls } = collected);
+    total = groups.flat().length;
+  }
+  if (
+    names?.some((name) => /^comparison$/i.test(name)) &&
+    isTorrentPage() &&
+    hasSlowPicsLink(container) &&
+    !hasAdjacentSlowPicsLinkBeforeImage(container, groups[0]?.[0]?.img) &&
+    groups.length === 1 &&
+    total >= 2
+  ) {
+    return [{ rows: groups[0].map((c) => [c]), numCols: 1, names: null, anchorEl: null, gallery: true }];
+  }
+  if (
+    !names &&
+    isTorrentPage() &&
+    hasSlowPicsLink(container) &&
+    !hasAdjacentSlowPicsLinkBeforeImage(container, groups[0]?.[0]?.img) &&
+    groups.length === 1 &&
+    total >= 2
+  ) {
+    return [{ rows: groups[0].map((c) => [c]), numCols: 1, names: null, anchorEl: null, gallery: true }];
+  }
+  if (!names && isTorrentPage() && hasAdjacentSlowPicsLinkBeforeImage(container, groups[0]?.[0]?.img)) {
+    return null;
+  }
 
   const shaped = reshapeGrid(groups, groups.flat(), names);
   if (!shaped) {
@@ -757,7 +1121,12 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     // gallery, not an A/B comparison. Rather than invent columns or go silent,
     // show them as a 1-wide viewer. Scoped to a single flat image group on a
     // torrent page so it never competes with a real multi-group comparison.
-    if (ambiguousTitle && isTorrentPage() && groups.length === 1 && total >= 2) {
+    const hasClaimedImageInContainer = screenshotImagesIn(container).some((img) => excludeImgs.has(img));
+    const adjacentSlowPics = hasAdjacentSlowPicsLinkBeforeImage(container, groups[0]?.[0]?.img);
+    if (ambiguousTitle && isTorrentPage() && !hasClaimedImageInContainer && !adjacentSlowPics && groups.length === 1 && total >= 2) {
+      return [{ rows: groups[0].map((c) => [c]), numCols: 1, names: null, anchorEl: null, gallery: true }];
+    }
+    if (isTorrentPage() && hasSlowPicsLink(container) && !adjacentSlowPics && groups.length === 1 && total >= 2) {
       return [{ rows: groups[0].map((c) => [c]), numCols: 1, names: null, anchorEl: null, gallery: true }];
     }
     return cmpThreadLargestBlock(container, groups);
@@ -778,6 +1147,11 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
       }
     }
   }
+  if (names && shaped.numCols === names.length + 1) {
+    const hasSourceColor = [...document.querySelectorAll('span[style*="color"]')]
+      .some((span) => /^source$/i.test(span.textContent?.trim() || ""));
+    if (hasSourceColor) names = ["Source", ...names];
+  }
 
   // No usable source label: fall back to defaults. By HDBits convention a
   // 3-wide comparison is Source / Filtered / Encode; any other width is just
@@ -795,6 +1169,15 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
 let _grids: { grid: Grid; container: Element }[] | null = null;
 
 function hdbGridParseContainer(container: Element): Element {
+  while (
+    /^(?:STRONG|B|I|EM|U|SPAN|FONT)$/i.test(container.tagName) &&
+    container.parentElement &&
+    screenshotImagesIn(container).length >= 2 &&
+    hasSameLinePreviousSibling(container)
+  ) {
+    container = container.parentElement;
+  }
+
   const hiddenContent = container.closest("div.div_showhide");
   const label = hiddenContent?.previousElementSibling;
   if (
@@ -833,6 +1216,12 @@ export function getGrids(preClaimed?: Set<HTMLImageElement>): { grid: Grid; cont
     seen.add(parseContainer);
     const parsed = parseGrid(parseContainer, claimed);
     if (parsed) {
+      // A successfully-parsed inner container owns its local screenshots, even
+      // if one auxiliary group was suppressed. Otherwise those leftovers can
+      // leak into an enclosing post parse and hide a later real grid.
+      for (const img of screenshotImagesIn(parseContainer)) {
+        claimed.add(img);
+      }
       for (const grid of parsed) {
         for (const cell of grid.rows.flat()) {
           if (cell.img) claimed.add(cell.img);

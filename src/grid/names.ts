@@ -3,14 +3,16 @@
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
 // Reject pipe/vs splits that look like metadata (years, runtimes, dates)
-const META_RE = /^(\d{4}|\d+\s*min|[a-z]{3,9}\s+\d{1,2},?\s*\d{4}|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})$/i;
+const META_RE = /^(\d{4}|\d+\s*min(?:\/[a-z]+)?|[a-z]{3,9}\s+\d{1,2},?\s*\d{4}|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})$/i;
 // A bare mediainfo/BDInfo metric value ("69.36 kbps", "48 kHz", "23.976 fps").
 // A real source keeps its name ("Amazon (7755 kbps)"). "bit"/"nits" are
 // deliberately excluded — "8-bit"/"10-bit"/"130 nits" are legitimate columns.
 // Resolutions like "1080p"/"2160p" are also not matched.
 const PURE_MEDIAINFO_VALUE_RE = /^\(?\s*[\d.,]+\s*-?\s*(?:kbps|mbps|kb\/s|mb\/s|k?hz|fps)\s*\)?$/i;
+const BITRATE_NOTE_RE = /^\(?\s*~?[\d\s.,]+\s*(?:kbps|mbps|kb\/s|mb\/s)\s*\)?$/i;
 export function looksLikeNames(parts: string[]): boolean {
   if (parts.length < 2) return false;
+  if (looksLikeTechnicalParts(parts)) return false;
   if (parts.some((p) => META_RE.test(p.trim()))) return false;
   // A MIX of a bare-metric column ("69.36 kbps") and a non-metric column
   // ("Subtitle: English") is a mediainfo/BDInfo table, not a comparison. An
@@ -21,7 +23,17 @@ export function looksLikeNames(parts: string[]): boolean {
   return true;
 }
 
-const GENERIC_HEADING_PREFIX_RE = /^\s*(?:screenshot\s+comparison|comparison|screenshots?)\s*/i;
+function looksLikeTechnicalParts(parts: string[]): boolean {
+  const trimmed = parts.map((part) => part.trim()).filter(Boolean);
+  if (trimmed.length < 2) return false;
+  if (trimmed.filter((part) => TECH_ASSIGNMENT_RE.test(part)).length >= 2) return true;
+  if (trimmed.some((part) => /^:\s*\S/.test(part))) return true;
+  if (trimmed.some((part) => GENERIC_ASSIGNMENT_RE.test(part)) && trimmed.every((part) => !SOURCE_TAIL_TOKEN_RE.test(part))) return true;
+  if (trimmed.some((part) => MEDIAINFO_FIELD_RE.test(part)) && trimmed.every((part) => !SOURCE_TAIL_TOKEN_RE.test(part))) return true;
+  return trimmed.every((part) => /^(?:format settings|reference frames(?:\s*:.*)?|input\s*=.*|output\s*=.*)$/i.test(part));
+}
+
+const GENERIC_HEADING_PREFIX_RE = /^\s*(?:screenshots?\s+comparison|comparison|screenshots?)\s*:?\s*/i;
 // A mediainfo FIELD prefix on a comparison line ("Video: GER … | USA …",
 // "Audio: …") merely states what kind of comparison it is — strip it so the
 // real source names remain (owner ruling, 2221/2425).
@@ -40,10 +52,20 @@ const ARROW_TEST = /[<>]{2,}/;
 // A "~" used as a comparison separator, e.g. "AMAZON ~ FRA BD" (owner ruling).
 // Spaces are required so a "~5GB" size approximation is left alone.
 const TILDE_RE = /\s+~\s+/;
+const ANGLE_DASH_RE = /\s*>\s*-\s*<\s*/;
 const DASH_RE = /\s+-\s+/;
 const SLASH_RE = /\s+\/\s+/;
 const TIMES_RE = /\s+×\s+/;
+const WIDE_SPACE_RE = /\s{3,}/;
 const STRUCTURED_LABEL_SELECTOR = 'span[style*="color"], strong, b';
+const TECH_ASSIGNMENT_RE = /\b(?:cabac|ref|deblock|analyse|me|subme|psy|psy_rd|mixed_ref|me_range|chroma_me|trellis|8x8dct|cqm|deadzone|fast_pskip|chroma_qp_offset|threads|sliced_threads|nr|decimate|interlaced|bluray_compat|constrained_intra|bframes|b_pyramid|b_adapt|b_bias|direct|weightb|open_gop|weightp|keyint|keyint_min|scenecut|intra_refresh|rc_lookahead|rc|mbtree|bitrate|ratetol|qcomp|qpmin|qpmax|qpstep|cplxblur|qblur|ip_ratio|aq)\s*=/i;
+const GENERIC_ASSIGNMENT_RE = /\b[A-Za-z_][A-Za-z0-9_]*\s*=/;
+const MEDIAINFO_FIELD_RE = /^(?:id|format(?:\/info| profile| settings)?|codec id(?:\/info)?|duration|bit\s*rate(?: mode)?|bitrate|width|height|display aspect ratio|frame rate(?: mode)?|color space|chroma subsampling|bit depth|scan type|compression mode|stream size|title|language|default|forced|complete name|file size|overall bit rate|writing (?:application|library))\b/i;
+const SOURCE_TAIL_TOKEN_RE = /\b(?:source|encode|filtered|web-?dl|webrip|blu-?ray|bd|uhd|hdtv|hd-?dvd|dvd|remux|amzn|amazon|nf|netflix|hulu|itunes|hdr|sdr|avc|hevc|x264|x265|capture|open\s+matte|criterion|mainframe)\b/i;
+const SOURCE_LEADING_TOKEN_RE = /^(?:source|encode|filtered|web-?dl|webrip|blu-?ray|bd|uhd|hdtv|hd-?dvd|dvd|remux|amzn|amazon|nf|netflix|hulu|itunes|hdr|sdr|avc|hevc|x264|x265|capture|\d{3,4}[pi])/i;
+const REGION_LEADING_TOKEN_RE = /^[A-Z]{2,4}\b/;
+const REGIONISH_RE = /^(?:[A-Z]{2,4}|[A-Z]{2,4}\s*\([^)]+\)|[A-Z]{2,4}\s+[A-Z]{2,4}|[A-Z]{2,4}\s+[A-Z]{2,4}\s*\([^)]+\))$/;
+const SOURCE_PAIR_RE = /^source\s+([A-Za-z0-9][A-Za-z0-9@._-]{1,30})$/i;
 
 export interface NameLabelInfo {
   names: string[];
@@ -77,9 +99,11 @@ export function isFieldLabel(text: string): boolean {
 }
 // A section/footer/structural heading ("See also:", "Slowpics:", "Note:",
 // "Quote", "Hidden text", "Spoiler") — never a source label.
-const FOOTER_LABEL_RE = /^(?:see\s+also|slow\s?\.?\s?pics?|comparisons?|screenshots?|notes?|edit|update|p\.?\s?s\.?|quote|hidden\s+text|spoilers?|click\s+to\s+\w+)\s*:?\s*$/i;
+const FOOTER_LABEL_RE = /^(?:see\s+also|slow\s?\.?\s?pics?|comparisons?|screenshots?|more\s+screens?|notes?|edit|update|p\.?\s?s\.?|quote|hidden\s+text|spoilers?|click\s+to\s+\w+)\s*:?\s*$/i;
 export function isFooterLabel(text: string): boolean {
-  return FOOTER_LABEL_RE.test(text.trim());
+  const t = text.trim();
+  if (/^encode\s+notes?\b/i.test(t)) return true;
+  return FOOTER_LABEL_RE.test(t);
 }
 // A leftover BBCode tag ("[/size]", "[color=red]", "[b]") — never part of a
 // source name. Matched by a known tag whitelist so a real fully-bracketed
@@ -105,12 +129,141 @@ export function isNonSourceLabel(text: string): boolean {
  *  lowercase sentence connector marks prose. No length cap — legit release names
  *  run long, and a comma before a CAPITAL/digit (region lists, bitrates) is fine.
  *  Re-exported from parser.ts for back-compat. */
+function maskNestedSentencePunctuation(text: string): string {
+  let depth = 0;
+  let out = "";
+  for (const ch of text) {
+    if (ch === "(" || ch === "[") depth++;
+    if (depth > 0 && /[.!?]/.test(ch)) out += " ";
+    else out += ch;
+    if (ch === ")" || ch === "]") depth = Math.max(0, depth - 1);
+  }
+  return out
+    .replace(/\b(?:bros|co|corp|inc|ltd)\.\s+/gi, (m) => m.replace(".", " "))
+    .replace(/\bshout!\s+factory\b/gi, (m) => m.replace("!", " "));
+}
+
 export function looksLikeProse(parts: string[]): boolean {
   return parts.some((p) => {
-    const t = p.trim();
+    const t = maskNestedSentencePunctuation(p.trim());
     return /[.!?]["')\]]?\s+[A-Z]/.test(t) ||
-      /,\s+(?:the|a|an|but|and|so|or|latter|former|it|this|which|that)\b/.test(t);
+      /,\s+(?:the|a|an|but|and|so|or|latter|former|it|this|which|that|some|i|i'd|i’ll|i'm|i’ve|you|we|one)\b/i.test(t) ||
+      /,\s+[A-Z][a-z]+\s+(?:is|are|was|were|has|have|had|can|could|will|would|should)\b/.test(t) ||
+      /\s+-\s+[A-Z][a-z]+\s+(?:is|are|was|were|has|have|had|can|could|will|would|should)\b/.test(t) ||
+      /\bas you can see\b/i.test(t) ||
+      /\bAmazon is also\b/i.test(t);
   });
+}
+
+function looksLikeTechnicalFileList(text: string): boolean {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length < 4) return false;
+  const fieldLines = lines.filter((line) =>
+    /\.{2,}\s*:/.test(line) ||
+    /^(?:technical information|release size|release date|runtime|video codec|framerate|bitrate|aspect ratio|resolution|audio\d*|source|chapters|subtitles|imdb|encoder|x264 \[info\]|notes|greetz)\b/i.test(line),
+  );
+  return fieldLines.length >= 3;
+}
+
+function looksLikeTechnicalSettingsLine(text: string): boolean {
+  const slashParts = text.split(SLASH_RE).map((part) => part.trim()).filter(Boolean);
+  return slashParts.filter((part) => TECH_ASSIGNMENT_RE.test(part)).length >= 3;
+}
+
+function looksLikeToneMappingSettings(parts: string[]): boolean {
+  const joined = parts.join(" ");
+  if (!/\b(?:nits?|clipped\s+reference|highlight\s+recovery|are\s+you\s+nuts)\b/i.test(joined)) {
+    return false;
+  }
+  return !parts.some((part) =>
+    SOURCE_TAIL_TOKEN_RE.test(part) ||
+    REGIONISH_RE.test(part) ||
+    /\b(?:19|20)\d{2}\b/.test(part) ||
+    /\b\d{3,4}p\b/i.test(part) ||
+    /\b(?:x26[45]|h\.?26[45]|hevc|avc|vc-?1)\b/i.test(part));
+}
+
+function looksLikeCutOnlyLabels(parts: string[]): boolean {
+  return parts.length >= 2 && parts.every((part) =>
+    /^(?:extended|theatrical|director'?s\s+cut|final\s+cut|unrated|rated|uncut)(?:\s+cut)?$/i.test(part.trim()));
+}
+
+function maskBracketed(text: string): string {
+  let depth = 0;
+  let out = "";
+  for (const ch of text) {
+    if (ch === "(" || ch === "[") {
+      depth++;
+      out += " ";
+      continue;
+    }
+    if (ch === ")" || ch === "]") {
+      depth = Math.max(0, depth - 1);
+      out += " ";
+      continue;
+    }
+    out += depth > 0 ? " " : ch;
+  }
+  return out;
+}
+
+function hasTopLevelColumnSeparator(text: string, includeWideSpace = true): boolean {
+  const masked = maskBracketed(cleanNameCandidate(text));
+  return masked.includes("|") || VS_TEST.test(masked) || ARROW_TEST.test(masked) ||
+    ANGLE_DASH_RE.test(masked) || TILDE_RE.test(masked) || masked.includes(",") ||
+    DASH_RE.test(masked) || SLASH_RE.test(masked) || TIMES_RE.test(masked) ||
+    (includeWideSpace && WIDE_SPACE_RE.test(masked));
+}
+
+function columnTitleCandidateText(text: string): string {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length <= 1) return text;
+  let best: string | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    if (!hasVsOrPipe(lines[i])) continue;
+    const startsContinuation = /^\s*(?:v(?:s\.?|\.)|\|)(?:\s+|$)/i.test(lines[i]);
+    const chunk = startsContinuation && i > 0 ? [lines[i - 1], lines[i]] : [lines[i]];
+    let j = i;
+    while (
+      j + 1 < lines.length &&
+      (/\bv(?:s\.?|\.)\s*:?\s*$/i.test(lines[j]) || /^\s*(?:v(?:s\.?|\.)|\|)(?:\s+|$)/i.test(lines[j + 1]))
+    ) {
+      chunk.push(lines[j + 1]);
+      j++;
+    }
+    best = chunk.join(" ");
+    i = j;
+  }
+  return best ?? text;
+}
+
+function looksLikeSingleReleaseWithParentheticalNotes(text: string): boolean {
+  if (hasTopLevelColumnSeparator(text, false)) return false;
+  if (VS_TEST.test(cleanNameCandidate(text))) return false;
+  if (!/[([]/.test(text)) return false;
+  return /\b(?:S\d{2}E\d{2}|WEBRip|WEB-DL|Blu-?Ray|x26[45]|DD5(?:\.1)?|Source\s+4K|No Logo|Re-Encoded|Untouched)\b/i.test(text) ||
+    /\w+\.\w+\.\w+/.test(text);
+}
+
+function stackedBitrateTitleNames(text: string): string[] | null {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (let i = 1; i < lines.length; i++) {
+    if (!VS_TEST.test(lines[i])) continue;
+    const metricParts = lines[i].split(VS_RE).map(cleanNamePart).filter(Boolean);
+    if (metricParts.length !== 2) continue;
+
+    if (WIDE_SPACE_RE.test(lines[i - 1])) {
+      const titleParts = splitNames(lines[i - 1]);
+      if (titleParts.length === 2 && BITRATE_NOTE_RE.test(metricParts[1])) {
+        const out = [titleParts[0], `${titleParts[1]} ${metricParts[1]}`].map(tidyName);
+        if (looksLikeNames(out)) return out;
+      }
+    } else if (BITRATE_NOTE_RE.test(metricParts[0])) {
+      const out = [tidyName(lines[i - 1]), tidyName(metricParts[1])];
+      if (looksLikeNames(out)) return out;
+    }
+  }
+  return null;
 }
 
 /** THE column-title predicate (MODEL.md). Turn one candidate line into validated
@@ -122,20 +275,31 @@ export function looksLikeProse(parts: string[]): boolean {
  *  0117's "For some reason, D+ added black bars…" split into bogus columns, and a
  *  mid-string "user wrote:" is what produced 1009). */
 export function asColumnTitles(text: string): string[] | null {
-  const t = text.trim();
+  const raw = text.trim();
   // No length cap: a legit 6-column title with bitrates runs long (2245), and
   // prose is rejected semantically below, not by length.
+  if (!raw) return null;
+  if (/\bvideo size\s*:/i.test(raw)) return null;
+  if (looksLikeTechnicalFileList(raw) || looksLikeTechnicalSettingsLine(raw)) return null;
+  const stacked = stackedBitrateTitleNames(raw);
+  if (stacked) return stacked;
+  const t = columnTitleCandidateText(raw).trim();
   if (!t) return null;
   // Whole-line prose check BEFORE splitting: when the separator is a comma,
   // splitting removes the comma-connector signal from each part, so the
   // per-part check below would miss it (0117). Mask the "v."/"vs." separator
   // first — its period otherwise reads as a sentence boundary ("… v. Capture"),
   // which would wrongly flag the 0288 footnote ruling as prose.
-  const prosePeek = t.replace(/\s+v(?:s\.?|\.)\s+/gi, " ");
+  const prosePeek = t.replace(/\.{3,}/g, " ").replace(/\s+v(?:s\.?|\.)\s+/gi, " ");
   if (isNonSourceLabel(t) || looksLikeProse([prosePeek])) return null;
+  if (looksLikeSingleReleaseWithParentheticalNotes(t)) return null;
+  const sourcePair = t.match(SOURCE_PAIR_RE);
+  if (sourcePair) return ["Source", tidyName(sourcePair[1])];
   if (!hasVsOrPipe(t)) return null;
   const names = splitNames(t);
   if (names.length < 2) return null;
+  if (looksLikeCutOnlyLabels(names)) return null;
+  if (looksLikeToneMappingSettings(names)) return null;
   if (!looksLikeNames(names) || looksLikeProse(names)) return null;
   return names;
 }
@@ -155,7 +319,13 @@ function cleanNamePart(text: string): string {
   // Drop a trailing link appended to a real label ("Blu-ray https://…" → "Blu-ray")
   // and a stray trailing colon ("Amazon 1080p (8.4Mbps):" → "Amazon 1080p (8.4Mbps)").
   s = s.replace(/\s+https?:\/\/\S+\s*$/i, "");
+  s = s.replace(/^([A-Za-z]+s?):\s+/, "$1 ");
   s = s.replace(/\s*:\s*$/, "");
+  // HDBits uploaders sometimes write centered labels as
+  // "< SOURCE >-< Encode >-< Alt >", where the angle brackets are decorative.
+  s = s.replace(/^\s*<\s*/, "").replace(/\s*>\s*$/, "");
+  // Dot leaders are visual spacing in labels ("POL ...... vs ...... US").
+  s = s.replace(/\.{3,}/g, " ");
   return s.replace(/^-+|-+$/g, "").trim();
 }
 
@@ -182,6 +352,8 @@ export function tidyName(s: string): string {
     // ">>>>> AMZN" → "BD" / "AMZN".
     .replace(/^\s*[<>]{2,}\s*/, "")
     .replace(/\s*[<>]{2,}\s*$/, "")
+    .replace(/^\s*\|\s*/, "")
+    .replace(/\s*\|\s*$/, "")
     .replace(/\s+/g, " ")
     .trim();
   return t || s.trim();
@@ -236,9 +408,78 @@ function isSimpleCode(s: string): boolean {
 // a digit (resolution/format) — so a trimmed trailing token is only accepted as
 // the parallel source code when it actually looks like the reference.
 function sameCodeShape(a: string, b: string): boolean {
-  const alpha = (s: string) => /^[A-Za-z]+$/.test(s.trim());
+  const alpha = (s: string) => /^[A-Za-z][A-Za-z\s-]*$/.test(s.trim());
   const digit = (s: string) => /\d/.test(s);
   return (alpha(a) && alpha(b)) || (digit(a) && digit(b));
+}
+
+function isSourceTail(s: string): boolean {
+  const t = s.trim();
+  if (!t || t.length > 72 || looksLikeProse([t])) return false;
+  return SOURCE_TAIL_TOKEN_RE.test(t) || REGIONISH_RE.test(t);
+}
+
+function isStandaloneSourceTail(s: string): boolean {
+  const t = s.trim();
+  if (!isSourceTail(t)) return false;
+  if (TITLE_YEAR_RE.test(t) || /^.+?\(\d{4}\)/.test(t) || /:/.test(t)) return false;
+  return t.split(/\s+/).length <= 5 || REGIONISH_RE.test(t);
+}
+
+function tailByWordCount(s: string, ref: string): string | null {
+  const words = s.trim().split(/\s+/);
+  const refWords = Math.max(1, ref.trim().split(/\s+/).length);
+  for (let count = refWords; count <= Math.min(refWords + 2, words.length - 1); count++) {
+    const tail = words.slice(-count).join(" ");
+    if (isSourceTail(tail)) return tail;
+  }
+  return null;
+}
+
+function titleSourceTail(s: string, ref: string): string | null {
+  const t = s.trim();
+  const parenYear = t.match(/^.+?\(\d{4}\)\s*(?:[-–]\s*)?(\S.*)$/);
+  if (parenYear) {
+    const after = parenYear[1].trim();
+    const sourceWithYear = t.match(/^.+?(\(\d{4}\)\s*(?:[-–]\s*)?\S.*)$/)?.[1]?.trim();
+    const wordTail = tailByWordCount(after, ref);
+    if (wordTail && REGIONISH_RE.test(wordTail) && REGIONISH_RE.test(ref.trim())) return wordTail;
+    if (sourceWithYear && REGIONISH_RE.test(ref.trim()) && isSourceTail(after) && !REGIONISH_RE.test(after)) {
+      return sourceWithYear;
+    }
+    if (isSourceTail(after)) return after;
+  }
+
+  const plainYear = t.match(/^.+?\s(?:19|20)\d{2}\s+(\S.*)$/);
+  if (plainYear) {
+    const after = plainYear[1].trim();
+    const wordTail = tailByWordCount(after, ref);
+    if (wordTail && REGIONISH_RE.test(wordTail) && REGIONISH_RE.test(ref.trim())) return wordTail;
+    if (isSourceTail(after)) return after;
+  }
+
+  const colon = t.lastIndexOf(":");
+  if (colon >= 0) {
+    const before = t.slice(0, colon).trim();
+    if (/^[A-Za-z]+s?$/i.test(before)) return null;
+    const after = t.slice(colon + 1).trim();
+    if (
+      isSourceTail(after) &&
+      after.split(/\s+/).length <= 5 &&
+      (SOURCE_LEADING_TOKEN_RE.test(after) || REGION_LEADING_TOKEN_RE.test(after))
+    ) return after;
+    const afterTail = tailByWordCount(after, ref);
+    if (afterTail) return afterTail;
+    const afterYear = after.match(/^.+?\s(?:19|20)\d{2}\s+(\S.*)$/);
+    if (afterYear && isSourceTail(afterYear[1])) return afterYear[1].trim();
+    const sourceWord = after.search(SOURCE_TAIL_TOKEN_RE);
+    if (sourceWord >= 0) {
+      const sourceTail = after.slice(sourceWord).trim();
+      if (isSourceTail(sourceTail)) return sourceTail;
+    }
+  }
+
+  return null;
 }
 /** Strip a shared "Title YEAR …" prefix from columns that carry it ONLY when the
  *  set is ASYMMETRIC — at least one column has the prefix and at least one does
@@ -250,6 +491,13 @@ function sameCodeShape(a: string, b: string): boolean {
  *  ("…(latest madVR test build (113)") are left untouched. */
 export function stripAsymmetricTitle(parts: string[]): string[] {
   if (parts.length < 2) return parts;
+  const refs = parts.filter(isStandaloneSourceTail);
+  if (refs.length) {
+    const ref = refs[0];
+    const out = parts.map((p) => isStandaloneSourceTail(p) ? p : titleSourceTail(p, ref) ?? p);
+    if (out.some((p, i) => p !== parts[i]) && out.every(isStandaloneSourceTail)) return out;
+  }
+
   const titled = parts.map((p) => TITLE_YEAR_RE.test(p.trim()));
   if (!titled.some(Boolean) || titled.every(Boolean)) return parts;
   const ref = parts[titled.findIndex((t) => !t)].trim();
@@ -319,6 +567,8 @@ function plainSplit(c: string): string[] {
   if (c.includes("|")) return c.split("|");
   if (VS_TEST.test(c)) return c.split(VS_RE);
   if (ARROW_TEST.test(c)) return c.split(ARROW_RE);
+  if (ANGLE_DASH_RE.test(c)) return c.split(ANGLE_DASH_RE);
+  if (WIDE_SPACE_RE.test(c)) return c.split(WIDE_SPACE_RE);
   if (c.includes(",")) return c.split(",");
   if (DASH_RE.test(c)) return c.split(DASH_RE);
   if (SLASH_RE.test(c)) return c.split(SLASH_RE);
@@ -343,6 +593,8 @@ export function splitNames(text: string): string[] {
     ? topLevelSplit(candidate, "|") ??
       topLevelSplit(candidate, VS_RE) ??
       topLevelSplit(candidate, ARROW_RE) ??
+      topLevelSplit(candidate, ANGLE_DASH_RE) ??
+      topLevelSplit(candidate, WIDE_SPACE_RE) ??
       topLevelSplit(candidate, ",") ??
       topLevelSplit(candidate, DASH_RE) ??
       topLevelSplit(candidate, SLASH_RE) ??
@@ -372,7 +624,7 @@ export function isMultiSourceLabel(label: string): boolean {
   const c = cleanNameCandidate(label);
   const masked = parensBalanced(c) ? maskParens(c) : c;
   const hasMultiSep =
-    masked.includes("|") || VS_TEST.test(masked) || SLASH_RE.test(masked) ||
+    masked.includes("|") || VS_TEST.test(masked) || ANGLE_DASH_RE.test(masked) || SLASH_RE.test(masked) ||
     TIMES_RE.test(masked) || masked.includes(",");
   if (!hasMultiSep) return false;
   const parts = splitNames(label);
@@ -381,7 +633,7 @@ export function isMultiSourceLabel(label: string): boolean {
 
 export function hasVsOrPipe(text: string): boolean {
   const candidate = cleanNameCandidate(text);
-  return candidate.includes("|") || VS_TEST.test(candidate) || ARROW_TEST.test(candidate) || TILDE_RE.test(candidate) || candidate.includes(",") || DASH_RE.test(candidate) || SLASH_RE.test(candidate) || TIMES_RE.test(candidate);
+  return candidate.includes("|") || VS_TEST.test(candidate) || ARROW_TEST.test(candidate) || ANGLE_DASH_RE.test(candidate) || TILDE_RE.test(candidate) || candidate.includes(",") || DASH_RE.test(candidate) || SLASH_RE.test(candidate) || TIMES_RE.test(candidate) || WIDE_SPACE_RE.test(candidate);
 }
 
 /** An UNAMBIGUOUS multi-source separator ("X vs Y", "X | Y", "X / Y", "X × Y").
@@ -392,7 +644,7 @@ export function hasVsOrPipe(text: string): boolean {
  *  a single transposed grid. */
 export function hasExplicitComparison(text: string): boolean {
   const candidate = cleanNameCandidate(text);
-  return candidate.includes("|") || VS_TEST.test(candidate) || ARROW_TEST.test(candidate) || TILDE_RE.test(candidate) || SLASH_RE.test(candidate) || TIMES_RE.test(candidate);
+  return candidate.includes("|") || VS_TEST.test(candidate) || ARROW_TEST.test(candidate) || ANGLE_DASH_RE.test(candidate) || TILDE_RE.test(candidate) || SLASH_RE.test(candidate) || TIMES_RE.test(candidate) || WIDE_SPACE_RE.test(candidate);
 }
 
 // ── Name-finding sub-strategies ──
@@ -446,11 +698,7 @@ export function namesFromLeadingText(container: Element): string[] | null {
     }
   }
   leadingText = leadingText.trim();
-  if (leadingText && hasVsOrPipe(leadingText)) {
-    const parts = splitNames(leadingText);
-    if (looksLikeNames(parts)) return parts;
-  }
-  return null;
+  return leadingText ? asColumnTitles(leadingText) : null;
 }
 
 /** Strategy 2b: color-coded span labels */
@@ -460,7 +708,10 @@ export function namesFromColorSpans(container: Element): string[] | null {
     const csNames = colorSpans
       .map((s) => s.textContent!.trim())
       .filter(Boolean);
-    if (csNames.length >= 2) return csNames;
+    if (csNames.length >= 2) {
+      const names = asColumnTitles(csNames.join(" | "));
+      if (names?.length === csNames.length) return names;
+    }
   }
   return null;
 }
@@ -491,8 +742,12 @@ export function namesFromLeadingStructuredLabels(container: Element, expectedCou
   if (labels.length !== expectedCount) return null;
 
   const names = labels
-    .map((label) => label.textContent!.trim())
+    .map((label, index) => {
+      const text = label.textContent!.trim();
+      return index > 0 ? text.replace(/^\s*v(?:s\.?|\.)\s+/i, "") : text;
+    })
     .filter(Boolean);
+  if (names.some(isNonSourceLabel)) return null;
   if (names.length !== expectedCount || !looksLikeNames(names)) return null;
 
   return { names, anchorEl: labels[labels.length - 1] };
@@ -505,7 +760,8 @@ export function namesFromLeadingBoldTags(container: Element): string[] | null {
   for (const node of container.childNodes) {
     if (node.nodeName === "A" && (node as Element).querySelector("img")) break;
     if (node.nodeName === "STRONG" || node.nodeName === "B") {
-      const t = node.textContent!.trim();
+      const raw = node.textContent!.trim();
+      const t = bolds.length ? raw.replace(/^\s*v(?:s\.?|\.)\s+/i, "") : raw;
       if (t && !isNonSourceLabel(t)) bolds.push(t);
     }
   }
@@ -530,6 +786,11 @@ export function namesFromAncestors(container: Element): string[] | null {
  *  movie-name/year prefix is left intact per project decision. */
 function stripTitlePrefix(text: string): string {
   const tagless = text.replace(LEADING_TAG_RE, "");
+  const colon = tagless.lastIndexOf(":");
+  if (colon >= 0) {
+    const after = tagless.substring(colon + 1).trim();
+    if (after && hasVsOrPipe(after)) return after;
+  }
   const dash = tagless.lastIndexOf(" - ");
   if (dash >= 0) return tagless.substring(dash + 3).trim();
   const ym = tagless.match(/\(\d{4}\)\s*/);

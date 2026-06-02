@@ -39,6 +39,12 @@ function hasLocalLabelBetween(link: Node, img: Node): boolean {
   }
 }
 
+function isInsideQuoteTable(node: Element): boolean {
+  const table = node.closest("table.main");
+  const heading = table?.previousElementSibling;
+  return !!heading?.matches("p.sub") && /\b(?:quote|wrote)\b/i.test(heading.textContent || "");
+}
+
 /** slow.pics links are authoritative comparison boundaries: each one owns the
  *  HDBits screenshots that follow it (until the next slow.pics link) AND that
  *  have no local label of their own. Returns one entry per slow.pics link that
@@ -47,6 +53,7 @@ function hasLocalLabelBetween(link: Node, img: Node): boolean {
 export function findSlowPicsComparisons(container: Element): SlowPicsComparison[] {
   const links: { a: HTMLAnchorElement; key: string }[] = [];
   for (const a of container.querySelectorAll<HTMLAnchorElement>("a[href]")) {
+    if (isInsideQuoteTable(a)) continue;
     const key = slowPicsKeyFromAnchor(a.href, a.textContent || "");
     if (key) links.push({ a, key });
   }

@@ -2,8 +2,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, basename } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export type ReviewStatus = "pending" | "correct" | "wrong";
-export type ReviewKind = "gain" | "name";
+export type ReviewStatus = "pending" | "correct" | "wrong" | "deferred";
+export type ReviewKind = "gain" | "name" | "loss";
+export type ReviewScope = "all" | "torrents";
 export type GridNames = (string[] | null)[] | null;
 
 export interface SweepRow {
@@ -39,9 +40,11 @@ export interface GainReviewSummary {
     total: number;
     correct: number;
     wrong: number;
+    deferred: number;
     pending: number;
   };
   wrong: { id: string; note: string }[];
+  deferred: { id: string; note: string }[];
   correct: { id: string; note: string }[];
   pending: { id: string; note: string }[];
 }
@@ -60,6 +63,7 @@ interface WriteOptions {
 
 interface ReviewPayload {
   kind: ReviewKind;
+  scope: ReviewScope;
   title: string;
   generatedAt: string;
   entries: GainReviewEntry[];
@@ -89,6 +93,13 @@ const REVIEW_FILES: Record<ReviewKind, {
     marks: "name-review-marks.json",
     summary: "name-review-summary.json",
   },
+  loss: {
+    title: "HDBits LOSS Review",
+    html: "loss-review.html",
+    json: "loss-review.json",
+    marks: "loss-review-marks.json",
+    summary: "loss-review-summary.json",
+  },
 };
 
 function readJsonFile<T>(path: string, fallback: T): T {
@@ -105,7 +116,7 @@ function rowMap(rows: SweepRow[]): Map<string, SweepRow> {
 }
 
 function normalizedStatus(status: unknown): ReviewStatus {
-  return status === "wrong" ? "wrong" : "correct";
+  return status === "wrong" || status === "deferred" || status === "pending" ? status : "correct";
 }
 
 function normalizedMark(mark: GainMark | undefined, now: string): GainMark {
@@ -180,6 +191,16 @@ export function buildNameReviewEntries(options: BuildEntriesOptions): GainReview
   );
 }
 
+export function buildLossReviewEntries(options: BuildEntriesOptions): GainReviewEntry[] {
+  return buildReviewEntries(options, (previous, next) => next.grids < previous.grids);
+}
+
+export function filterReviewEntriesByScope<T extends { id: string }>(entries: T[], scope: ReviewScope): T[] {
+  return scope === "torrents"
+    ? entries.filter((entry) => entry.id.startsWith("yacomp-torrents-fixtures-"))
+    : entries;
+}
+
 export function mergeGainMarks(entries: { id: string }[], existing: GainMarks, now: string): GainMarks {
   const marks: GainMarks = {};
   for (const entry of entries) {
@@ -199,9 +220,11 @@ export function summarizeGainReview(
       total: entries.length,
       correct: 0,
       wrong: 0,
+      deferred: 0,
       pending: 0,
     },
     wrong: [],
+    deferred: [],
     correct: [],
     pending: [],
   };
@@ -237,11 +260,29 @@ function jsJson(value: unknown): string {
   return JSON.stringify(value).replaceAll("</", "<\\/");
 }
 
+function scopedTitle(title: string, scope: ReviewScope): string {
+  return scope === "torrents" ? `${title} (Torrents only)` : title;
+}
+
+function scopedPayload(payload: ReviewPayload, scope: ReviewScope, now = payload.generatedAt): ReviewPayload {
+  const entries = filterReviewEntriesByScope(payload.entries, scope);
+  const marks = mergeGainMarks(entries, payload.marks, now);
+  return {
+    ...payload,
+    scope,
+    title: scopedTitle(REVIEW_FILES[payload.kind].title, scope),
+    entries,
+    marks,
+    summary: summarizeGainReview(entries, marks, now),
+  };
+}
+
 function renderGainReviewHtml(payload: ReviewPayload): string {
   const entriesJson = jsJson(payload.entries);
   const marksJson = jsJson(payload.marks);
   const summaryJson = jsJson(payload.summary);
   const kindJson = jsJson(payload.kind);
+  const scopeJson = jsJson(payload.scope);
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -254,7 +295,7 @@ function renderGainReviewHtml(payload: ReviewPayload): string {
     header { position: sticky; top: 0; z-index: 10; padding: 16px 20px; border-bottom: 1px solid color-mix(in srgb, CanvasText 18%, transparent); background: color-mix(in srgb, Canvas 94%, transparent); backdrop-filter: blur(10px); }
     h1 { margin: 0 0 8px; font-size: 20px; }
     .sub { margin: 0 0 12px; color: color-mix(in srgb, CanvasText 68%, transparent); font-size: 13px; }
-    .controls { display: grid; grid-template-columns: minmax(220px, 1fr) auto auto auto; gap: 10px; align-items: center; }
+    .controls { display: grid; grid-template-columns: minmax(220px, 1fr) auto auto auto auto; gap: 10px; align-items: center; }
     input, select, button, textarea { font: inherit; }
     input, select { padding: 8px 10px; border: 1px solid color-mix(in srgb, CanvasText 22%, transparent); border-radius: 6px; background: Canvas; color: CanvasText; }
     button { border: 1px solid color-mix(in srgb, CanvasText 24%, transparent); border-radius: 6px; padding: 7px 10px; background: Canvas; color: CanvasText; cursor: pointer; }
@@ -264,18 +305,21 @@ function renderGainReviewHtml(payload: ReviewPayload): string {
     .pill { display: inline-flex; align-items: center; min-height: 24px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 650; background: color-mix(in srgb, CanvasText 8%, Canvas); }
     .pill.correct { background: color-mix(in srgb, limegreen 20%, Canvas); }
     .pill.wrong { background: color-mix(in srgb, red 18%, Canvas); }
+    .pill.deferred { background: color-mix(in srgb, royalblue 18%, Canvas); }
     .pill.pending { background: color-mix(in srgb, orange 18%, Canvas); }
     .notice { display: none; margin-top: 10px; font-size: 13px; color: color-mix(in srgb, CanvasText 75%, transparent); }
     .notice.show { display: block; }
     .row { border: 1px solid color-mix(in srgb, CanvasText 14%, transparent); border-left-width: 5px; border-radius: 8px; padding: 14px; margin: 12px 0; background: color-mix(in srgb, CanvasText 3%, Canvas); }
     .row[data-status="correct"] { border-left-color: limegreen; }
     .row[data-status="wrong"] { border-left-color: #d33; }
+    .row[data-status="deferred"] { border-left-color: royalblue; }
     .row[data-status="pending"] { border-left-color: orange; }
     .meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
     .idx { color: color-mix(in srgb, CanvasText 60%, transparent); font-size: 12px; }
     .badge, .delta { display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 650; }
     .badge { background: color-mix(in srgb, Highlight 18%, Canvas); }
     .delta { background: color-mix(in srgb, limegreen 18%, Canvas); }
+    .delta.negative { background: color-mix(in srgb, red 16%, Canvas); }
     .missing { color: white; background: #b00020; border-radius: 999px; padding: 2px 8px; font-size: 12px; }
     h2 { margin: 0 0 6px; font-size: 16px; line-height: 1.35; overflow-wrap: anywhere; }
     a { color: LinkText; }
@@ -302,10 +346,13 @@ function renderGainReviewHtml(payload: ReviewPayload): string {
         <option value="">All statuses</option>
         <option value="correct">Correct</option>
         <option value="wrong">Wrong</option>
+        <option value="deferred">Deferred</option>
+        <option value="pending">Pending</option>
       </select>
       <select id="changeFilter">
         <option value="">All changes</option>
       </select>
+      <button id="saveAll" type="button">Save all</button>
       <button id="copySummary" type="button">Copy summary</button>
     </div>
     <div class="notice" id="notice"></div>
@@ -316,7 +363,8 @@ function renderGainReviewHtml(payload: ReviewPayload): string {
     const EMBEDDED_MARKS = ${marksJson};
     const EMBEDDED_SUMMARY = ${summaryJson};
     const REVIEW_KIND = ${kindJson};
-    const storageKey = "yacomp:hdbits-" + REVIEW_KIND + "-review:" + EMBEDDED_SUMMARY.generatedAt;
+    const REVIEW_SCOPE = ${scopeJson};
+    const storageKey = "yacomp:hdbits-" + REVIEW_KIND + "-review:" + REVIEW_SCOPE + ":" + EMBEDDED_SUMMARY.generatedAt;
     let marks = loadMarks();
 
     const list = document.querySelector("#list");
@@ -331,7 +379,7 @@ function renderGainReviewHtml(payload: ReviewPayload): string {
     async function bootstrap() {
       if (location.protocol.startsWith("http")) {
         try {
-          const response = await fetch("/api/review?kind=" + encodeURIComponent(REVIEW_KIND));
+          const response = await fetch(apiUrl("/api/review"));
           if (response.ok) {
             const payload = await response.json();
             Object.assign(marks, payload.marks || {});
@@ -384,7 +432,7 @@ function renderGainReviewHtml(payload: ReviewPayload): string {
           <div class="meta">
             <span class="idx">#\${index + 1}</span>
             <span class="badge">\${entry.baselineGrids} &rarr; \${entry.newGrids}</span>
-            <span class="delta">+\${entry.delta}</span>
+            <span class="delta \${entry.delta < 0 ? "negative" : ""}">\${formatDelta(entry.delta)}</span>
             \${entry.exists ? "" : '<span class="missing">missing</span>'}
           </div>
           <h2>\${escapeHtml(entry.shortName)}</h2>
@@ -397,6 +445,8 @@ function renderGainReviewHtml(payload: ReviewPayload): string {
           <div class="mark">
             <button type="button" data-mark="correct" class="\${mark.status === "correct" ? "active" : ""}">Correct</button>
             <button type="button" data-mark="wrong" class="\${mark.status === "wrong" ? "active" : ""}">Wrong</button>
+            <button type="button" data-mark="deferred" class="\${mark.status === "deferred" ? "active" : ""}">Deferred</button>
+            <button type="button" data-save-row>Save</button>
             <textarea data-note placeholder="Optional note">\${escapeHtml(mark.note || "")}</textarea>
           </div>
           <details open>
@@ -413,12 +463,22 @@ function renderGainReviewHtml(payload: ReviewPayload): string {
 
     list.addEventListener("click", (event) => {
       const button = event.target.closest("button[data-mark]");
-      if (!button) return;
-      const row = button.closest(".row");
-      const id = row.dataset.id;
-      const status = button.dataset.mark;
-      const note = row.querySelector("[data-note]").value;
-      setMark(id, status, note);
+      if (button) {
+        const row = button.closest(".row");
+        const id = row.dataset.id;
+        const status = button.dataset.mark;
+        const note = row.querySelector("[data-note]").value;
+        setMark(id, status, note);
+        return;
+      }
+      const saveButton = event.target.closest("button[data-save-row]");
+      if (saveButton) {
+        const row = saveButton.closest(".row");
+        const id = row.dataset.id;
+        const status = marks[id]?.status || "correct";
+        const note = row.querySelector("[data-note]").value;
+        setMark(id, status, note);
+      }
     });
 
     list.addEventListener("change", (event) => {
@@ -437,6 +497,7 @@ function renderGainReviewHtml(payload: ReviewPayload): string {
       await navigator.clipboard.writeText(text);
       showNotice("Summary copied to clipboard.");
     });
+    document.querySelector("#saveAll").addEventListener("click", saveAllMarks);
 
     async function setMark(id, status, note) {
       marks[id] = { status, note, updatedAt: new Date().toISOString() };
@@ -446,7 +507,7 @@ function renderGainReviewHtml(payload: ReviewPayload): string {
       applyFilter();
       if (location.protocol.startsWith("http")) {
         try {
-          const response = await fetch("/api/marks?kind=" + encodeURIComponent(REVIEW_KIND), {
+          const response = await fetch(apiUrl("/api/marks"), {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ id, mark: marks[id] }),
@@ -455,7 +516,7 @@ function renderGainReviewHtml(payload: ReviewPayload): string {
           const payload = await response.json();
           marks = payload.marks || marks;
           localStorage.setItem(storageKey, JSON.stringify(marks));
-          showNotice("Saved to gain-review-marks.json and gain-review-summary.json.");
+          showNotice("Saved to " + REVIEW_KIND + "-review-marks.json and " + REVIEW_KIND + "-review-summary.json.");
           return;
         } catch (error) {
           showNotice("Saved in this browser only. Run the local server to persist to disk.");
@@ -465,8 +526,41 @@ function renderGainReviewHtml(payload: ReviewPayload): string {
       showNotice("Saved in this browser only. Run the local server to persist to disk.");
     }
 
+    async function saveAllMarks() {
+      syncNotesFromDom();
+      localStorage.setItem(storageKey, JSON.stringify(marks));
+      if (location.protocol.startsWith("http")) {
+        try {
+          const response = await fetch(apiUrl("/api/marks"), {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ marks }),
+          });
+          if (!response.ok) throw new Error(await response.text());
+          const payload = await response.json();
+          marks = payload.marks || marks;
+          localStorage.setItem(storageKey, JSON.stringify(marks));
+          renderRows();
+          updateSummary();
+          applyFilter();
+          showNotice("Saved all marks to " + REVIEW_KIND + "-review-marks.json and " + REVIEW_KIND + "-review-summary.json.");
+          return;
+        } catch {}
+      }
+      showNotice("Saved in this browser only. Run the local server to persist to disk.");
+    }
+
+    function syncNotesFromDom() {
+      for (const row of document.querySelectorAll(".row")) {
+        const id = row.dataset.id;
+        const status = marks[id]?.status || "correct";
+        const note = row.querySelector("[data-note]").value;
+        marks[id] = { status, note, updatedAt: marks[id]?.updatedAt || new Date().toISOString() };
+      }
+    }
+
     function buildSummary() {
-      const result = { generatedAt: new Date().toISOString(), counts: { total: ENTRIES.length, correct: 0, wrong: 0, pending: 0 }, wrong: [], correct: [], pending: [] };
+      const result = { generatedAt: new Date().toISOString(), counts: { total: ENTRIES.length, correct: 0, wrong: 0, deferred: 0, pending: 0 }, wrong: [], deferred: [], correct: [], pending: [] };
       for (const entry of ENTRIES) {
         const mark = marks[entry.id] || { status: "pending", note: "" };
         result.counts[mark.status] += 1;
@@ -475,12 +569,19 @@ function renderGainReviewHtml(payload: ReviewPayload): string {
       return result;
     }
 
+    function apiUrl(path) {
+      const params = new URLSearchParams({ kind: REVIEW_KIND });
+      if (REVIEW_SCOPE !== "all") params.set("scope", REVIEW_SCOPE);
+      return path + "?" + params.toString();
+    }
+
     function updateSummary() {
       const current = buildSummary();
       summary.innerHTML = \`
         <span class="pill">Total \${current.counts.total}</span>
         <span class="pill correct">Correct \${current.counts.correct}</span>
         <span class="pill wrong">Wrong \${current.counts.wrong}</span>
+        <span class="pill deferred">Deferred \${current.counts.deferred}</span>
         <span class="pill pending">Pending \${current.counts.pending}</span>
         <span class="pill">Visible <span id="visibleCount">0</span></span>\`;
     }
@@ -506,6 +607,10 @@ function renderGainReviewHtml(payload: ReviewPayload): string {
       notice.classList.add("show");
     }
 
+    function formatDelta(delta) {
+      return delta > 0 ? "+" + delta : String(delta);
+    }
+
     function escapeHtml(value) {
       return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
     }
@@ -527,12 +632,14 @@ function buildPayload(kind: ReviewKind, options: WriteOptions = {}): ReviewPaylo
   const newRows = readJsonFile<SweepRow[]>(join(scratchDir, "new-out.json"), []);
   const entries = kind === "gain"
     ? buildGainReviewEntries({ repoRoot, baselineRows, newRows })
-    : buildNameReviewEntries({ repoRoot, baselineRows, newRows });
+    : kind === "loss"
+      ? buildLossReviewEntries({ repoRoot, baselineRows, newRows })
+      : buildNameReviewEntries({ repoRoot, baselineRows, newRows });
   const files = REVIEW_FILES[kind];
   const previousMarks = readMarksFile(join(scratchDir, files.marks));
   const marks = mergeGainMarks(entries, previousMarks, now);
   const summary = summarizeGainReview(entries, marks, now);
-  return { kind, title: files.title, generatedAt: now, entries, marks, summary };
+  return { kind, scope: "all", title: files.title, generatedAt: now, entries, marks, summary };
 }
 
 function writeReviewFiles(kind: ReviewKind, options: WriteOptions = {}): ReviewPayload {
@@ -561,62 +668,101 @@ export function writeNameReviewFiles(options: WriteOptions = {}): ReviewPayload 
   return writeReviewFiles("name", options);
 }
 
-function readPayloadFromDisk(kind: ReviewKind, scratchDir: string): ReviewPayload {
+export function writeLossReviewFiles(options: WriteOptions = {}): ReviewPayload {
+  return writeReviewFiles("loss", options);
+}
+
+function readPayloadFromDisk(kind: ReviewKind, scratchDir: string, scope: ReviewScope = "all"): ReviewPayload {
   const files = REVIEW_FILES[kind];
   const entries = readJsonFile<GainReviewEntry[]>(join(scratchDir, files.json), []);
   const marks = readMarksFile(join(scratchDir, files.marks));
   const summary = summarizeGainReview(entries, marks, new Date().toISOString());
-  return { kind, title: files.title, generatedAt: summary.generatedAt, entries, marks, summary };
+  const payload: ReviewPayload = {
+    kind,
+    scope: "all",
+    title: files.title,
+    generatedAt: summary.generatedAt,
+    entries,
+    marks,
+    summary,
+  };
+  return scopedPayload(payload, scope, summary.generatedAt);
 }
 
-async function serveGainReview(repoRoot: string, scratchDir: string, port: number): Promise<void> {
+async function serveGainReview(repoRoot: string, scratchDir: string, port: number, hostname: string): Promise<void> {
   writeGainReviewFiles({ repoRoot, scratchDir });
   writeNameReviewFiles({ repoRoot, scratchDir });
+  writeLossReviewFiles({ repoRoot, scratchDir });
 
   const server = Bun.serve({
+    hostname,
     port,
     async fetch(req) {
       const url = new URL(req.url);
       if (url.pathname === "/" || url.pathname === "/gain" || url.pathname === `/${REVIEW_FILES.gain.html}`) {
-        return new Response(readFileSync(join(scratchDir, REVIEW_FILES.gain.html)), {
+        return new Response(renderGainReviewHtml(readPayloadFromDisk("gain", scratchDir, reviewScopeFromUrl(url))), {
           headers: { "content-type": "text/html; charset=utf-8" },
         });
       }
       if (url.pathname === "/name" || url.pathname === `/${REVIEW_FILES.name.html}`) {
-        return new Response(readFileSync(join(scratchDir, REVIEW_FILES.name.html)), {
+        return new Response(renderGainReviewHtml(readPayloadFromDisk("name", scratchDir, reviewScopeFromUrl(url))), {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+      }
+      if (url.pathname === "/loss" || url.pathname === `/${REVIEW_FILES.loss.html}`) {
+        return new Response(renderGainReviewHtml(readPayloadFromDisk("loss", scratchDir, reviewScopeFromUrl(url))), {
           headers: { "content-type": "text/html; charset=utf-8" },
         });
       }
       if (url.pathname === "/api/review") {
         const kind = reviewKindFromUrl(url);
-        return Response.json(readPayloadFromDisk(kind, scratchDir));
+        return Response.json(readPayloadFromDisk(kind, scratchDir, reviewScopeFromUrl(url)));
       }
       if (url.pathname === "/api/summary") {
         const kind = reviewKindFromUrl(url);
-        return Response.json(readJsonFile(join(scratchDir, REVIEW_FILES[kind].summary), {}));
+        return Response.json(readPayloadFromDisk(kind, scratchDir, reviewScopeFromUrl(url)).summary);
       }
       if (url.pathname === "/api/marks" && req.method === "POST") {
         const kind = reviewKindFromUrl(url);
+        const scope = reviewScopeFromUrl(url);
         const files = REVIEW_FILES[kind];
-        const body = await req.json() as { id?: string; mark?: GainMark };
-        const payload = readPayloadFromDisk(kind, scratchDir);
-        if (!body.id || !payload.entries.some((entry) => entry.id === body.id)) {
+        const body = await req.json() as { id?: string; mark?: GainMark; marks?: GainMarks };
+        const payload = readPayloadFromDisk(kind, scratchDir, "all");
+        const scopedEntries = filterReviewEntriesByScope(payload.entries, scope);
+        const scopedIds = new Set(scopedEntries.map((entry) => entry.id));
+        const now = new Date().toISOString();
+        if (body.marks && typeof body.marks === "object") {
+          for (const entry of scopedEntries) {
+            payload.marks[entry.id] = normalizedMark(body.marks[entry.id], now);
+          }
+          payload.summary = summarizeGainReview(payload.entries, payload.marks, now);
+          writeJsonFile(join(scratchDir, files.marks), {
+            generatedAt: payload.summary.generatedAt,
+            marks: payload.marks,
+          });
+          writeJsonFile(join(scratchDir, files.summary), payload.summary);
+          const scoped = scopedPayload(payload, scope, payload.summary.generatedAt);
+          return Response.json({ marks: scoped.marks, summary: scoped.summary });
+        }
+        if (!body.id || !scopedIds.has(body.id)) {
           return new Response("Unknown review id", { status: 400 });
         }
-        payload.marks[body.id] = normalizedMark(body.mark, new Date().toISOString());
-        payload.summary = summarizeGainReview(payload.entries, payload.marks, new Date().toISOString());
+        payload.marks[body.id] = normalizedMark(body.mark, now);
+        payload.summary = summarizeGainReview(payload.entries, payload.marks, now);
         writeJsonFile(join(scratchDir, files.marks), {
           generatedAt: payload.summary.generatedAt,
           marks: payload.marks,
         });
         writeJsonFile(join(scratchDir, files.summary), payload.summary);
-        return Response.json({ marks: payload.marks, summary: payload.summary });
+        const scoped = scopedPayload(payload, scope, payload.summary.generatedAt);
+        return Response.json({ marks: scoped.marks, summary: scoped.summary });
       }
       if (url.pathname === "/case") {
         const id = url.searchParams.get("id") ?? "";
         const gainPayload = readPayloadFromDisk("gain", scratchDir);
         const namePayload = readPayloadFromDisk("name", scratchDir);
-        if (![...gainPayload.entries, ...namePayload.entries].some((entry) => entry.id === id)) {
+        const lossPayload = readPayloadFromDisk("loss", scratchDir);
+        if (![...gainPayload.entries, ...namePayload.entries, ...lossPayload.entries].some((entry) => entry.id === id)) {
           return new Response("Unknown review id", { status: 404 });
         }
         const absPath = resolve(repoRoot, id);
@@ -631,12 +777,26 @@ async function serveGainReview(repoRoot: string, scratchDir: string, port: numbe
     },
   });
 
-  console.log(`HDBits gain review: http://localhost:${server.port}/gain`);
-  console.log(`HDBits name review: http://localhost:${server.port}/name`);
+  const origin = `http://${hostname}:${server.port}`;
+  console.log(`HDBits gain review: ${origin}/gain`);
+  console.log(`HDBits name review: ${origin}/name`);
+  console.log(`HDBits loss review: ${origin}/loss`);
 }
 
 function reviewKindFromUrl(url: URL): ReviewKind {
-  return url.searchParams.get("kind") === "name" ? "name" : "gain";
+  return reviewKindFromValue(url.searchParams.get("kind"));
+}
+
+function reviewKindFromValue(value: string | null): ReviewKind {
+  return value === "name" || value === "loss" ? value : "gain";
+}
+
+function reviewScopeFromUrl(url: URL): ReviewScope {
+  return reviewScopeFromValue(url.searchParams.get("scope"));
+}
+
+function reviewScopeFromValue(value: string | null): ReviewScope {
+  return value === "torrents" ? "torrents" : "all";
 }
 
 function argValue(prefix: string, fallback: string): string {
@@ -648,12 +808,13 @@ if (import.meta.main) {
   const repoRoot = resolve(process.cwd());
   const scratchDir = resolve(repoRoot, argValue("--scratch=", DEFAULT_SCRATCH));
   const port = Number(argValue("--port=", "4187"));
+  const hostname = argValue("--host=", "127.0.0.1");
   if (Bun.argv.includes("--serve")) {
-    await serveGainReview(repoRoot, scratchDir, Number.isFinite(port) ? port : 4187);
+    await serveGainReview(repoRoot, scratchDir, Number.isFinite(port) ? port : 4187, hostname);
   } else {
     const kinds: ReviewKind[] = Bun.argv.includes("--all")
-      ? ["gain", "name"]
-      : [argValue("--kind=", "gain") === "name" ? "name" : "gain"];
+      ? ["gain", "name", "loss"]
+      : [reviewKindFromValue(argValue("--kind=", "gain"))];
     for (const kind of kinds) {
       const payload = writeReviewFiles(kind, { repoRoot, scratchDir });
       const files = REVIEW_FILES[kind];
