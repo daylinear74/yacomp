@@ -224,8 +224,6 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     }
     comp.updateSourceMenu?.();
     updateHUD();
-    // In 1:1, re-fit to the new column's native width (each column its own res).
-    refit1to1();
   }
 
   for (let ri = 0; ri < grid.rows.length; ri++) {
@@ -325,6 +323,10 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     if (col < 0 || col >= grid.numCols) return;
     if (!comp.visibleCols.includes(col)) return;
     switchColumn(col);
+    // A DELIBERATE column move (keyboard / column-nav) re-fits 1:1 to this
+    // column's native width; the mouse-sweep (raw switchColumn) does not, so
+    // sweeping to compare stays at one stable scale instead of resizing.
+    refit1to1();
   };
 
   comp.setSourceVisible = (col: number, visible: boolean) => {
