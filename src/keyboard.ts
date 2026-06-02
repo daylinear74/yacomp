@@ -26,7 +26,8 @@ import { openSlowPicsViewer } from "./sites/slowpics";
 import { visibleColumnOffset } from "./viewer/source-visibility";
 import { getShadowRoot } from "./ui/shadow";
 import { ACTIONS, type ActionId } from "./shortcuts/registry";
-import { keyShortcutMatchesEvent } from "./shortcuts/types";
+import { keyShortcutMatchesEvent, mouseShortcutMatches, type MouseShortcut } from "./shortcuts/types";
+import type { DragState } from "./viewer/drag";
 import type { Comp } from "./viewer/types";
 
 export function sourceNameForColumn(
@@ -243,6 +244,58 @@ function dispatchKey(e: KeyboardEvent, phase: "down" | "up"): boolean {
     }
   }
   return false;
+}
+
+/** Run the action bound (main/extra) to this mouse gesture. Viewer-only. */
+function dispatchMouse(g: MouseShortcut["g"]): boolean {
+  if (activeComps.length === 0) return false;
+  for (const meta of ACTIONS) {
+    const pair = shortcutPairFor(meta.id);
+    if (mouseShortcutMatches(pair.main, g) || (pair.extra != null && mouseShortcutMatches(pair.extra, g))) {
+      HANDLERS[meta.id]({ source: "mouse" });
+      return true;
+    }
+  }
+  return false;
+}
+
+function mouseGestureBound(g: MouseShortcut["g"]): boolean {
+  if (activeComps.length === 0) return false;
+  return ACTIONS.some((meta) => {
+    const pair = shortcutPairFor(meta.id);
+    return mouseShortcutMatches(pair.main, g) || (pair.extra != null && mouseShortcutMatches(pair.extra, g));
+  });
+}
+
+/** Canvas mouse-gesture shortcuts (click / dblclick / middle / back / forward),
+ *  set up per comparison. Listeners live on compDiv, so they only fire for the
+ *  image area and are torn down with it. A pan (drag) is never a click. */
+export function setupCompMouseShortcuts(compDiv: HTMLElement, drag: DragState): void {
+  let downX = 0, downY = 0;
+
+  compDiv.addEventListener("mousedown", (e) => {
+    if (e.button === 0) {
+      downX = e.clientX;
+      downY = e.clientY;
+      return;
+    }
+    // Stop the browser navigating/scrolling when an aux button is bound.
+    const g = e.button === 1 ? "middle" : e.button === 3 ? "back" : e.button === 4 ? "forward" : null;
+    if (g && mouseGestureBound(g)) e.preventDefault();
+  });
+
+  compDiv.addEventListener("mouseup", (e) => {
+    if (e.button !== 0 || drag.active) return;
+    if (Math.abs(e.clientX - downX) > 4 || Math.abs(e.clientY - downY) > 4) return;
+    dispatchMouse("click");
+  });
+
+  compDiv.addEventListener("dblclick", () => dispatchMouse("dblclick"));
+
+  compDiv.addEventListener("auxclick", (e) => {
+    const g = e.button === 1 ? "middle" : e.button === 3 ? "back" : e.button === 4 ? "forward" : null;
+    if (g && dispatchMouse(g)) e.preventDefault();
+  });
 }
 
 export function setupKeyboard(hostname?: string): void {

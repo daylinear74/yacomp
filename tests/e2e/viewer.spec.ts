@@ -909,6 +909,38 @@ test("R persistently force-hides the row nav on top of the chrome mode", async (
   await expect.poll(forceHidden).toBe(false);
 });
 
+test("shortcuts: double-click-to-close closes the viewer and hides the close button", async ({ page }) => {
+  await openViewer(page, {
+    config: {
+      shortcuts: { "viewer.close": { main: { t: "key", code: "Escape" }, extra: { t: "mouse", g: "dblclick" } } },
+    },
+  });
+  // Close is reachable by a canvas double-click → the button is redundant.
+  await expect(page.locator("._scf_close_btn")).toBeHidden();
+  const box = (await page.locator("._scf_comp").boundingBox())!;
+  await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(page.locator("._scf_comp")).not.toBeVisible();
+});
+
+test("shortcuts: single-click-to-close works and removes the close button", async ({ page }) => {
+  await openViewer(page, {
+    config: { shortcuts: { "viewer.close": { main: { t: "mouse", g: "click" }, extra: null } } },
+  });
+  await expect(page.locator("._scf_close_btn")).toBeHidden();
+  const box = (await page.locator("._scf_comp").boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(page.locator("._scf_comp")).not.toBeVisible();
+});
+
+test("shortcuts: by default a canvas click does NOT close and the close button stays", async ({ page }) => {
+  await openViewer(page);
+  await expect(page.locator("._scf_close_btn")).toBeVisible();
+  const box = (await page.locator("._scf_comp").boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(120);
+  await expect(page.locator("._scf_comp")).toBeVisible();
+});
+
 test("settings: PTP custom-label inputs appear only under the Custom button style", async ({ page }) => {
   await openViewer(page);
   await page.evaluate(() => {

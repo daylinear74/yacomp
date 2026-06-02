@@ -2,7 +2,7 @@
 // ║  User configuration — persistent settings via GM_getValue / GM_setValue  ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
-import { isValidShortcut, type Shortcut, type ShortcutPair } from "./shortcuts/types";
+import { isValidShortcut, mouseShortcutMatches, type Shortcut, type ShortcutPair } from "./shortcuts/types";
 import { defaultPair, isActionId, type ActionId } from "./shortcuts/registry";
 
 export const SITE_KEYS = [
@@ -280,6 +280,15 @@ export function siteEnabled(key: SiteKey): boolean { return config.enabledSites[
 /** Effective binding for an action: the user override or the registry default. */
 export function shortcutPairFor(id: ActionId): ShortcutPair {
   return config.shortcuts[id] ?? defaultPair(id);
+}
+
+/** True when "close viewer" is bound (main or extra) to a canvas click /
+ *  double-click — in which case the close button is redundant and hidden. */
+export function closeUsesCanvasClick(): boolean {
+  const p = shortcutPairFor("viewer.close");
+  return [p.main, p.extra].some(
+    (s) => s != null && (mouseShortcutMatches(s, "click") || mouseShortcutMatches(s, "dblclick")),
+  );
 }
 export function filterCycle(): readonly FilterModeId[] { return config.filterCycle; }
 export function gammaCycle(): readonly GammaPresetId[] { return config.gammaCycle; }
