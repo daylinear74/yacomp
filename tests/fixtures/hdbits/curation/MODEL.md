@@ -131,18 +131,23 @@ baseline (`.scratch/_baseline.json`). **Ship gate per step: 0 losses** (excludin
   explicit separator + `looksLikeNames` + per-part prose; `isQuoteAttribution`
   also catches a leading `User wrote:` (1009). `nameLabelInfoFromBoldTags` routes
   through it → the **1009** quote FP is gone, 0 regressions (commit `4f2c517`).
+- **Step 3a-continued — current curation pass.** The remaining high-risk
+  candidate producers now route through `asColumnTitles` where they decide
+  whether a line is a column title: `leadingComparisonNames`,
+  `leadingComparisonNamesBeforeContainer`, leading text, sibling/bold tags,
+  color spans, inline structured labels, and per-group comparison labels. This
+  pass also added guarded torrent gallery fallback and many regression fixtures
+  for prose/file-list/BDInfo/technical-settings false positives. Torrent-page
+  review is converged except the documented uploader-page singleton deferrals
+  (`0315`/`0316`).
 
 ## Next (in order)
 
-- **3a-continued — route the remaining candidate producers through
-  `asColumnTitles`.** Bold-tags are done; still un-routed: `leadingComparisonNames`
-  (parser.ts), the `findComparisonNames` sub-scanners (`namesFromLeadingText`,
-  `namesFromSiblings`, color-spans), and the per-group-label path. Routing these
-  fixes the remaining known FPs — **0117** (comma-prose "For some reason, D+ added
-  black bars…") and **0049/0050** (exotica torrent *file-lists*, not comparisons)
-  — and is where the scattered guards finally collapse to one call site. Do it
-  **one producer at a time, sweep after each**: a careless routing nicks a ruling
-  (2245's long 6-col title and 0288's `v.` footnotes were both near-misses in 3a).
+- **Resolve the full-corpus loss blockers before re-baselining.** As of
+  2026-06-02, gain/name have `wrong=0`, but loss still has unresolved `wrong`
+  rows where the original/baseline behavior was marked right. Do **not** copy
+  `.scratch/new-out.json` over `.scratch/_baseline.json` until those are fixed or
+  deliberately moved to `deferred` with a durable reason in `DEFERRED.md`.
 - **3b — per-block collect→select.** Replace the precedence ladder in `parseGrid`
   with: collect all candidates (per-group labels · adjacent lines skipping doc
   blocks · H1 if OP) → `asColumnTitles` each → select (strong adjacent owns the
