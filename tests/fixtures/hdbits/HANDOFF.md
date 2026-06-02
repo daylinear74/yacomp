@@ -38,7 +38,8 @@ Everything else (source, tests, iconic fixtures, templates, rulings) is in git.
   `looksLikeNames` / `looksLikeProse` / `stripAsymmetricTitle` / `isFooterLabel`
   and `namesFromHeadings` (the H1 reader, OP-only).
 - `src/sites/hdbits.ts` — `setupHDBitsCore()`: slow.pics collection, `getGrids`,
-  link insertion, the slow.pics rescue, and the click dispatch
+  link insertion, the slow.pics rescue, forum manual custom comparison, and the
+  click dispatch
   (`grid.gallery` → "Show viewer" 1-wide; `grid.partial` → `openOrphanSelect`
   picker; else the normal comparison).
 - `src/viewer/` — `comparison.ts` (inline viewer), `row.ts`, and
@@ -171,6 +172,13 @@ Recent:
   indivisible OPs; 1-wide **"Show viewer" gallery** for ambiguous torrent sample
   shots (a leading title carrying a URL is a slow.pics caption, not a column
   heading — `Grid.gallery`).
+- **current branch after dev.19** — forum pages have a manual **Custom
+  comparison** fallback below the thread title. Its purpose is to cover HDBits
+  forum posts whose markup is too varied to parse safely: select `td.comment`
+  screenshots by click or left-button drag, enter a column count, and build a
+  `Source 1` / `Source 2` / ... viewer. Keep this as the fallback for
+  case-specific forum threads instead of adding brittle parser rules for every
+  unusual post.
 
 Open:
 - Picker thumbnails are the small `t.hdbits.org` thumbs; for near-identical
