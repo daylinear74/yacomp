@@ -908,3 +908,23 @@ test("R persistently force-hides the row nav on top of the chrome mode", async (
   await page.keyboard.press("KeyR");
   await expect.poll(forceHidden).toBe(false);
 });
+
+test("settings: PTP custom-label inputs appear only under the Custom button style", async ({ page }) => {
+  await openViewer(page);
+  await page.evaluate(() => {
+    (window as unknown as { __yacomp: YacompTestHooks }).__yacomp.openSettings();
+  });
+  await expect(page.locator("._scf_settings_overlay")).toBeVisible();
+
+  const customRow = page.locator("._scf_settings_row", { hasText: "Custom (closed)" });
+  const styleRow = page.locator("._scf_settings_row", { hasText: "PTP grid button" });
+
+  // Hidden under the default (grid glyph) style.
+  await expect(customRow).toBeHidden();
+  // Choosing Custom reveals the free-text inputs...
+  await styleRow.getByRole("button", { name: "Custom", exact: true }).click();
+  await expect(customRow).toBeVisible();
+  // ...and switching back to a preset hides them again.
+  await styleRow.getByRole("button", { name: "Text", exact: true }).click();
+  await expect(customRow).toBeHidden();
+});

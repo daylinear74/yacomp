@@ -53,6 +53,9 @@ interface TextDef {
   tooltip?: string;
   placeholder?: string;
   maxLength?: number;
+  // When set, the row is shown only while this returns true (re-evaluated
+  // whenever a radio changes, which re-runs every row's sync).
+  visibleWhen?: () => boolean;
   onSave?: () => void;
 }
 
@@ -185,19 +188,34 @@ const GROUPS: SettingGroup[] = [
         ],
       },
       {
+        type: "radio",
+        key: "ptpGridToggleStyle",
+        label: "PTP grid button",
+        tooltip: "The fold toggle beside PTP's \"Show comparison\". ▦ is a single glyph; ▶ ▼ swaps between closed/open arrows; Text reads \"Show grid\"/\"Hide grid\"; Custom lets you type your own.",
+        options: [
+          { label: "▦", value: "grid" },
+          { label: "▶ ▼", value: "triangles" },
+          { label: "Text", value: "text" },
+          { label: "Custom", value: "custom" },
+        ],
+        onSave: () => refreshPTPGridToggles(),
+      },
+      {
         type: "text",
         key: "ptpGridToggleCollapsed",
-        label: "PTP grid button (closed)",
-        tooltip: "Label/glyph for the PTP grid toggle while the grid is folded shut. Default ▦. Pair ▶ here with ▼ below, or use any text.",
+        label: "Custom (closed)",
+        tooltip: "Used with the Custom style: the toggle's label while the grid is folded shut.",
         placeholder: "▦",
+        visibleWhen: () => getConfig().ptpGridToggleStyle === "custom",
         onSave: () => refreshPTPGridToggles(),
       },
       {
         type: "text",
         key: "ptpGridToggleExpanded",
-        label: "PTP grid button (open)",
-        tooltip: "Label/glyph for the PTP grid toggle while the grid is open. Default ▦. Pair ▼ here with ▶ above, or use any text.",
+        label: "Custom (open)",
+        tooltip: "Used with the Custom style: the toggle's label while the grid is open.",
         placeholder: "▦",
+        visibleWhen: () => getConfig().ptpGridToggleStyle === "custom",
         onSave: () => refreshPTPGridToggles(),
       },
     ],
@@ -316,7 +334,9 @@ function buildRadio(def: RadioDef, renderers: Renderer[]): HTMLElement {
     btn.textContent = opt.label;
     btn.addEventListener("click", () => {
       saveConfig({ [def.key]: opt.value });
-      sync();
+      // Re-sync every row, not just this one, so rows gated on this value
+      // (visibleWhen) show/hide immediately.
+      for (const r of renderers) r();
       def.onSave?.();
     });
     buttons.push(btn);
@@ -415,6 +435,7 @@ function buildText(def: TextDef, renderers: Renderer[]): HTMLElement {
   });
 
   function sync() {
+    if (def.visibleWhen) row.style.display = def.visibleWhen() ? "" : "none";
     input.value = String(getConfig()[def.key] ?? "");
   }
 

@@ -4,7 +4,7 @@
 
 import { injectCSS, injectPTPGridCSS } from "../ui/css";
 import {
-  ptpGridImageSize, ptpGridClick,
+  ptpGridImageSize, ptpGridClick, ptpGridToggleStyle,
   ptpGridToggleCollapsed, ptpGridToggleExpanded,
 } from "../config";
 import { openWithDummyWrapper } from "../viewer";
@@ -89,8 +89,21 @@ function gridImageUrls(grid: Grid): string[] {
 // the visible buttons without a reload (each shows its label for its fold state).
 const gridToggles: { toggle: HTMLElement; gridEl: HTMLElement }[] = [];
 
+/** Built-in toggle label pairs (collapsed / expanded). "custom" reads the
+ *  free-text config instead. */
+export const PTP_TOGGLE_PRESETS: Record<"grid" | "triangles" | "text", { collapsed: string; expanded: string }> = {
+  grid: { collapsed: "▦", expanded: "▦" },
+  triangles: { collapsed: "▶", expanded: "▼" },
+  text: { collapsed: "Show grid", expanded: "Hide grid" },
+};
+
 function toggleLabel(open: boolean): string {
-  return open ? ptpGridToggleExpanded() : ptpGridToggleCollapsed();
+  const style = ptpGridToggleStyle();
+  const pair =
+    style === "custom"
+      ? { collapsed: ptpGridToggleCollapsed(), expanded: ptpGridToggleExpanded() }
+      : PTP_TOGGLE_PRESETS[style];
+  return open ? pair.expanded : pair.collapsed;
 }
 
 /** Re-apply the configured collapsed/expanded labels to every grid toggle. */

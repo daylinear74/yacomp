@@ -88,6 +88,11 @@ describe("validate — discriminated unions", () => {
     expect(validate({ ptpGridClick: "viewer" }).ptpGridClick).toBe("viewer");
     expect(validate({ ptpGridClick: "nope" }).ptpGridClick).toBe(DEFAULTS.ptpGridClick);
   });
+  test("ptpGridToggleStyle only accepts grid/triangles/text/custom", () => {
+    expect(validate({ ptpGridToggleStyle: "triangles" }).ptpGridToggleStyle).toBe("triangles");
+    expect(validate({ ptpGridToggleStyle: "custom" }).ptpGridToggleStyle).toBe("custom");
+    expect(validate({ ptpGridToggleStyle: "nope" }).ptpGridToggleStyle).toBe(DEFAULTS.ptpGridToggleStyle);
+  });
   test("ptpGridToggle labels trim, cap length, and fall back when blank or non-string", () => {
     expect(validate({ ptpGridToggleCollapsed: "▶" }).ptpGridToggleCollapsed).toBe("▶");
     expect(validate({ ptpGridToggleExpanded: "  ▼  " }).ptpGridToggleExpanded).toBe("▼");
