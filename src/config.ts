@@ -58,6 +58,10 @@ export interface YacompConfig {
   // What clicking a PTP grid tile does: open the yacomp viewer at that image,
   // or open the full image in a new browser tab.
   ptpGridClick: "viewer" | "tab";
+  // The PTP grid toggle's label, by fold state. Defaults "▦"/"▦" (one glyph);
+  // set to e.g. "▶"/"▼" for an open/closed pair, or any text.
+  ptpGridToggleCollapsed: string;
+  ptpGridToggleExpanded: string;
   enabledSites: Record<SiteKey, boolean>;
   filterCycle: FilterModeId[];
   gammaCycle: GammaPresetId[];
@@ -88,6 +92,8 @@ export const DEFAULTS: Readonly<YacompConfig> = {
   uiHideDelay: 1000,
   ptpGridImageSize: "thumbnail" as const,
   ptpGridClick: "viewer" as const,
+  ptpGridToggleCollapsed: "▦",
+  ptpGridToggleExpanded: "▦",
   enabledSites: ALL_SITES_ENABLED,
   filterCycle: [...FILTER_MODE_IDS],
   gammaCycle: [...GAMMA_PRESET_IDS],
@@ -96,6 +102,14 @@ export const DEFAULTS: Readonly<YacompConfig> = {
 function clampNum(val: unknown, min: number, max: number, fallback: number): number {
   if (typeof val !== "number" || !isFinite(val)) return fallback;
   return Math.max(min, Math.min(max, val));
+}
+
+// A short free-text label (e.g. the PTP grid toggle glyph). Trimmed, length-
+// capped, and never empty — a blank label would be an unclickable control.
+function validateLabel(val: unknown, fallback: string): string {
+  if (typeof val !== "string") return fallback;
+  const t = val.trim();
+  return t ? t.slice(0, 32) : fallback;
 }
 
 function validateEnabledSites(raw: unknown): Record<SiteKey, boolean> {
@@ -178,6 +192,8 @@ export function validate(raw: Record<string, unknown>): YacompConfig {
       raw.ptpGridClick === "viewer" || raw.ptpGridClick === "tab"
         ? raw.ptpGridClick
         : DEFAULTS.ptpGridClick,
+    ptpGridToggleCollapsed: validateLabel(raw.ptpGridToggleCollapsed, DEFAULTS.ptpGridToggleCollapsed),
+    ptpGridToggleExpanded: validateLabel(raw.ptpGridToggleExpanded, DEFAULTS.ptpGridToggleExpanded),
     enabledSites: validateEnabledSites(raw.enabledSites),
     filterCycle: validateOrderedIdList(raw.filterCycle, FILTER_MODE_IDS, DEFAULTS.filterCycle),
     gammaCycle: validateOrderedIdList(raw.gammaCycle, GAMMA_PRESET_IDS, DEFAULTS.gammaCycle),
@@ -224,6 +240,8 @@ export function uiChromeMode(): "always" | "default" | "autohide" { return confi
 export function uiHideDelay(): number { return config.uiHideDelay; }
 export function ptpGridImageSize(): "thumbnail" | "full" { return config.ptpGridImageSize; }
 export function ptpGridClick(): "viewer" | "tab" { return config.ptpGridClick; }
+export function ptpGridToggleCollapsed(): string { return config.ptpGridToggleCollapsed; }
+export function ptpGridToggleExpanded(): string { return config.ptpGridToggleExpanded; }
 
 export function siteEnabled(key: SiteKey): boolean { return config.enabledSites[key]; }
 export function filterCycle(): readonly FilterModeId[] { return config.filterCycle; }

@@ -88,6 +88,17 @@ describe("validate — discriminated unions", () => {
     expect(validate({ ptpGridClick: "viewer" }).ptpGridClick).toBe("viewer");
     expect(validate({ ptpGridClick: "nope" }).ptpGridClick).toBe(DEFAULTS.ptpGridClick);
   });
+  test("ptpGridToggle labels trim, cap length, and fall back when blank or non-string", () => {
+    expect(validate({ ptpGridToggleCollapsed: "▶" }).ptpGridToggleCollapsed).toBe("▶");
+    expect(validate({ ptpGridToggleExpanded: "  ▼  " }).ptpGridToggleExpanded).toBe("▼");
+    expect(validate({ ptpGridToggleCollapsed: "   " }).ptpGridToggleCollapsed).toBe(
+      DEFAULTS.ptpGridToggleCollapsed,
+    );
+    expect(validate({ ptpGridToggleExpanded: 42 as unknown as string }).ptpGridToggleExpanded).toBe(
+      DEFAULTS.ptpGridToggleExpanded,
+    );
+    expect(validate({ ptpGridToggleCollapsed: "x".repeat(50) }).ptpGridToggleCollapsed).toHaveLength(32);
+  });
   test("zoomPercentBase only accepts 'original' or 'fit'", () => {
     expect(validate({ zoomPercentBase: "fit" }).zoomPercentBase).toBe("fit");
     expect(validate({ zoomPercentBase: "natural" }).zoomPercentBase).toBe(
