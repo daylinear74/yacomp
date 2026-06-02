@@ -30,6 +30,11 @@ export function injectPTPGridCSS(): void {
   const style = document.createElement("style");
   style.id = "_scf_ptp_grid_css_";
   style.textContent = `
+    ._scf_ptp_grid_sep {
+      margin-left: 6px;
+      opacity: .4;
+      user-select: none;
+    }
     ._scf_ptp_grid_toggle {
       display: inline-block;
       vertical-align: middle;
@@ -55,7 +60,6 @@ export function injectPTPGridCSS(): void {
       width: 100%;
       height: auto;
       display: block;
-      border-radius: 3px;
       background: rgba(127,127,127,.12);
     }
   `;
@@ -671,6 +675,21 @@ export function injectCSS(): void {
       background: rgba(255,255,255,.14);
       border-color: rgba(255,255,255,.4);
       color: #fff;
+    }
+    ._scf_settings_text {
+      padding: 5px 10px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 6px;
+      background: rgba(0,0,0,.25);
+      color: #fff;
+      font: 600 13px/1 system-ui, sans-serif;
+      width: 130px;
+      max-width: 45%;
+      text-align: center;
+    }
+    ._scf_settings_text:focus {
+      outline: none;
+      border-color: rgba(255,255,255,.4);
     }
     ._scf_settings_toggle {
       position: relative;

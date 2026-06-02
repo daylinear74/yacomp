@@ -13,6 +13,7 @@ import { injectCSS } from "./css";
 import { getShadowRoot } from "./shadow";
 import { showToast } from "./toast";
 import { activeComps, zoomToast } from "../filters/zoom";
+import { refreshPTPGridToggles } from "../sites/ptp";
 
 type Renderer = () => void;
 
@@ -45,7 +46,17 @@ interface SliderDef {
   onSave?: () => void;
 }
 
-type SettingDef = RadioDef | ToggleDef | SliderDef;
+interface TextDef {
+  type: "text";
+  key: keyof YacompConfig;
+  label: string;
+  tooltip?: string;
+  placeholder?: string;
+  maxLength?: number;
+  onSave?: () => void;
+}
+
+type SettingDef = RadioDef | ToggleDef | SliderDef | TextDef;
 
 interface SettingGroup {
   label: string;
@@ -172,6 +183,22 @@ const GROUPS: SettingGroup[] = [
           { label: "Viewer", value: "viewer" },
           { label: "New tab", value: "tab" },
         ],
+      },
+      {
+        type: "text",
+        key: "ptpGridToggleCollapsed",
+        label: "PTP grid button (closed)",
+        tooltip: "Label/glyph for the PTP grid toggle while the grid is folded shut. Default ▦. Pair ▶ here with ▼ below, or use any text.",
+        placeholder: "▦",
+        onSave: () => refreshPTPGridToggles(),
+      },
+      {
+        type: "text",
+        key: "ptpGridToggleExpanded",
+        label: "PTP grid button (open)",
+        tooltip: "Label/glyph for the PTP grid toggle while the grid is open. Default ▦. Pair ▼ here with ▶ above, or use any text.",
+        placeholder: "▦",
+        onSave: () => refreshPTPGridToggles(),
       },
     ],
   },
@@ -367,6 +394,32 @@ function buildSlider(def: SliderDef, renderers: Renderer[]): HTMLElement {
   renderers.push(sync);
   controls.append(range, valueEl);
   row.append(label, controls);
+  return row;
+}
+
+function buildText(def: TextDef, renderers: Renderer[]): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "_scf_settings_row";
+
+  const label = buildSettingLabel(def.label, def.tooltip);
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "_scf_settings_text";
+  input.maxLength = def.maxLength ?? 32;
+  if (def.placeholder) input.placeholder = def.placeholder;
+
+  input.addEventListener("input", () => {
+    saveConfig({ [def.key]: input.value });
+    def.onSave?.();
+  });
+
+  function sync() {
+    input.value = String(getConfig()[def.key] ?? "");
+  }
+
+  renderers.push(sync);
+  row.append(label, input);
   return row;
 }
 
@@ -638,6 +691,7 @@ export function openSettings(): void {
         case "radio": el = buildRadio(item, renderers); break;
         case "toggle": el = buildToggle(item, renderers); break;
         case "slider": el = buildSlider(item, renderers); break;
+        case "text": el = buildText(item, renderers); break;
       }
       body.appendChild(el);
     }

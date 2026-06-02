@@ -3,7 +3,10 @@
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
 import { injectCSS, injectPTPGridCSS } from "../ui/css";
-import { ptpGridImageSize, ptpGridClick } from "../config";
+import {
+  ptpGridImageSize, ptpGridClick,
+  ptpGridToggleCollapsed, ptpGridToggleExpanded,
+} from "../config";
 import { openWithDummyWrapper } from "../viewer";
 import type { Grid, GridCell } from "../grid";
 
@@ -82,8 +85,20 @@ function gridImageUrls(grid: Grid): string[] {
   return grid.rows.flatMap((row) => row.map((cell) => cell.full));
 }
 
-// Single-glyph "fold a grid" affordance.
-const GRID_ICON = "▦"; // ▦
+// Live registry of grid toggles so a settings change to the labels can refresh
+// the visible buttons without a reload (each shows its label for its fold state).
+const gridToggles: { toggle: HTMLElement; gridEl: HTMLElement }[] = [];
+
+function toggleLabel(open: boolean): string {
+  return open ? ptpGridToggleExpanded() : ptpGridToggleCollapsed();
+}
+
+/** Re-apply the configured collapsed/expanded labels to every grid toggle. */
+export function refreshPTPGridToggles(): void {
+  for (const { toggle, gridEl } of gridToggles) {
+    toggle.textContent = toggleLabel(gridEl.classList.contains("_scf_open"));
+  }
+}
 
 function populatePTPGrid(gridEl: HTMLElement, grid: Grid): void {
   const urls = gridImageUrls(grid);
@@ -125,6 +140,11 @@ function addPTPGridToggle(link: GridLink): void {
   if (!grid) return;
   link._scfPtpGrid = true;
 
+  const sep = document.createElement("span");
+  sep.className = "_scf_ptp_grid_sep";
+  sep.textContent = "|";
+  sep.setAttribute("aria-hidden", "true");
+
   const toggle = document.createElement("a");
   toggle.href = "#";
   toggle.className = "_scf_ptp_grid_toggle";
@@ -132,7 +152,7 @@ function addPTPGridToggle(link: GridLink): void {
   toggle.setAttribute("role", "button");
   toggle.setAttribute("aria-label", "Toggle image grid");
   toggle.setAttribute("aria-expanded", "false");
-  toggle.textContent = GRID_ICON;
+  toggle.textContent = toggleLabel(false);
 
   const gridEl = document.createElement("div");
   gridEl.className = "_scf_ptp_grid";
@@ -144,6 +164,7 @@ function addPTPGridToggle(link: GridLink): void {
     const open = gridEl.classList.toggle("_scf_open");
     toggle.classList.toggle("_scf_open", open);
     toggle.setAttribute("aria-expanded", String(open));
+    toggle.textContent = toggleLabel(open); // read labels live
     // Lazy: a comparison can carry 50+ shots — only fetch once first expanded.
     if (open && !populated) {
       populated = true;
@@ -151,9 +172,12 @@ function addPTPGridToggle(link: GridLink): void {
     }
   });
 
-  // Order ends up: <link> <toggle> <grid>.
+  gridToggles.push({ toggle, gridEl });
+
+  // Order ends up: <link> <sep> <toggle> <grid>.
   link.insertAdjacentElement("afterend", gridEl);
   link.insertAdjacentElement("afterend", toggle);
+  link.insertAdjacentElement("afterend", sep);
 }
 
 /** Scan a subtree for PTP comparison links and attach a grid toggle to each. */

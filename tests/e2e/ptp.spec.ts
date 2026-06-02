@@ -36,11 +36,18 @@ test("ptp: a grid toggle sits beside Show comparison and folds the grid open/clo
   await expect(toggle).toHaveCount(1);
   await expect(grid).toHaveCount(1);
 
-  // The toggle is inserted right after the native "Show comparison" link.
-  const prevClass = await toggle.evaluate(
+  // Order is: Show comparison | ▦ — a separator sits between the native link
+  // and the toggle.
+  const sep = page.locator("._scf_ptp_grid_sep");
+  await expect(sep).toHaveText("|");
+  const beforeSep = await sep.evaluate(
     (el) => (el.previousElementSibling as HTMLElement | null)?.textContent?.trim(),
   );
-  expect(prevClass).toBe("Show comparison");
+  expect(beforeSep).toBe("Show comparison");
+  const afterSep = await sep.evaluate(
+    (el) => (el.nextElementSibling as HTMLElement | null)?.className,
+  );
+  expect(afterSep).toContain("_scf_ptp_grid_toggle");
 
   // Collapsed and unpopulated until first opened (a comparison can be 50+ shots).
   await expect(grid).not.toHaveClass(/_scf_open/);
@@ -91,9 +98,34 @@ test("ptp: the grid lays out one column per source", async ({ page }) => {
   expect(cols).toBe("repeat(3, 1fr)");
 });
 
-test("ptp: the toggle is a single ▦ glyph", async ({ page }) => {
+test("ptp: the toggle is a single ▦ glyph by default", async ({ page }) => {
   await openPtp(page);
   await expect(page.locator("._scf_ptp_grid_toggle")).toHaveText("▦");
+});
+
+test("ptp: collapsed/expanded toggle labels are configurable (▶/▼ pair)", async ({ page }) => {
+  await openPtp(page, { ptpGridToggleCollapsed: "▶", ptpGridToggleExpanded: "▼" });
+  // The settings UI refreshes already-rendered toggles on save; drive it directly.
+  await page.evaluate(() => {
+    (window as unknown as { __yacomp: { refreshGridToggles: () => void } })
+      .__yacomp.refreshGridToggles();
+  });
+  const toggle = page.locator("._scf_ptp_grid_toggle");
+  await expect(toggle).toHaveText("▶"); // collapsed
+  await toggle.click();
+  await expect(toggle).toHaveText("▼"); // expanded
+  await toggle.click();
+  await expect(toggle).toHaveText("▶"); // collapsed again
+});
+
+test("ptp: grid images have square (un-rounded) corners", async ({ page }) => {
+  await openPtp(page);
+  await page.locator("._scf_ptp_grid_toggle").click();
+  const radius = await page
+    .locator("._scf_ptp_grid img")
+    .first()
+    .evaluate((el) => getComputedStyle(el).borderTopLeftRadius);
+  expect(radius).toBe("0px");
 });
 
 test("ptp: clicking a grid image opens the viewer at that shot (default)", async ({ page }) => {
