@@ -213,13 +213,29 @@ export function applyZoom(anchors: CapturedZoomAnchor[] = []): void {
 
 function getReferenceWidth(): number {
   if (zoomPercentBase() === "fit") return window.innerWidth;
-  const sizer = getShadowRoot().querySelector("._scf_comp_sizer") as HTMLImageElement | null;
-  return sizer?.naturalWidth || window.innerWidth;
+  return activeColumnNaturalWidth() || getSizerNaturalWidth() || window.innerWidth;
 }
 
 function getSizerNaturalWidth(): number {
   const sizer = getShadowRoot().querySelector("._scf_comp_sizer") as HTMLImageElement | null;
   return sizer?.naturalWidth || 0;
+}
+
+/** Native pixel width of the ACTIVE column's image (from any loaded row), so 1:1
+ *  shows each column at its own resolution instead of always column 0's sizer
+ *  (a 1080p source and a 4K encode in one comparison should each be 1:1). Falls
+ *  back to the column-0 sizer until the active column has measured. */
+function activeColumnNaturalWidth(): number {
+  const comp = activeComps[activeComps.length - 1];
+  if (comp) {
+    for (const rd of comp.allRowData) {
+      const img = rd.imgs[comp.currentCol];
+      if (img?.naturalWidth) return img.naturalWidth;
+    }
+  }
+  // 0 (not "the sizer") when the active column hasn't measured, so doZoom1to1 /
+  // refit1to1 wait for its image instead of locking to column 0's width.
+  return 0;
 }
 
 export function zoomToast(): string | ToastLine[] {
@@ -290,17 +306,32 @@ export function doZoomFit(): void {
   showToast(zoomToast());
 }
 
-export function doZoom1to1(): void {
-  const sizer = getShadowRoot().querySelector("._scf_comp_sizer") as HTMLImageElement | null;
-  if (!sizer) return;
-  const anchors = captureActiveZoomAnchors();
-  function apply() {
-    if (!sizer!.naturalWidth) return;
-    zoomWidth = sizer!.naturalWidth;
+export function doZoom1to1(opts: { silent?: boolean } = {}): void {
+  const apply = (): boolean => {
+    const w = activeColumnNaturalWidth();
+    if (!w) return false;
+    const anchors = captureActiveZoomAnchors();
+    zoomWidth = w;
     zoomMode = "1:1";
     applyZoom(anchors);
-    showToast(zoomToast());
-  }
-  if (sizer.naturalWidth) apply();
-  else sizer.addEventListener("load", apply, { once: true });
+    if (!opts.silent) showToast(zoomToast());
+    return true;
+  };
+  if (apply()) return;
+  // The active column's image hasn't measured yet (lazy-loaded) — re-apply when
+  // it lands, falling back to the column-0 sizer.
+  const comp = activeComps[activeComps.length - 1];
+  const probe = comp?.allRowData[comp.currentRow]?.imgs[comp.currentCol]
+    ?? (getShadowRoot().querySelector("._scf_comp_sizer") as HTMLImageElement | null);
+  probe?.addEventListener("load", () => apply(), { once: true });
+}
+
+/** Re-fit 1:1 to the active column after a column switch, so each column renders
+ *  at its own native resolution. No-op outside 1:1 or when the width is unchanged
+ *  (same-resolution columns don't jank). */
+export function refit1to1(): void {
+  if (zoomMode !== "1:1") return;
+  const w = activeColumnNaturalWidth();
+  if (w && w === zoomWidth) return;
+  doZoom1to1({ silent: true });
 }
