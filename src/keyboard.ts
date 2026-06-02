@@ -269,13 +269,15 @@ export function setupKeyboard(hostname?: string): void {
         return;
       }
 
-      // R: toggle row nav sidebar
+      // R: persistently hide / show the row nav sidebar. This is a manual
+      // override on top of auto-hide — force-hidden stays gone regardless of
+      // activity; re-showing hands it back to the auto-hide controller.
       if (e.code === "KeyR" && activeComps.length > 0) {
         const nav = getShadowRoot().querySelector("._scf_row_nav") as HTMLElement | null;
         if (nav) {
-          const visible = nav.style.opacity !== "0";
-          nav.style.opacity = visible ? "0" : "1";
-          showToast("Row nav: " + (visible ? "off" : "on"));
+          const hidden = nav.classList.toggle("_scf_ui_force_hidden");
+          showToast("Row nav: " + (hidden ? "off" : "on"));
+          if (!hidden) activeComps[activeComps.length - 1]?.revealRowNav?.();
         }
         return;
       }

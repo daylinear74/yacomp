@@ -45,6 +45,8 @@ export interface YacompConfig {
   zoomPercentBase: "original" | "fit";
   verboseZoom: boolean;
   closeBtnPosition: "auto" | "left" | "right" | "hide";
+  uiHideDelay: number;
+  uiAlwaysShow: boolean;
   enabledSites: Record<SiteKey, boolean>;
   filterCycle: FilterModeId[];
   gammaCycle: GammaPresetId[];
@@ -71,6 +73,8 @@ export const DEFAULTS: Readonly<YacompConfig> = {
   zoomPercentBase: "original",
   verboseZoom: false,
   closeBtnPosition: "auto" as const,
+  uiHideDelay: 1000,
+  uiAlwaysShow: false,
   enabledSites: ALL_SITES_ENABLED,
   filterCycle: [...FILTER_MODE_IDS],
   gammaCycle: [...GAMMA_PRESET_IDS],
@@ -148,6 +152,11 @@ export function validate(raw: Record<string, unknown>): YacompConfig {
       raw.closeBtnPosition === "auto" || raw.closeBtnPosition === "left" || raw.closeBtnPosition === "right" || raw.closeBtnPosition === "hide"
         ? raw.closeBtnPosition
         : DEFAULTS.closeBtnPosition,
+    uiHideDelay: clampNum(raw.uiHideDelay, 200, 5000, DEFAULTS.uiHideDelay),
+    uiAlwaysShow:
+      typeof raw.uiAlwaysShow === "boolean"
+        ? raw.uiAlwaysShow
+        : DEFAULTS.uiAlwaysShow,
     enabledSites: validateEnabledSites(raw.enabledSites),
     filterCycle: validateOrderedIdList(raw.filterCycle, FILTER_MODE_IDS, DEFAULTS.filterCycle),
     gammaCycle: validateOrderedIdList(raw.gammaCycle, GAMMA_PRESET_IDS, DEFAULTS.gammaCycle),
@@ -190,6 +199,8 @@ export function mouseSwitch(): boolean { return config.mouseSwitch; }
 export function zoomPercentBase(): "original" | "fit" { return config.zoomPercentBase; }
 export function verboseZoom(): boolean { return config.verboseZoom; }
 export function closeBtnPosition(): "auto" | "left" | "right" | "hide" { return config.closeBtnPosition; }
+export function uiHideDelay(): number { return config.uiHideDelay; }
+export function uiAlwaysShow(): boolean { return config.uiAlwaysShow; }
 
 export function siteEnabled(key: SiteKey): boolean { return config.enabledSites[key]; }
 export function filterCycle(): readonly FilterModeId[] { return config.filterCycle; }

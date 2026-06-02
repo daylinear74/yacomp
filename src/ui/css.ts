@@ -190,6 +190,19 @@ export function injectCSS(): void {
       text-shadow: 0 1px 4px rgba(0,0,0,.7);
       transition: opacity .15s ease;
     }
+    /* ① Auto-hide chrome: fade these out after a spell of no activity. */
+    ._scf_row_nav,
+    ._scf_close_btn,
+    ._scf_toolbar {
+      transition: opacity .2s ease;
+    }
+    ._scf_ui_autohidden {
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
+    ._scf_ui_force_hidden {
+      display: none !important;
+    }
     ._scf_nav_map {
       position: fixed;
       bottom: 16px;

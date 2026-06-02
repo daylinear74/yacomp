@@ -243,6 +243,9 @@ export function applyZoom(anchors: CapturedZoomAnchor[] = []): void {
   for (const anchor of anchors) restoreZoomAnchor(anchor);
   for (const comp of activeComps) {
     if (comp.updateNavMap) comp.updateNavMap();
+    // applyZoom is the choke point for every zoom-mode change, so re-evaluate
+    // the fit/fill button's "hidden entirely at 1:1" rule here.
+    if (comp.syncFillCanvasVisibility) comp.syncFillCanvasVisibility();
   }
 }
 
