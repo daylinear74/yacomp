@@ -163,6 +163,16 @@ const GROUPS: SettingGroup[] = [
           { label: "Full", value: "full" },
         ],
       },
+      {
+        type: "radio",
+        key: "ptpGridClick",
+        label: "PTP grid click",
+        tooltip: "What clicking an image in the PTP grid does. Viewer opens the yacomp comparison viewer at that shot; New tab opens the full image in a new browser tab.",
+        options: [
+          { label: "Viewer", value: "viewer" },
+          { label: "New tab", value: "tab" },
+        ],
+      },
     ],
   },
   {

@@ -31,19 +31,18 @@ export function injectPTPGridCSS(): void {
   style.id = "_scf_ptp_grid_css_";
   style.textContent = `
     ._scf_ptp_grid_toggle {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
+      display: inline-block;
       vertical-align: middle;
       margin-left: 6px;
       cursor: pointer;
       color: inherit;
       text-decoration: none;
+      font-size: 1.15em;
+      line-height: 1;
       opacity: .7;
     }
     ._scf_ptp_grid_toggle:hover,
     ._scf_ptp_grid_toggle._scf_open { opacity: 1; }
-    ._scf_ptp_grid_toggle svg { width: 1.1em; height: 1.1em; display: block; }
     ._scf_ptp_grid {
       display: none;
       gap: 6px;

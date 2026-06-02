@@ -90,3 +90,36 @@ test("ptp: the grid lays out one column per source", async ({ page }) => {
     .evaluate((el) => (el as HTMLElement).style.gridTemplateColumns);
   expect(cols).toBe("repeat(3, 1fr)");
 });
+
+test("ptp: the toggle is a single ▦ glyph", async ({ page }) => {
+  await openPtp(page);
+  await expect(page.locator("._scf_ptp_grid_toggle")).toHaveText("▦");
+});
+
+test("ptp: clicking a grid image opens the viewer at that shot (default)", async ({ page }) => {
+  await openPtp(page); // default ptpGridClick = "viewer"
+  await page.locator("._scf_ptp_grid_toggle").click();
+  const imgs = page.locator("._scf_ptp_grid img");
+  await expect(imgs).toHaveCount(6);
+
+  // Image index 1 = row 0, col 1 → the viewer opens with Source B active.
+  await imgs.nth(1).click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  const label = page.locator("._scf_comp_label");
+  await expect(label.locator("span", { hasText: "Source B" })).toHaveCSS("opacity", "1");
+  await expect(label.locator("span", { hasText: "Source A" })).toHaveCSS("opacity", "0.4");
+});
+
+test("ptp: with 'New tab', clicking a grid image opens the full image in a tab (no viewer)", async ({ page }) => {
+  await openPtp(page, { ptpGridClick: "tab" });
+  await page.locator("._scf_ptp_grid_toggle").click();
+  const imgs = page.locator("._scf_ptp_grid img");
+  await expect(imgs).toHaveCount(6);
+
+  const [popup] = await Promise.all([
+    page.waitForEvent("popup"),
+    imgs.nth(0).click(),
+  ]);
+  expect(popup.url()).toMatch(/passthepopcorn\.me\/i\/AAA\.png/);
+  await expect(page.locator("._scf_comp")).toHaveCount(0);
+});
