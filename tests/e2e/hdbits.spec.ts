@@ -73,6 +73,14 @@ async function stubHdbitsImages(page: Page): Promise<void> {
   );
 }
 
+async function waitForHdbitsReady(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => (window as unknown as { __yacomp_test_ready?: boolean }).__yacomp_test_ready === true,
+    undefined,
+    { timeout: 5000 },
+  );
+}
+
 async function readGridNames(page: Page, linkIndex: number): Promise<string[]> {
   // Click the Nth comparison link, read source names off the viewer's
   // label, then close the viewer so the next assertion starts clean.
@@ -226,6 +234,53 @@ test("hdbits: sibling heading sections place triggers under matching titles", as
       linksInTitleBlock: 1,
     },
   ]);
+});
+
+test("hdbits: forum manual custom comparison builds a Source N grid from selected screenshots", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/154-forum-post-manual-custom-comparison");
+  await waitForHdbitsReady(page);
+
+  const panel = page.locator("h1 + ._scf_manual_panel");
+  await expect(panel).toHaveCount(1);
+  await panel.locator("._scf_manual_button").click();
+
+  const screenshots = page.locator('img[src*="t.hdbits.org/manual"]');
+  await screenshots.nth(0).click();
+  await screenshots.nth(1).click();
+  await screenshots.nth(2).click();
+  await screenshots.nth(3).click();
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(4);
+  await expect(panel.locator("._scf_manual_status")).toHaveText("4 selected");
+
+  await panel.locator("._scf_manual_cols").fill("2");
+  await panel.locator("._scf_manual_build").click();
+
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(2);
+  await page.keyboard.press("Digit1");
+  const names = (await page.locator("._scf_comp_label span").allTextContents())
+    .map((t) => t.replace(/^\d+\.\s*/, "").trim())
+    .filter(Boolean);
+  expect(names).toEqual(["Source 1", "Source 2"]);
+});
+
+test("hdbits: forum manual custom comparison clear resets selected screenshots", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/154-forum-post-manual-custom-comparison");
+  await waitForHdbitsReady(page);
+
+  const panel = page.locator("._scf_manual_panel");
+  await panel.locator("._scf_manual_button").click();
+  const screenshots = page.locator('img[src*="t.hdbits.org/manual"]');
+  await screenshots.nth(0).click();
+  await screenshots.nth(1).click();
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(2);
+
+  await panel.locator("._scf_manual_clear").click();
+
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(0);
+  await expect(panel.locator("._scf_manual_status")).toHaveText("0 selected");
 });
 
 for (const { file, meta } of cases) {
