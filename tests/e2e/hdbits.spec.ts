@@ -315,65 +315,6 @@ test("hdbits: 1:1 sizes each ROW to its own native width (mixed-resolution rows 
   await expect.poll(() => rowWidth(1)).toBe("400px");
 });
 
-// ── ① Auto-hide UI ───────────────────────────────────────────────────────────
-
-async function openAutoHideCase(page: Page): Promise<void> {
-  await stubHdbitsImages(page);
-  await page.goto("/hdbits/case/117-zoom-mixed-row-dims"); // 2 rows → row nav exists
-  await page.waitForFunction(
-    () => (window as unknown as { __yacomp_test_ready?: boolean }).__yacomp_test_ready === true,
-    undefined,
-    { timeout: 5000 },
-  );
-  await page.locator("._scf_comp_link").first().click();
-  await expect(page.locator("._scf_comp")).toBeVisible();
-}
-
-test("hdbits: viewer chrome auto-hides after inactivity and a mouse move reveals it", async ({ page }) => {
-  await openAutoHideCase(page);
-  const closeBtn = page.locator("._scf_close_btn");
-  const autohidden = () => closeBtn.evaluate((el) => el.classList.contains("_scf_ui_autohidden"));
-  // Surfaced briefly on open for discoverability, then auto-hidden after the
-  // default ~1s delay once there's no activity.
-  await expect.poll(autohidden, { timeout: 4000 }).toBe(true);
-  // A mouse move over the comparison brings the corner chrome back.
-  const box = await page.locator("._scf_comp").boundingBox();
-  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
-  await expect.poll(autohidden).toBe(false);
-});
-
-test("hdbits: the fit/fill button is hidden entirely at 1:1 and returns when fit", async ({ page }) => {
-  await openAutoHideCase(page);
-  const toggle = page.locator("._scf_fill_canvas_toggle");
-  const forceHidden = () => toggle.evaluate((el) => el.classList.contains("_scf_ui_force_hidden"));
-  await page.keyboard.press("Digit0"); // fit → the toggle is meaningful, shown
-  await expect.poll(forceHidden).toBe(false);
-  await page.keyboard.press("KeyO"); // 1:1 → hidden entirely
-  await expect.poll(forceHidden).toBe(true);
-  await page.keyboard.press("Digit0"); // fit → back
-  await expect.poll(forceHidden).toBe(false);
-});
-
-test("hdbits: row nav reveals on row navigation and R force-hides it", async ({ page }) => {
-  await openAutoHideCase(page);
-  const rowNav = page.locator("._scf_row_nav");
-  await expect(rowNav).toHaveCount(1);
-  const autohidden = () => rowNav.evaluate((el) => el.classList.contains("_scf_ui_autohidden"));
-  const forceHidden = () => rowNav.evaluate((el) => el.classList.contains("_scf_ui_force_hidden"));
-  // Auto-hides on idle, then a deliberate row move reveals it.
-  await expect.poll(autohidden, { timeout: 4000 }).toBe(true);
-  await page.keyboard.press("ArrowDown");
-  await expect.poll(autohidden).toBe(false);
-  // R persistently hides it — a later row action must NOT bring it back.
-  await page.keyboard.press("KeyR");
-  await expect.poll(forceHidden).toBe(true);
-  await page.keyboard.press("ArrowUp");
-  expect(await forceHidden()).toBe(true);
-  // R again hands it back to the auto-hide controller.
-  await page.keyboard.press("KeyR");
-  await expect.poll(forceHidden).toBe(false);
-});
-
 for (const { file, meta } of cases) {
   test(`hdbits: ${file}`, async ({ page }) => {
     await stubHdbitsImages(page);

@@ -131,7 +131,8 @@ test("row navigation with arrow keys", async ({ page }) => {
 });
 
 test("source menu hides sources and protects the last visible source", async ({ page }) => {
-  await openViewer(page);
+  // Pin chrome on so the toolbar stays clickable regardless of auto-hide timing.
+  await openViewer(page, { config: { uiChromeMode: "always" } });
 
   const sourceMenu = page.locator("._scf_source_menu");
   const sourceButton = sourceMenu.getByRole("button", { name: "Choose visible sources" });
@@ -831,4 +832,79 @@ test("settings: mouseSwitch=false suppresses pointer-driven column switching", a
 
   // Cleanup: restore default for any subsequent test that might share this page.
   await setConfig(page, { mouseSwitch: true });
+});
+
+// ── ① Auto-hide UI: the three chrome modes ────────────────────────────────────
+
+const CHROME = {
+  label: "._scf_comp_label",
+  rowNav: "._scf_row_nav",
+  close: "._scf_close_btn",
+  toolbar: "._scf_toolbar",
+  fill: "._scf_fill_canvas_toggle",
+};
+
+function chromeHasClass(page: Page, selector: string, cls: string): Promise<boolean> {
+  return page.locator(selector).first().evaluate((el, c) => el.classList.contains(c), cls);
+}
+
+test("chrome 'always': titles, row nav and buttons all stay fully visible", async ({ page }) => {
+  await openViewer(page, { config: { uiChromeMode: "always", uiHideDelay: 200 } });
+  await page.waitForTimeout(300); // past any settle window
+  for (const sel of [CHROME.label, CHROME.rowNav, CHROME.close, CHROME.toolbar]) {
+    expect(await chromeHasClass(page, sel, "_scf_ui_autohidden")).toBe(false);
+    expect(await chromeHasClass(page, sel, "_scf_ui_dimmed")).toBe(false);
+  }
+});
+
+test("chrome 'default': titles/row nav sit dimmed, buttons auto-hide and reveal on movement", async ({ page }) => {
+  await openViewer(page, { config: { uiChromeMode: "default", uiHideDelay: 200 } });
+  // Resting state: nav dimmed (still visible), buttons auto-hidden.
+  await expect.poll(() => chromeHasClass(page, CHROME.label, "_scf_ui_dimmed")).toBe(true);
+  await expect.poll(() => chromeHasClass(page, CHROME.rowNav, "_scf_ui_dimmed")).toBe(true);
+  await expect.poll(() => chromeHasClass(page, CHROME.close, "_scf_ui_autohidden")).toBe(true);
+  // A mouse move brightens the label to full and brings the buttons back.
+  const box = (await page.locator("._scf_comp").boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await expect.poll(() => chromeHasClass(page, CHROME.label, "_scf_ui_dimmed")).toBe(false);
+  await expect.poll(() => chromeHasClass(page, CHROME.close, "_scf_ui_autohidden")).toBe(false);
+});
+
+test("chrome 'autohide': titles/row nav fully hidden, buttons gated by cursor proximity", async ({ page }) => {
+  await openViewer(page, { config: { uiChromeMode: "autohide", uiHideDelay: 200 } });
+  // Resting state: nav fully hidden, buttons hidden.
+  await expect.poll(() => chromeHasClass(page, CHROME.label, "_scf_ui_autohidden")).toBe(true);
+  await expect.poll(() => chromeHasClass(page, CHROME.rowNav, "_scf_ui_autohidden")).toBe(true);
+  await expect.poll(() => chromeHasClass(page, CHROME.close, "_scf_ui_autohidden")).toBe(true);
+  // A move far from the corners surfaces the label (titles) but NOT the buttons.
+  const comp = (await page.locator("._scf_comp").boundingBox())!;
+  await page.mouse.move(comp.x + comp.width / 2, comp.y + comp.height / 2);
+  await expect.poll(() => chromeHasClass(page, CHROME.label, "_scf_ui_autohidden")).toBe(false);
+  expect(await chromeHasClass(page, CHROME.close, "_scf_ui_autohidden")).toBe(true);
+  // Moving NEAR the close button reveals it (proximity).
+  const cb = (await page.locator(CHROME.close).boundingBox())!;
+  await page.mouse.move(cb.x + cb.width / 2, cb.y + cb.height / 2);
+  await expect.poll(() => chromeHasClass(page, CHROME.close, "_scf_ui_autohidden")).toBe(false);
+});
+
+test("the fit/fill button is hidden entirely at 1:1 and returns when fit", async ({ page }) => {
+  await openViewer(page, { config: { uiChromeMode: "always" } });
+  const forceHidden = () => chromeHasClass(page, CHROME.fill, "_scf_ui_force_hidden");
+  await page.keyboard.press("Digit0"); // fit → the toggle is meaningful, shown
+  await expect.poll(forceHidden).toBe(false);
+  await page.keyboard.press("KeyO"); // 1:1 → hidden entirely
+  await expect.poll(forceHidden).toBe(true);
+  await page.keyboard.press("Digit0"); // fit → back
+  await expect.poll(forceHidden).toBe(false);
+});
+
+test("R persistently force-hides the row nav on top of the chrome mode", async ({ page }) => {
+  await openViewer(page, { config: { uiChromeMode: "always" } });
+  await expect(page.locator(CHROME.rowNav)).toHaveCount(1);
+  const forceHidden = () => chromeHasClass(page, CHROME.rowNav, "_scf_ui_force_hidden");
+  expect(await forceHidden()).toBe(false);
+  await page.keyboard.press("KeyR");
+  await expect.poll(forceHidden).toBe(true);
+  await page.keyboard.press("KeyR");
+  await expect.poll(forceHidden).toBe(false);
 });

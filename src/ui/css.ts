@@ -200,6 +200,9 @@ export function injectCSS(): void {
       opacity: 0 !important;
       pointer-events: none !important;
     }
+    ._scf_ui_dimmed {
+      opacity: 0.5 !important;
+    }
     ._scf_ui_force_hidden {
       display: none !important;
     }

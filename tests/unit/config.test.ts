@@ -73,6 +73,11 @@ describe("validate — discriminated unions", () => {
     expect(validate({ closeBtnPosition: "hide" }).closeBtnPosition).toBe("hide");
     expect(validate({ closeBtnPosition: "center" }).closeBtnPosition).toBe("auto");
   });
+  test("uiChromeMode only accepts always/default/autohide", () => {
+    expect(validate({ uiChromeMode: "always" }).uiChromeMode).toBe("always");
+    expect(validate({ uiChromeMode: "autohide" }).uiChromeMode).toBe("autohide");
+    expect(validate({ uiChromeMode: "nope" }).uiChromeMode).toBe(DEFAULTS.uiChromeMode);
+  });
   test("zoomPercentBase only accepts 'original' or 'fit'", () => {
     expect(validate({ zoomPercentBase: "fit" }).zoomPercentBase).toBe("fit");
     expect(validate({ zoomPercentBase: "natural" }).zoomPercentBase).toBe(
@@ -93,12 +98,6 @@ describe("validate — boolean fields", () => {
   test("boolean is preserved", () => {
     expect(validate({ mouseSwitch: false }).mouseSwitch).toBe(false);
     expect(validate({ verboseZoom: true }).verboseZoom).toBe(true);
-  });
-  test("uiAlwaysShow is a boolean field with a default fallback", () => {
-    expect(validate({ uiAlwaysShow: true }).uiAlwaysShow).toBe(true);
-    expect(validate({ uiAlwaysShow: "yes" as unknown as boolean }).uiAlwaysShow).toBe(
-      DEFAULTS.uiAlwaysShow,
-    );
   });
 });
 
