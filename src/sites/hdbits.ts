@@ -299,6 +299,8 @@ function injectForumManualCSS(): void {
     }
     body._scf_manual_selecting .std-content img {
       cursor: crosshair;
+      -webkit-user-drag: none;
+      user-select: none;
     }
     img.${FORUM_MANUAL_SELECTED_CLASS} {
       outline: 3px solid #4da3ff !important;
@@ -312,6 +314,7 @@ function injectForumManualCSS(): void {
 function isSelectableForumImage(img: HTMLImageElement): boolean {
   const postRoot = document.querySelector(".std-content");
   if (postRoot && !postRoot.contains(img)) return false;
+  if (!img.closest("td.comment")) return false;
   if (img.closest(`#${FORUM_MANUAL_PANEL_ID}, .sig, #header, .menu`)) return false;
   const src = img.currentSrc || img.src;
   return Boolean(src) && !/(?:\/\/|\.)flagcounter\.com\//i.test(src);
@@ -364,6 +367,12 @@ function addForumManualComparisonControl(): void {
 
   const selected: HTMLImageElement[] = [];
   let selecting = false;
+  let dragSelecting = false;
+  let dragMoved = false;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let dragStartImage: HTMLImageElement | null = null;
+  let suppressNextClick = false;
 
   const panel = document.createElement("div");
   panel.id = FORUM_MANUAL_PANEL_ID;
@@ -409,8 +418,21 @@ function addForumManualComparisonControl(): void {
     if (selecting === on) return;
     selecting = on;
     document.body.classList.toggle("_scf_manual_selecting", selecting);
-    if (selecting) document.addEventListener("click", onDocumentClick, true);
-    else document.removeEventListener("click", onDocumentClick, true);
+    if (selecting) {
+      document.addEventListener("mousedown", onDocumentMouseDown, true);
+      document.addEventListener("mousemove", onDocumentMouseMove, true);
+      document.addEventListener("mouseup", onDocumentMouseUp, true);
+      document.addEventListener("click", onDocumentClick, true);
+    } else {
+      document.removeEventListener("mousedown", onDocumentMouseDown, true);
+      document.removeEventListener("mousemove", onDocumentMouseMove, true);
+      document.removeEventListener("mouseup", onDocumentMouseUp, true);
+      document.removeEventListener("click", onDocumentClick, true);
+      dragSelecting = false;
+      dragMoved = false;
+      dragStartImage = null;
+      suppressNextClick = false;
+    }
   };
 
   const reset = () => {
@@ -429,12 +451,74 @@ function addForumManualComparisonControl(): void {
     updateStatus();
   };
 
-  function onDocumentClick(event: MouseEvent): void {
-    const target = event.target;
-    if (!(target instanceof HTMLImageElement)) return;
-    if (!isSelectableForumImage(target)) return;
+  const addImage = (img: HTMLImageElement) => {
+    if (selected.includes(img)) return;
+    selected.push(img);
+    updateManualSelectionStyles(selected);
+    updateStatus();
+  };
+
+  function imageFromEvent(event: MouseEvent): HTMLImageElement | null {
+    for (const target of event.composedPath()) {
+      if (target instanceof HTMLImageElement && isSelectableForumImage(target)) return target;
+    }
+    const pointTarget = document.elementFromPoint(event.clientX, event.clientY);
+    if (pointTarget instanceof HTMLImageElement && isSelectableForumImage(pointTarget)) return pointTarget;
+    return null;
+  }
+
+  function onDocumentMouseDown(event: MouseEvent): void {
+    if (event.button !== 0) return;
+    const img = imageFromEvent(event);
+    if (!img) return;
     event.preventDefault();
     event.stopPropagation();
+    dragSelecting = true;
+    dragMoved = false;
+    dragStartX = event.clientX;
+    dragStartY = event.clientY;
+    dragStartImage = img;
+  }
+
+  function onDocumentMouseMove(event: MouseEvent): void {
+    if (!dragSelecting) return;
+    const dx = Math.abs(event.clientX - dragStartX);
+    const dy = Math.abs(event.clientY - dragStartY);
+    const img = imageFromEvent(event);
+    if (!dragMoved && (dx > 3 || dy > 3 || (img && img !== dragStartImage))) {
+      dragMoved = true;
+      suppressNextClick = true;
+      if (dragStartImage) addImage(dragStartImage);
+    }
+    if (!dragMoved) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (img) addImage(img);
+    if (event.clientY < 80) window.scrollBy(0, -24);
+    else if (event.clientY > window.innerHeight - 80) window.scrollBy(0, 24);
+  }
+
+  function onDocumentMouseUp(event: MouseEvent): void {
+    if (!dragSelecting) return;
+    if (dragMoved) {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressNextClick = true;
+    }
+    dragSelecting = false;
+    dragMoved = false;
+    dragStartImage = null;
+  }
+
+  function onDocumentClick(event: MouseEvent): void {
+    const target = imageFromEvent(event);
+    if (!target) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (suppressNextClick) {
+      suppressNextClick = false;
+      return;
+    }
     toggleImage(target);
   }
 

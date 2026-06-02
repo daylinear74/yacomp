@@ -15,6 +15,7 @@ import { join } from "node:path";
 // for the case file format and extraction instructions.
 
 const CASES_DIR = "tests/fixtures/hdbits/cases";
+const SAVED_HDBITS_FORUM_HTML = process.env.YACOMP_SAVED_HDBITS_FORUM_HTML;
 
 interface CaseMetadata {
   slot: "torrent.description" | "torrent.comment" | "forum.post" | "forum.reply";
@@ -106,6 +107,21 @@ async function readGridNames(page: Page, linkIndex: number): Promise<string[]> {
   await page.keyboard.press("Escape");
   await expect(comp).not.toBeVisible();
   return names;
+}
+
+async function dragAcrossScreenshots(page: Page, selector: string, count: number): Promise<void> {
+  const boxes = [];
+  for (let i = 0; i < count; i++) {
+    const box = await page.locator(selector).nth(i).boundingBox();
+    if (!box) throw new Error(`screenshot ${i} has no bounding box`);
+    boxes.push(box);
+  }
+  await page.mouse.move(boxes[0].x + boxes[0].width / 2, boxes[0].y + boxes[0].height / 2);
+  await page.mouse.down();
+  for (const box of boxes.slice(1)) {
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 4 });
+  }
+  await page.mouse.up();
 }
 
 const cases = readCases();
@@ -281,6 +297,44 @@ test("hdbits: forum manual custom comparison clear resets selected screenshots",
 
   await expect(page.locator("._scf_manual_selected")).toHaveCount(0);
   await expect(panel.locator("._scf_manual_status")).toHaveText("0 selected");
+});
+
+test("hdbits: forum manual custom comparison supports drag selection across screenshots", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/154-forum-post-manual-custom-comparison");
+  await waitForHdbitsReady(page);
+
+  const panel = page.locator("._scf_manual_panel");
+  await panel.locator("._scf_manual_button").click();
+  await dragAcrossScreenshots(page, 'td.comment img[src*="t.hdbits.org/manual"]', 4);
+
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(4);
+  await expect(panel.locator("._scf_manual_status")).toHaveText("4 selected");
+});
+
+test("hdbits: saved Over the Garden Wall forum page uses the current manual fallback", async ({ page }) => {
+  test.skip(!SAVED_HDBITS_FORUM_HTML, "Set YACOMP_SAVED_HDBITS_FORUM_HTML to a saved HDBits forum HTML file");
+
+  await page.goto("/hdbits/saved/forum");
+  await waitForHdbitsReady(page);
+
+  await expect(page).toHaveTitle(/\[Comparisons\] Over the Garden Wall :: HDBits/);
+  const panel = page.locator("h1 + ._scf_manual_panel");
+  await expect(panel).toHaveCount(1);
+  await expect(page.locator("td.comment a[href*='img.hdbits.org'] img")).toHaveCount(56);
+
+  await panel.locator("._scf_manual_button").click();
+  await dragAcrossScreenshots(page, "td.comment a[href*='img.hdbits.org'] img", 6);
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(6);
+
+  await panel.locator("._scf_manual_cols").fill("6");
+  await panel.locator("._scf_manual_build").click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await page.keyboard.press("Digit1");
+  const names = (await page.locator("._scf_comp_label span").allTextContents())
+    .map((t) => t.replace(/^\d+\.\s*/, "").trim())
+    .filter(Boolean);
+  expect(names).toEqual(["Source 1", "Source 2", "Source 3", "Source 4", "Source 5", "Source 6"]);
 });
 
 for (const { file, meta } of cases) {
