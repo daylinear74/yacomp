@@ -15,7 +15,7 @@ import {
 import {
   zoomMode, zoomWidth, setZoomMode, setZoomWidth,
   applyZoom, calcZoom, snapZoom, captureZoomAnchor, zoomToast, navMapEnabled,
-  doZoom1to1, refit1to1,
+  doZoom1to1, refit1to1, centerOnActiveCell,
   fillCanvasEnabled, applyFillCanvas, setFillCanvas, setNavMap,
   activeComps, addComp, removeComp,
   type CapturedZoomAnchor,
@@ -474,13 +474,36 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     doZoom1to1({ silent: true });
   }
   rowNav.updateRowNav(initialPosition.row);
-  if (initialPosition.row !== 0) {
-    requestAnimationFrame(() => {
-      const row = allRowData[initialPosition.row];
-      if (!row) return;
-      row.rowDiv.scrollIntoView({ behavior: "auto", block: "center" });
-      comp.updateNavMap();
-    });
+
+  // Always open centered on the active cell — every entry path (Show
+  // comparison, an HDBits/PTP image click, V), at any zoom, and for images both
+  // smaller and larger than the viewport.
+  let centeredScroll: { top: number; left: number } | null = null;
+  const centerNow = (): void => {
+    comp.updateScrollSpacers?.();
+    centerOnActiveCell(comp);
+    centeredScroll = { top: compDiv.scrollTop, left: compDiv.scrollLeft };
+    comp.updateNavMap();
+  };
+  requestAnimationFrame(centerNow);
+  // The active image may not be measured yet (lazy/deferred), so the first
+  // center used placeholder geometry — re-center once it lands, but only if the
+  // user hasn't scrolled away from where we put them.
+  const activeImg = allRowData[initialPosition.row]?.imgs[initialPosition.col];
+  if (activeImg && !activeImg.complete) {
+    activeImg.addEventListener(
+      "load",
+      () => requestAnimationFrame(() => {
+        if (
+          centeredScroll &&
+          Math.abs(compDiv.scrollTop - centeredScroll.top) < 2 &&
+          Math.abs(compDiv.scrollLeft - centeredScroll.left) < 2
+        ) {
+          centerNow();
+        }
+      }),
+      { once: true },
+    );
   }
 }
 
