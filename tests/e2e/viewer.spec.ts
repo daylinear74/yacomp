@@ -1043,8 +1043,8 @@ test.describe("1:1 on a HiDPI (2x) display", () => {
     await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("960px");
     await page.keyboard.press("KeyO"); // re-trigger 1:1 so the toast shows (open is silent)
     const toast = page.locator("#_scf_toast_");
-    await expect(toast).toContainText("Original 1920px");
-    await expect(toast).toContainText("On screen 960px@2x");
+    await expect(toast).toContainText("Original 1920×804");
+    await expect(toast).toContainText("On screen 960×402@2x");
   });
 
   test("+ from 1:1 never collapses to 0px (zoomWidth was unset)", async ({ page }) => {
@@ -1062,8 +1062,8 @@ test.describe("1:1 on a HiDPI (2x) display", () => {
     await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("960px");
     await page.keyboard.press("Equal"); // + → custom 960 × 1.25 = 1200 CSS px
     const toast = page.locator("#_scf_toast_");
-    await expect(toast).toContainText("Original 1920px");
-    await expect(toast).toContainText("On screen 1200px@2x");
+    await expect(toast).toContainText("Original 1920×804");
+    await expect(toast).toContainText("On screen 1200×503@2x");
   });
 });
 
