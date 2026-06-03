@@ -50,7 +50,7 @@ export interface YacompConfig {
   mouseSwitch: boolean;
   zoomPercentBase: "original" | "fit";
   // What "1:1" maps one source pixel to: a physical device pixel (HiDPI-aware —
-  // a 4K shot fills a 4K@2x screen) or a CSS pixel (the browser's logical 100%,
+  // a 4K shot fills a 1080p@2x screen) or a CSS pixel (the browser's logical 100%,
   // which looks 2x magnified on Retina). No effect when devicePixelRatio is 1.
   oneToOnePixels: "device" | "logical";
   verboseZoom: boolean;
