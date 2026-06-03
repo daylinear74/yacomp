@@ -3,6 +3,7 @@
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
 import { injectCSS, injectTriggerLinkCSS } from "../ui/css";
+import { hdbitsImageClick } from "../config";
 import { getGrids } from "../grid";
 import type { Grid } from "../grid";
 import { hasVsOrPipe, splitNames, looksLikeNames } from "../grid/names";
@@ -28,6 +29,35 @@ function makeShowComparisonLink(label = "Show comparison"): HTMLAnchorElement {
   link.className = "_scf_comp_link";
   link.textContent = label;
   return link;
+}
+
+/** Make each of a comparison's on-page images open the yacomp viewer at that
+ *  shot (config `hdbitsImageClick`). The "Show comparison" link still opens the
+ *  whole grid; this just adds a per-image entry point at the right row/col.
+ *  Read live, so toggling the setting takes effect without a reload. */
+function attachGridImageClicks(grid: Grid, container: HTMLElement, link: HTMLAnchorElement): void {
+  for (let r = 0; r < grid.rows.length; r++) {
+    const row = grid.rows[r];
+    for (let c = 0; c < row.length; c++) {
+      const target = row[c].a ?? row[c].img;
+      if (!target) continue;
+      target.addEventListener(
+        "click",
+        async (e) => {
+          if (hdbitsImageClick() !== "viewer") return; // leave HDBits' native behavior
+          e.preventDefault();
+          e.stopPropagation();
+          await maybeEnrichNames(grid);
+          if (grid.partial) {
+            openOrphanSelect(grid, container, link);
+          } else {
+            buildComparison({ ...grid, initialRow: r, initialCol: c }, container, link);
+          }
+        },
+        true, // capture, to beat any page-level image handler
+      );
+    }
+  }
 }
 
 /** Nearest preceding slow.pics/c key for a DOM node (its comparison's link). */
@@ -104,6 +134,9 @@ export function setupHDBitsCore(): void {
       if (grid.partial) openOrphanSelect(grid, container as HTMLElement, link);
       else buildComparison(grid, container as HTMLElement, link);
     });
+
+    // Click any of this comparison's images to jump straight into the viewer.
+    attachGridImageClicks(grid, container as HTMLElement, link);
 
     // Keep links for a BBCode hide block inside its hidden content. Inserting
     // after the external label breaks HDBits' adjacent-sibling toggle lookup.

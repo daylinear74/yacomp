@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
 
 // Stub the slow.pics CDN so the suite is hermetic (no external network).
 // Specific fixture files use production-risk dimensions; the fallback keeps
@@ -1016,6 +1017,38 @@ test("settings: Reset shortcuts restores defaults", async ({ page }) => {
   await expect(mainBtn).toHaveText("P");
   await page.getByRole("button", { name: "Reset shortcuts", exact: true }).click();
   await expect(mainBtn).toHaveText("O");
+});
+
+test("settings: Export downloads the config as JSON", async ({ page }) => {
+  await openViewer(page, { config: { toastDuration: 3200 } });
+  await openSettingsModal(page);
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Export", exact: true }).click(),
+  ]);
+  expect(download.suggestedFilename()).toBe("yacomp-config.json");
+  const content = readFileSync(await download.path(), "utf8");
+  expect(JSON.parse(content).toastDuration).toBe(3200);
+});
+
+test("settings: Import restores settings from a file", async ({ page }) => {
+  await openViewer(page);
+  await openSettingsModal(page);
+  const cfg = JSON.stringify({ v: 2, toastDuration: 4800, closeBtnPosition: "left" });
+  await page.locator("._scf_settings_backup input[type=file]").setInputFiles({
+    name: "yacomp-config.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(cfg),
+  });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as { __yacomp: { getConfig: () => { toastDuration: number } } })
+            .__yacomp.getConfig().toastDuration,
+      ),
+    )
+    .toBe(4800);
 });
 
 test("settings: PTP custom-label inputs appear only under the Custom button style", async ({ page }) => {

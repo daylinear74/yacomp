@@ -758,6 +758,7 @@ export function injectCSS(): void {
     }
     ._scf_shortcut_chip:hover { background: rgba(255,255,255,.14); color: #fff; }
     ._scf_shortcut_reset_row { display: flex; justify-content: flex-end; margin-top: 8px; }
+    ._scf_settings_backup { display: flex; gap: 8px; margin-top: 4px; }
     ._scf_settings_toggle {
       position: relative;
       width: 38px;

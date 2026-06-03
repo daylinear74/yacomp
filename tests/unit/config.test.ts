@@ -14,9 +14,11 @@ import {
   GAMMA_PRESET_IDS,
   SITE_KEYS,
   bcStep,
+  exportConfig,
   filterCycle,
   gammaCycle,
   getConfig,
+  importConfig,
   migrate,
   mouseSwitch,
   resetConfig,
@@ -88,6 +90,11 @@ describe("validate — discriminated unions", () => {
     expect(validate({ ptpGridClick: "viewer" }).ptpGridClick).toBe("viewer");
     expect(validate({ ptpGridClick: "nope" }).ptpGridClick).toBe(DEFAULTS.ptpGridClick);
   });
+  test("hdbitsImageClick only accepts viewer/native", () => {
+    expect(validate({ hdbitsImageClick: "native" }).hdbitsImageClick).toBe("native");
+    expect(validate({ hdbitsImageClick: "viewer" }).hdbitsImageClick).toBe("viewer");
+    expect(validate({ hdbitsImageClick: "nope" }).hdbitsImageClick).toBe(DEFAULTS.hdbitsImageClick);
+  });
   test("ptpGridToggleStyle only accepts grid/triangles/text/custom", () => {
     expect(validate({ ptpGridToggleStyle: "triangles" }).ptpGridToggleStyle).toBe("triangles");
     expect(validate({ ptpGridToggleStyle: "custom" }).ptpGridToggleStyle).toBe("custom");
@@ -154,6 +161,33 @@ describe("validate — shortcuts", () => {
   });
   test("defaults to no overrides", () => {
     expect(validate({}).shortcuts).toEqual({});
+  });
+});
+
+describe("export / import", () => {
+  test("exportConfig emits pretty JSON of the live config", () => {
+    saveConfig({ toastDuration: 3333 });
+    const json = exportConfig();
+    expect(json).toContain("\n"); // pretty-printed
+    expect(JSON.parse(json).toastDuration).toBe(3333);
+  });
+  test("importConfig replaces config, validating + backfilling missing fields", () => {
+    saveConfig({ toastDuration: 2000 });
+    expect(importConfig(JSON.stringify({ toastDuration: 4500, hdbitsImageClick: "native" }))).toBe(true);
+    expect(getConfig().toastDuration).toBe(4500);
+    expect(getConfig().hdbitsImageClick).toBe("native");
+    expect(getConfig().defaultZoomMode).toBe(DEFAULTS.defaultZoomMode); // missing → default
+  });
+  test("importConfig clamps out-of-range numbers", () => {
+    expect(importConfig(JSON.stringify({ toastDuration: 999999 }))).toBe(true);
+    expect(getConfig().toastDuration).toBe(10000);
+  });
+  test("importConfig rejects bad payloads and leaves config untouched", () => {
+    saveConfig({ toastDuration: 2500 });
+    expect(importConfig("not json")).toBe(false);
+    expect(importConfig("[1,2,3]")).toBe(false);
+    expect(importConfig("42")).toBe(false);
+    expect(getConfig().toastDuration).toBe(2500);
   });
 });
 

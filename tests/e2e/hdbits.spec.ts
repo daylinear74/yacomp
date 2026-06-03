@@ -315,6 +315,45 @@ test("hdbits: 1:1 sizes each ROW to its own native width (mixed-resolution rows 
   await expect.poll(() => rowWidth(1)).toBe("400px");
 });
 
+// ── Click a comparison image → viewer (hdbitsImageClick) ───────────────────────
+
+test("hdbits: clicking a comparison image opens the viewer at that shot", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/116-zoom-mixed-dims");
+  await page.waitForFunction(
+    () => (window as unknown as { __yacomp_test_ready?: boolean }).__yacomp_test_ready === true,
+    undefined,
+    { timeout: 5000 },
+  );
+  // cB0 = row 0, column 1 ("Encode") — default config opens the viewer there.
+  await page.locator('img[src*="cB0"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  const label = page.locator("._scf_comp_label");
+  await expect(label.locator("span", { hasText: "Encode" })).toHaveCSS("opacity", "1");
+});
+
+test("hdbits: with Native set, an image click stays HDBits' own (no viewer)", async ({ page }) => {
+  await page.route(/[ti]\.hdbits\.org|img\.hdbits\.org/, (route) =>
+    route.fulfill({ contentType: "image/svg+xml", body: STUB_SVG }),
+  );
+  await page.goto("/hdbits/case/116-zoom-mixed-dims");
+  await page.waitForFunction(
+    () => (window as unknown as { __yacomp_test_ready?: boolean }).__yacomp_test_ready === true,
+    undefined,
+    { timeout: 5000 },
+  );
+  await page.evaluate(() => {
+    (window as unknown as { __yacomp: { saveConfig: (c: Record<string, unknown>) => void } })
+      .__yacomp.saveConfig({ hdbitsImageClick: "native" });
+  });
+  // Native behavior: the anchor navigates to the full image; no viewer opens.
+  await Promise.all([
+    page.waitForURL(/img\.hdbits\.org/),
+    page.locator('img[src*="cB0"]').click(),
+  ]);
+  await expect(page.locator("._scf_comp")).toHaveCount(0);
+});
+
 for (const { file, meta } of cases) {
   test(`hdbits: ${file}`, async ({ page }) => {
     await stubHdbitsImages(page);
