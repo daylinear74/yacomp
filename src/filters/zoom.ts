@@ -317,21 +317,27 @@ function getSizerNaturalWidth(): number {
   return sizer?.naturalWidth || 0;
 }
 
-/** The currently-viewed row's true source width (raw) and on-screen rendered
- *  width — for the toast, so "Original / On screen" track the row you're looking
- *  at, not the first loaded row. */
-function currentRowReadout(): { nativeW: number; screenW: number } {
+/** The currently-viewed row's active image: its true source size (raw) and its
+ *  on-screen rendered size — for the toast, so "Original / On screen" track the
+ *  row + image you're actually looking at, not the first loaded one. */
+function currentRowReadout(): { nativeW: number; nativeH: number; screenW: number } {
+  const sizer = getShadowRoot().querySelector("._scf_comp_sizer") as HTMLImageElement | null;
+  let nativeW = sizer?.naturalWidth || 0;
+  let nativeH = sizer?.naturalHeight || 0;
+  let screenW = oneToOneWidth(nativeW);
   const comp = activeComps[activeComps.length - 1];
-  let nativeW = getSizerNaturalWidth();
   if (comp) {
     const rd = comp.allRowData[comp.currentRow];
     if (rd) {
-      nativeW = rd.imgs[comp.currentCol]?.naturalWidth || nativeW;
-      const offset = Math.round(rd.rowDiv.offsetWidth);
-      return { nativeW, screenW: offset || oneToOneWidth(nativeW) };
+      const img = rd.imgs[comp.currentCol];
+      if (img?.naturalWidth) {
+        nativeW = img.naturalWidth;
+        nativeH = img.naturalHeight;
+      }
+      screenW = Math.round(rd.rowDiv.offsetWidth) || oneToOneWidth(nativeW);
     }
   }
-  return { nativeW, screenW: oneToOneWidth(nativeW) };
+  return { nativeW, nativeH, screenW };
 }
 
 /** Native pixel width of the ACTIVE column's image (from any loaded row), so 1:1
@@ -372,11 +378,15 @@ export function zoomToast(): string | ToastLine[] {
   const lines: ToastLine[] = [{ text: briefLabel, size: "large" }];
 
   if (showDevice) {
-    const { nativeW, screenW } = currentRowReadout();
+    const { nativeW, nativeH, screenW } = currentRowReadout();
     if (nativeW) {
-      lines.push({ text: "Original " + nativeW + "px", size: "small", color: TOAST_NATIVE_COLOR });
+      // On-screen height from the image's own aspect (per-image, not the row).
+      const screenH = nativeH ? Math.round((screenW * nativeH) / nativeW) : 0;
+      const nativeRes = nativeH ? nativeW + "×" + nativeH : nativeW + "px";
+      const screenRes = screenH ? screenW + "×" + screenH : screenW + "px";
+      lines.push({ text: "Original " + nativeRes, size: "small", color: TOAST_NATIVE_COLOR });
       lines.push({
-        text: "On screen " + screenW + "px@" + dpr + "x",
+        text: "On screen " + screenRes + "@" + dpr + "x",
         size: "small",
         color: TOAST_SCREEN_COLOR,
       });
