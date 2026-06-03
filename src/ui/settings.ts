@@ -101,7 +101,7 @@ const GROUPS: SettingGroup[] = [
         type: "radio",
         key: "oneToOnePixels",
         label: "1:1 pixels",
-        tooltip: "What a source pixel maps to at 1:1 on a HiDPI / Retina screen. Device = one physical screen pixel (a 4K shot fills a 4K@2x panel, pixel-perfect); Logical = one CSS pixel (the browser's 100%, ~2x magnified on Retina). No effect on standard displays.",
+        tooltip: "What a source pixel maps to at 1:1 on a HiDPI / Retina screen. Device = one physical screen pixel (a 4K shot fills a 1080p@2x panel, pixel-perfect); Logical = one CSS pixel (the browser's 100%, ~2x magnified on Retina). No effect on standard displays.",
         options: [
           { label: "Device", value: "device" },
           { label: "Logical", value: "logical" },

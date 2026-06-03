@@ -220,7 +220,7 @@ export function centerOnActiveCell(comp: Comp): void {
 
 /** How many source pixels collapse into one CSS pixel at 1:1. In "device" mode
  *  that's the live devicePixelRatio (so a source pixel maps to a physical screen
- *  pixel — a 4K shot fills a 4K@2x panel); in "logical" mode it's 1 (the
+ *  pixel — a 4K shot fills a 1080p@2x panel); in "logical" mode it's 1 (the
  *  browser's CSS 100%). Read live so dragging across monitors / browser zoom
  *  takes effect on the next applyZoom. */
 function oneToOneScale(): number {
