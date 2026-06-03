@@ -363,6 +363,9 @@ function injectForumManualCSS(): void {
     ._scf_manual_cols {
       width: 4em;
     }
+    ._scf_manual_names {
+      width: 16em;
+    }
     ._scf_manual_status {
       opacity: 0.85;
     }
@@ -438,6 +441,89 @@ function updateManualSelectionStyles(selected: HTMLImageElement[]): void {
   });
 }
 
+/** All post images eligible for manual selection, in document order. */
+function selectableForumImages(): HTMLImageElement[] {
+  return [...document.querySelectorAll<HTMLImageElement>("img")].filter(isSelectableForumImage);
+}
+
+/** Comparator that orders two nodes by their position in the document. */
+function docOrder(a: Node, b: Node): number {
+  if (a === b) return 0;
+  return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+}
+
+/** Contiguous runs of selectable images. A run is broken only by substantive
+ *  content (a non-blank text line, a heading, or an <hr>); <br>, <a> wrappers
+ *  and whitespace are connective and keep a gallery together. */
+function forumImageGroups(): HTMLImageElement[][] {
+  const root = document.querySelector(".std-content") ?? document.body;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+  const groups: HTMLImageElement[][] = [];
+  let current: HTMLImageElement[] = [];
+  const flush = () => {
+    if (current.length) {
+      groups.push(current);
+      current = [];
+    }
+  };
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (node instanceof HTMLImageElement) {
+      if (isSelectableForumImage(node)) current.push(node);
+    } else if (node.nodeType === Node.TEXT_NODE) {
+      if ((node.textContent ?? "").trim()) flush();
+    } else if (node instanceof HTMLElement && (node.tagName === "HR" || /^H[1-6]$/.test(node.tagName))) {
+      flush();
+    }
+  }
+  flush();
+  return groups;
+}
+
+/** The contiguous gallery a given image belongs to. */
+function forumGroupOf(img: HTMLImageElement): HTMLImageElement[] {
+  for (const group of forumImageGroups()) if (group.includes(img)) return group;
+  return [img];
+}
+
+/** Selectable images from a to b inclusive, in document order (shift-range). */
+function forumImagesBetween(a: HTMLImageElement, b: HTMLImageElement): HTMLImageElement[] {
+  const all = selectableForumImages();
+  let i = all.indexOf(a);
+  let j = all.indexOf(b);
+  if (i < 0 || j < 0) return [b];
+  if (i > j) [i, j] = [j, i];
+  return all.slice(i, j + 1);
+}
+
+/** How many images share the clicked image's visual row — the gallery's natural
+ *  column count (0 when it can't tell, e.g. a lone image). */
+function forumRowWidth(group: HTMLImageElement[], clicked: HTMLImageElement): number {
+  const top = clicked.getBoundingClientRect().top;
+  const n = group.filter((img) => Math.abs(img.getBoundingClientRect().top - top) <= 4).length;
+  return n >= 2 ? n : 0;
+}
+
+/** The text line or label under the pointer, for column-name extraction. */
+function forumTextUnderPointer(event: MouseEvent): string | null {
+  const doc = document as unknown as {
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node } | null;
+  };
+  const node: Node | undefined =
+    doc.caretRangeFromPoint?.(event.clientX, event.clientY)?.startContainer ??
+    doc.caretPositionFromPoint?.(event.clientX, event.clientY)?.offsetNode;
+  if (node && node.nodeType === Node.TEXT_NODE && node.parentElement?.closest("td.comment")) {
+    const t = (node.textContent ?? "").trim();
+    if (t) return t;
+  }
+  const el = event.target;
+  if (el instanceof HTMLElement && !(el instanceof HTMLImageElement) && el.closest("td.comment")) {
+    const t = (el.textContent ?? "").trim();
+    if (t && t.length <= 200) return t;
+  }
+  return null;
+}
+
 function addForumManualComparisonControl(): void {
   if (!isHDBitsForumPage() || document.getElementById(FORUM_MANUAL_PANEL_ID)) return;
   const title = document.querySelector("h1");
@@ -446,6 +532,7 @@ function addForumManualComparisonControl(): void {
   injectForumManualCSS();
 
   const selected: HTMLImageElement[] = [];
+  let anchor: HTMLImageElement | null = null;
   let selecting = false;
   let dragSelecting = false;
   let dragMoved = false;
@@ -466,6 +553,14 @@ function addForumManualComparisonControl(): void {
   const controls = document.createElement("span");
   controls.className = "_scf_manual_controls";
   controls.hidden = true;
+
+  const namesLabel = document.createElement("label");
+  namesLabel.textContent = "names ";
+  const namesInput = document.createElement("input");
+  namesInput.type = "text";
+  namesInput.className = "_scf_manual_names";
+  namesInput.placeholder = "Source | Filtered | Encode";
+  namesLabel.appendChild(namesInput);
 
   const colLabel = document.createElement("label");
   colLabel.textContent = "columns ";
@@ -517,25 +612,45 @@ function addForumManualComparisonControl(): void {
 
   const reset = () => {
     selected.splice(0, selected.length);
+    anchor = null;
+    namesInput.value = "";
     updateManualSelectionStyles(selected);
     setSelecting(false);
     controls.hidden = true;
     updateStatus();
   };
 
-  const toggleImage = (img: HTMLImageElement) => {
-    const existing = selected.indexOf(img);
-    if (existing >= 0) selected.splice(existing, 1);
-    else selected.push(img);
+  const refreshSelection = () => {
     updateManualSelectionStyles(selected);
     updateStatus();
   };
 
+  // Selection is kept in document order so rows assemble top-to-bottom,
+  // left-to-right regardless of the order images were clicked.
+  const setSelection = (imgs: HTMLImageElement[]) => {
+    const seen = new Set<HTMLImageElement>();
+    const next: HTMLImageElement[] = [];
+    for (const candidate of imgs) {
+      if (isSelectableForumImage(candidate) && !seen.has(candidate)) {
+        seen.add(candidate);
+        next.push(candidate);
+      }
+    }
+    next.sort(docOrder);
+    selected.splice(0, selected.length, ...next);
+    refreshSelection();
+  };
+
+  const setColumns = (n: number) => {
+    if (n >= 2) cols.value = String(n);
+  };
+
+  // Additive single-image add used by the drag sweep.
   const addImage = (img: HTMLImageElement) => {
     if (selected.includes(img)) return;
     selected.push(img);
-    updateManualSelectionStyles(selected);
-    updateStatus();
+    selected.sort(docOrder);
+    refreshSelection();
   };
 
   function imageFromEvent(event: MouseEvent): HTMLImageElement | null {
@@ -591,21 +706,48 @@ function addForumManualComparisonControl(): void {
   }
 
   function onDocumentClick(event: MouseEvent): void {
-    const target = imageFromEvent(event);
-    if (!target) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (suppressNextClick) {
-      suppressNextClick = false;
+    const img = imageFromEvent(event);
+    if (img) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (suppressNextClick) {
+        suppressNextClick = false;
+        return;
+      }
+      if (event.metaKey || event.ctrlKey) {
+        // Ctrl/⌘-click toggles a single image — fine add or deselect.
+        if (selected.includes(img)) setSelection(selected.filter((x) => x !== img));
+        else setSelection([...selected, img]);
+        anchor = img;
+      } else if (event.shiftKey && anchor) {
+        // Shift-click adds the range from the anchor to here.
+        setSelection([...selected, ...forumImagesBetween(anchor, img)]);
+      } else {
+        // A plain click selects the whole contiguous gallery.
+        const group = forumGroupOf(img);
+        setSelection(group);
+        anchor = img;
+        setColumns(forumRowWidth(group, img));
+      }
       return;
     }
-    toggleImage(target);
+    // A click on a text label fills the column names from it.
+    const text = forumTextUnderPointer(event);
+    if (!text) return;
+    const parts = splitNames(text);
+    if (parts.length >= 2 && looksLikeNames(parts)) {
+      event.preventDefault();
+      event.stopPropagation();
+      namesInput.value = parts.join(" | ");
+      setColumns(parts.length);
+      updateStatus(`titles: ${parts.join(" | ")}`);
+    }
   }
 
   start.addEventListener("click", () => {
     controls.hidden = false;
     setSelecting(true);
-    updateStatus();
+    updateStatus("click a gallery · Ctrl-click toggles · Shift-click ranges · click a label to name");
   });
 
   build.addEventListener("click", () => {
@@ -619,6 +761,18 @@ function addForumManualComparisonControl(): void {
       return;
     }
 
+    let names: string[];
+    const typed = namesInput.value.trim();
+    if (typed) {
+      names = splitNames(typed).map((part) => part.trim()).filter(Boolean);
+      if (names.length !== numCols) {
+        updateStatus(`names (${names.length}) ≠ columns (${numCols})`);
+        return;
+      }
+    } else {
+      names = Array.from({ length: numCols }, (_, i) => `Source ${i + 1}`);
+    }
+
     const rows: GridCell[][] = [];
     for (let i = 0; i < selected.length; i += numCols) {
       rows.push(selected.slice(i, i + numCols).map(forumManualCell));
@@ -626,7 +780,7 @@ function addForumManualComparisonControl(): void {
     const grid: Grid = {
       rows,
       numCols,
-      names: Array.from({ length: numCols }, (_, i) => `Source ${i + 1}`),
+      names,
       anchorEl: panel,
     };
     setSelecting(false);
@@ -636,7 +790,7 @@ function addForumManualComparisonControl(): void {
 
   clear.addEventListener("click", reset);
 
-  controls.append(colLabel, build, clear, status);
+  controls.append(namesLabel, colLabel, build, clear, status);
   panel.append(start, controls);
   title.insertAdjacentElement("afterend", panel);
 }

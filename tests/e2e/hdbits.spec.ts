@@ -438,15 +438,14 @@ test("hdbits: forum manual custom comparison builds a Source N grid from selecte
   await expect(panel).toHaveCount(1);
   await panel.locator("._scf_manual_button").click();
 
+  // One click selects the whole contiguous gallery (4 images), and the column
+  // count auto-fills from the gallery's row width (2-wide) — no manual entry.
   const screenshots = page.locator('img[src*="t.hdbits.org/manual"]');
   await screenshots.nth(0).click();
-  await screenshots.nth(1).click();
-  await screenshots.nth(2).click();
-  await screenshots.nth(3).click();
   await expect(page.locator("._scf_manual_selected")).toHaveCount(4);
   await expect(panel.locator("._scf_manual_status")).toHaveText("4 selected");
+  await expect(panel.locator("._scf_manual_cols")).toHaveValue("2");
 
-  await panel.locator("._scf_manual_cols").fill("2");
   await panel.locator("._scf_manual_build").click();
 
   await expect(page.locator("._scf_comp")).toBeVisible();
@@ -468,9 +467,9 @@ test("hdbits: forum manual custom comparison clear resets selected screenshots",
   const panel = page.locator("._scf_manual_panel");
   await panel.locator("._scf_manual_button").click();
   const screenshots = page.locator('img[src*="t.hdbits.org/manual"]');
+  // One click grabs the whole 4-image gallery.
   await screenshots.nth(0).click();
-  await screenshots.nth(1).click();
-  await expect(page.locator("._scf_manual_selected")).toHaveCount(2);
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(4);
 
   await panel.locator("._scf_manual_clear").click();
 
@@ -489,6 +488,80 @@ test("hdbits: forum manual custom comparison supports drag selection across scre
 
   await expect(page.locator("._scf_manual_selected")).toHaveCount(4);
   await expect(panel.locator("._scf_manual_status")).toHaveText("4 selected");
+});
+
+test("hdbits: forum manual — one click selects a whole gallery, leaving other groups untouched", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/155-forum-post-grouped-manual-selection");
+  await waitForHdbitsReady(page);
+
+  const panel = page.locator("._scf_manual_panel");
+  await panel.locator("._scf_manual_button").click();
+
+  // Group A is a 2-image gallery; one click grabs both and nothing from group B.
+  await page.locator('img[src*="grpA1"]').click();
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(2);
+  await expect(page.locator('img[src*="grpB1"]')).not.toHaveClass(/_scf_manual_selected/);
+  // Column count auto-detected from the gallery's row width (2-wide).
+  await expect(panel.locator("._scf_manual_cols")).toHaveValue("2");
+});
+
+test("hdbits: forum manual — Shift-click extends the selection as a range across groups", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/155-forum-post-grouped-manual-selection");
+  await waitForHdbitsReady(page);
+
+  const panel = page.locator("._scf_manual_panel");
+  await panel.locator("._scf_manual_button").click();
+
+  await page.locator('img[src*="grpA1"]').click(); // anchor + group A (2)
+  await page.locator('img[src*="grpB2"]').click({ modifiers: ["Shift"] });
+  // Range from the first image to the last spans both galleries: all 4 selected.
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(4);
+});
+
+test("hdbits: forum manual — Ctrl/Cmd-click toggles a single image (add or deselect)", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/155-forum-post-grouped-manual-selection");
+  await waitForHdbitsReady(page);
+
+  const panel = page.locator("._scf_manual_panel");
+  await panel.locator("._scf_manual_button").click();
+
+  await page.locator('img[src*="grpA1"]').click(); // group A (2)
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(2);
+  // Toggle off one already-selected image.
+  await page.locator('img[src*="grpA2"]').click({ modifiers: ["Meta"] });
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(1);
+  // Toggle on a single image from another group.
+  await page.locator('img[src*="grpB1"]').click({ modifiers: ["Meta"] });
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(2);
+});
+
+test("hdbits: forum manual — clicking a label fills the column names and count", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/155-forum-post-grouped-manual-selection");
+  await waitForHdbitsReady(page);
+
+  const panel = page.locator("._scf_manual_panel");
+  await panel.locator("._scf_manual_button").click();
+
+  // Clicking the "Source vs Encode" label extracts the names and sets the count.
+  await page.locator(".cmp-label").click();
+  await expect(panel.locator("._scf_manual_names")).toHaveValue("Source | Encode");
+  await expect(panel.locator("._scf_manual_cols")).toHaveValue("2");
+
+  // Apply those names to a manual 2-wide selection (group A).
+  await page.locator('img[src*="grpA1"]').click();
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(2);
+  await panel.locator("._scf_manual_build").click();
+
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await page.keyboard.press("Digit1");
+  const names = (await page.locator("._scf_comp_label span").allTextContents())
+    .map((t) => t.replace(/^\d+\.\s*/, "").trim())
+    .filter(Boolean);
+  expect(names).toEqual(["Source", "Encode"]);
 });
 
 test("hdbits: saved Over the Garden Wall forum page uses the current manual fallback", async ({ page }) => {
