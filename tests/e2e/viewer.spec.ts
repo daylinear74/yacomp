@@ -1019,6 +1019,25 @@ test("settings: Reset shortcuts restores defaults", async ({ page }) => {
   await expect(mainBtn).toHaveText("O");
 });
 
+test.describe("1:1 on a HiDPI (2x) display", () => {
+  test.use({ deviceScaleFactor: 2 });
+
+  test("device mode (default) maps source pixels to physical pixels — halves the CSS width", async ({ page }) => {
+    await openViewer(page); // default oneToOnePixels = "device"
+    await expect(page.locator("._scf_comp")).toHaveClass(/_scf_zoomed/);
+    // Active column is the 1920px-wide source → at 1:1 device on DPR 2, 960 CSS px
+    // (= 1920 physical px), so it isn't drawn 2x oversized.
+    const row = page.locator("._scf_comp_row").first();
+    await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("960px");
+  });
+
+  test("logical mode keeps the full source width (the old 2x-magnified behavior)", async ({ page }) => {
+    await openViewer(page, { config: { oneToOnePixels: "logical" } });
+    const row = page.locator("._scf_comp_row").first();
+    await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("1920px");
+  });
+});
+
 test("viewer opens horizontally centered on a 1:1 image wider than the viewport", async ({ page }) => {
   // Default zoom is 1:1; the fixture's first row is 1920px wide in Playwright's
   // 1280px viewport, so it must open centered (scrollLeft ≈ half the overflow),

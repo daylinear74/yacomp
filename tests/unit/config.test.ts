@@ -117,6 +117,11 @@ describe("validate — discriminated unions", () => {
       DEFAULTS.zoomPercentBase,
     );
   });
+  test("oneToOnePixels only accepts device/logical", () => {
+    expect(validate({ oneToOnePixels: "logical" }).oneToOnePixels).toBe("logical");
+    expect(validate({ oneToOnePixels: "device" }).oneToOnePixels).toBe("device");
+    expect(validate({ oneToOnePixels: "nope" }).oneToOnePixels).toBe(DEFAULTS.oneToOnePixels);
+  });
 });
 
 describe("validate — boolean fields", () => {

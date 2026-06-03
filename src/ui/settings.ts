@@ -14,7 +14,7 @@ import {
 import { injectCSS } from "./css";
 import { getShadowRoot } from "./shadow";
 import { showToast } from "./toast";
-import { activeComps, zoomToast } from "../filters/zoom";
+import { activeComps, zoomToast, refit1to1 } from "../filters/zoom";
 import { refreshPTPGridToggles } from "../sites/ptp";
 import { formatShortcut, keyEventToShortcut, type Shortcut } from "../shortcuts/types";
 import { ACTIONS, actionMeta, type ActionId } from "../shortcuts/registry";
@@ -96,6 +96,17 @@ const GROUPS: SettingGroup[] = [
           { label: "Fit", value: "fit" },
         ],
         onSave: () => { if (activeComps.length) showToast(zoomToast()); },
+      },
+      {
+        type: "radio",
+        key: "oneToOnePixels",
+        label: "1:1 pixels",
+        tooltip: "What a source pixel maps to at 1:1 on a HiDPI / Retina screen. Device = one physical screen pixel (a 4K shot fills a 4K@2x panel, pixel-perfect); Logical = one CSS pixel (the browser's 100%, ~2x magnified on Retina). No effect on standard displays.",
+        options: [
+          { label: "Device", value: "device" },
+          { label: "Logical", value: "logical" },
+        ],
+        onSave: () => { refit1to1(); if (activeComps.length) showToast(zoomToast()); },
       },
       {
         type: "radio",

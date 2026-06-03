@@ -49,6 +49,10 @@ export interface YacompConfig {
   lazyLoadMargin: number;
   mouseSwitch: boolean;
   zoomPercentBase: "original" | "fit";
+  // What "1:1" maps one source pixel to: a physical device pixel (HiDPI-aware —
+  // a 4K shot fills a 4K@2x screen) or a CSS pixel (the browser's logical 100%,
+  // which looks 2x magnified on Retina). No effect when devicePixelRatio is 1.
+  oneToOnePixels: "device" | "logical";
   verboseZoom: boolean;
   closeBtnPosition: "auto" | "left" | "right" | "hide";
   // Viewer chrome visibility policy (① auto-hide UI):
@@ -100,6 +104,7 @@ export const DEFAULTS: Readonly<YacompConfig> = {
   lazyLoadMargin: 200,
   mouseSwitch: true,
   zoomPercentBase: "original",
+  oneToOnePixels: "device" as const,
   verboseZoom: false,
   closeBtnPosition: "auto" as const,
   uiChromeMode: "default" as const,
@@ -203,6 +208,10 @@ export function validate(raw: Record<string, unknown>): YacompConfig {
       raw.zoomPercentBase === "original" || raw.zoomPercentBase === "fit"
         ? raw.zoomPercentBase
         : DEFAULTS.zoomPercentBase,
+    oneToOnePixels:
+      raw.oneToOnePixels === "device" || raw.oneToOnePixels === "logical"
+        ? raw.oneToOnePixels
+        : DEFAULTS.oneToOnePixels,
     verboseZoom:
       typeof raw.verboseZoom === "boolean"
         ? raw.verboseZoom
@@ -276,6 +285,7 @@ export function zoomScaleFactor(): number { return config.zoomScaleFactor; }
 export function lazyLoadMargin(): number { return config.lazyLoadMargin; }
 export function mouseSwitch(): boolean { return config.mouseSwitch; }
 export function zoomPercentBase(): "original" | "fit" { return config.zoomPercentBase; }
+export function oneToOnePixels(): "device" | "logical" { return config.oneToOnePixels; }
 export function verboseZoom(): boolean { return config.verboseZoom; }
 export function closeBtnPosition(): "auto" | "left" | "right" | "hide" { return config.closeBtnPosition; }
 export function uiChromeMode(): "always" | "default" | "autohide" { return config.uiChromeMode; }

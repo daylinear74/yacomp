@@ -423,7 +423,14 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
       spacerResizeObserver.observe(allRowData[allRowData.length - 1].rowDiv);
     }
   }
-  window.addEventListener("resize", onResize);
+  // On window resize the devicePixelRatio may have changed (monitor move /
+  // browser zoom), so re-apply 1:1 at the new scale. Kept off the spacer
+  // observer's handler to avoid a resize→refit→resize loop.
+  const onWindowResize = () => {
+    comp.updateScrollSpacers?.();
+    refit1to1();
+  };
+  window.addEventListener("resize", onWindowResize);
 
   // The page scroll position at open — restored on close so dismissing the
   // viewer never moves the page (hiding the container would otherwise reflow it).
@@ -435,7 +442,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   function closeThis() {
     window.removeEventListener("mousemove", onDragMove);
     window.removeEventListener("mouseup", onDragEnd);
-    window.removeEventListener("resize", onResize);
+    window.removeEventListener("resize", onWindowResize);
     if (spacerResizeObserver) spacerResizeObserver.disconnect();
     openCenterRO?.disconnect();
 
