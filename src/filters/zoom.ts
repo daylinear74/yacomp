@@ -344,10 +344,11 @@ export function zoomToast(): string | ToastLine[] {
       ? "🔍 1:1"
       : "🔍 " + Math.round((zoomWidth / getReferenceWidth()) * 100) + "%";
 
-  // At 1:1 in device mode on a HiDPI screen, a source pixel ≠ a CSS pixel, so a
-  // single "Npx / N%" hides what's happening — call out native vs on-screen.
+  // In device mode on a HiDPI screen a source pixel ≠ a CSS pixel, so a single
+  // "Npx / N%" hides what's happening — call out native vs on-screen at every
+  // zoom level (1:1, +/- custom, and fit), not just 1:1.
   const dpr = window.devicePixelRatio || 1;
-  const showDevice = zoomMode === "1:1" && oneToOnePixels() === "device" && dpr !== 1;
+  const showDevice = oneToOnePixels() === "device" && dpr !== 1;
 
   if (!verboseZoom() && !showDevice) return briefLabel;
 
@@ -355,10 +356,14 @@ export function zoomToast(): string | ToastLine[] {
 
   if (showDevice) {
     const nativeW = activeColumnRawWidth() || getSizerNaturalWidth();
+    // The CSS width the row actually renders at, by mode.
+    const cssW = zoomMode === "fit" ? window.innerWidth
+      : zoomMode === "1:1" ? oneToOneWidth(nativeW)
+        : zoomWidth;
     if (nativeW) {
       lines.push({ text: "Native " + nativeW + "px", size: "small", color: TOAST_NATIVE_COLOR });
       lines.push({
-        text: "On screen " + oneToOneWidth(nativeW) + "px@" + dpr + "x",
+        text: "On screen " + Math.round(cssW) + "px@" + dpr + "x",
         size: "small",
         color: TOAST_SCREEN_COLOR,
       });
