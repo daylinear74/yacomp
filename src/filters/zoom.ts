@@ -191,6 +191,33 @@ function restoreZoomAnchor(anchor: CapturedZoomAnchor): void {
   if (anchor.comp.updateRowNav) anchor.comp.updateRowNav(anchor.currentRowIdx);
 }
 
+/** Center the viewport on the active row's active cell — horizontally and
+ *  vertically. Used on every viewer open (and re-applied once the active image
+ *  measures) so it always starts at the image center, even when the image is
+ *  larger than the viewport (e.g. a 4K shot at 1:1 in a 1080p viewport). */
+export function centerOnActiveCell(comp: Comp): void {
+  const rd = comp.allRowData[comp.currentRow];
+  if (!rd) return;
+  const row = rd.rowDiv;
+  const cw = comp.compDiv.clientWidth;
+  const ch = comp.compDiv.clientHeight;
+  const next = calcAnchoredRowScroll(
+    { rowXRatio: 0.5, rowYRatio: 0.5, viewportX: cw / 2, viewportY: ch / 2, scrollTopBounds: "row" },
+    {
+      rowLeft: row.offsetLeft,
+      rowTop: row.offsetTop,
+      rowWidth: row.offsetWidth || 1,
+      rowHeight: row.offsetHeight || 1,
+      contentHeight: comp.compDiv.scrollHeight,
+      viewportWidth: cw,
+      viewportHeight: ch,
+    },
+  );
+  suppressRowSync(comp);
+  comp.compDiv.scrollLeft = next.scrollLeft;
+  comp.compDiv.scrollTop = next.scrollTop;
+}
+
 /** Size one row to its ACTIVE column's native pixel width at 1:1 — each image at
  *  its own resolution, so a comparison that mixes resolutions across rows (057:
  *  785px bitrate charts alongside 1920px screenshots) no longer squashes every

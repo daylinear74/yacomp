@@ -1019,6 +1019,23 @@ test("settings: Reset shortcuts restores defaults", async ({ page }) => {
   await expect(mainBtn).toHaveText("O");
 });
 
+test("viewer opens horizontally centered on a 1:1 image wider than the viewport", async ({ page }) => {
+  // Default zoom is 1:1; the fixture's first row is 1920px wide in Playwright's
+  // 1280px viewport, so it must open centered (scrollLeft ≈ half the overflow),
+  // not pinned to the left edge.
+  await openViewer(page);
+  const comp = page.locator("._scf_comp");
+  await expect(comp).toHaveClass(/_scf_zoomed/);
+  await expect
+    .poll(() =>
+      comp.evaluate((el) => {
+        const centered = (el.scrollWidth - el.clientWidth) / 2;
+        return el.scrollWidth > el.clientWidth + 8 && Math.abs(el.scrollLeft - centered) < 8;
+      }),
+    )
+    .toBe(true);
+});
+
 test("settings: Export downloads the config as JSON", async ({ page }) => {
   await openViewer(page, { config: { toastDuration: 3200 } });
   await openSettingsModal(page);
