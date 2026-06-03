@@ -3,7 +3,7 @@
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
 import { applyFilterToImg } from "../filters/imaging";
-import { size1to1RowOnLoad } from "../filters/zoom";
+import { sizeRowOnLoad } from "../filters/zoom";
 import { mouseSwitch } from "../config";
 import type { DragState } from "./drag";
 import type { RowData, Comp } from "./types";
@@ -149,10 +149,10 @@ export function loadRow(rd: RowData, comp: Comp): void {
   }
   const activeCol = comp.currentCol || 0;
   if (imgs[activeCol]) loadCellSrc(imgs[activeCol], activeCol, comp, adjustRowAR);
-  // At 1:1, a row scrolling in must take its OWN native width (it may be a
-  // different resolution than rows already on screen). Sizes once the active
-  // cell measures; no-op in fit/custom.
-  size1to1RowOnLoad(rd, comp);
+  // When zoomed, a row scrolling in must take its OWN native width × the
+  // current scale (it may be a different resolution than rows already on
+  // screen). Sizes once the active cell measures; no-op in fit.
+  sizeRowOnLoad(rd, comp);
 }
 
 // switchColumn hook: promote one column's deferred src in a row that's

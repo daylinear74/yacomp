@@ -234,24 +234,36 @@ function oneToOneWidth(naturalWidth: number): number {
   return Math.round(naturalWidth / oneToOneScale());
 }
 
-/** Size one row to its ACTIVE column's native pixel width at 1:1 — each image at
- *  its own resolution, so a comparison that mixes resolutions across rows (057:
- *  785px bitrate charts alongside 1920px screenshots) no longer squashes every
- *  row to one shared width. If the active image hasn't measured yet (lazy /
- *  deferred), set a fallback now and finish once it loads, guarded so a column
- *  switch in the meantime can't apply a stale width. */
-function size1to1Row(rd: RowData, comp: Comp): void {
+/** Zoom scale relative to each row's own native (device-1:1) width: 1 at 1:1,
+ *  and zoomWidth / reference when zoomed. The factor is global but applied
+ *  per-row, so a comparison that mixes resolutions across rows (057: 785px
+ *  bitrate charts beside 1920px screenshots) keeps each row at its OWN native ×
+ *  the same factor instead of flattening every row to one width. */
+function currentZoomScale(): number {
+  if (zoomMode === "1:1") return 1;
+  const ref = activeColumnNaturalWidth();
+  return ref ? zoomWidth / ref : 1;
+}
+
+/** Size one row to (its active column's native width ÷ DPR) × scale — each image
+ *  at its own resolution, scaled by the common factor. If the active image
+ *  hasn't measured yet (lazy / deferred), set a fallback now and finish once it
+ *  loads at the live scale, guarded so a mid-load column switch can't apply a
+ *  stale width. */
+function sizeRowScaled(rd: RowData, comp: Comp, scale: number): void {
   const img = rd.imgs[comp.currentCol];
   if (img?.naturalWidth) {
-    rd.rowDiv.style.width = `${oneToOneWidth(img.naturalWidth)}px`;
+    rd.rowDiv.style.width = `${Math.round(oneToOneWidth(img.naturalWidth) * scale)}px`;
     return;
   }
-  rd.rowDiv.style.width = rd.sizer?.naturalWidth ? `${oneToOneWidth(rd.sizer.naturalWidth)}px` : "100vw";
+  rd.rowDiv.style.width = rd.sizer?.naturalWidth
+    ? `${Math.round(oneToOneWidth(rd.sizer.naturalWidth) * scale)}px`
+    : "100vw";
   img?.addEventListener(
     "load",
     () => {
-      if (zoomMode === "1:1" && rd.imgs[comp.currentCol] === img && img.naturalWidth) {
-        rd.rowDiv.style.width = `${oneToOneWidth(img.naturalWidth)}px`;
+      if (zoomMode !== "fit" && rd.imgs[comp.currentCol] === img && img.naturalWidth) {
+        rd.rowDiv.style.width = `${Math.round(oneToOneWidth(img.naturalWidth) * currentZoomScale())}px`;
       }
     },
     { once: true },
@@ -259,12 +271,13 @@ function size1to1Row(rd: RowData, comp: Comp): void {
 }
 
 /** Scroll-in / deliberate-switch hook (row.ts): size a row to its active column
- *  once that image lands. No-op outside 1:1. A mouse-sweep does NOT call this —
- *  it loads the swept-to column width-neutrally — so the scale stays put during
- *  the compare gesture; only a deliberate switch (refit1to1 → applyZoom) re-fits. */
-export function size1to1RowOnLoad(rd: RowData, comp: Comp): void {
-  if (zoomMode !== "1:1") return;
-  size1to1Row(rd, comp);
+ *  once that image lands, at the current zoom scale. No-op in fit. A mouse-sweep
+ *  does NOT call this — it loads the swept-to column width-neutrally — so the
+ *  scale stays put during the compare gesture; only a deliberate switch
+ *  (refit1to1 → applyZoom) re-fits. */
+export function sizeRowOnLoad(rd: RowData, comp: Comp): void {
+  if (zoomMode === "fit") return;
+  sizeRowScaled(rd, comp, currentZoomScale());
 }
 
 export function applyZoom(anchors: CapturedZoomAnchor[] = []): void {
@@ -272,11 +285,10 @@ export function applyZoom(anchors: CapturedZoomAnchor[] = []): void {
     if (zoomMode === "fit") {
       for (const rd of comp.allRowData) rd.rowDiv.style.width = "100vw";
       comp.compDiv.classList.remove("_scf_zoomed");
-    } else if (zoomMode === "1:1") {
-      for (const rd of comp.allRowData) size1to1Row(rd, comp);
-      comp.compDiv.classList.add("_scf_zoomed");
     } else {
-      for (const rd of comp.allRowData) rd.rowDiv.style.width = `${zoomWidth}px`;
+      // 1:1 (scale 1) and custom (scale ≠ 1) share one per-row scaled path.
+      const scale = currentZoomScale();
+      for (const rd of comp.allRowData) sizeRowScaled(rd, comp, scale);
       comp.compDiv.classList.add("_scf_zoomed");
     }
   }
@@ -305,16 +317,21 @@ function getSizerNaturalWidth(): number {
   return sizer?.naturalWidth || 0;
 }
 
-/** Raw source-pixel width of the ACTIVE column's image (NOT device-adjusted). */
-function activeColumnRawWidth(): number {
+/** The currently-viewed row's true source width (raw) and on-screen rendered
+ *  width — for the toast, so "Original / On screen" track the row you're looking
+ *  at, not the first loaded row. */
+function currentRowReadout(): { nativeW: number; screenW: number } {
   const comp = activeComps[activeComps.length - 1];
+  let nativeW = getSizerNaturalWidth();
   if (comp) {
-    for (const rd of comp.allRowData) {
-      const img = rd.imgs[comp.currentCol];
-      if (img?.naturalWidth) return img.naturalWidth;
+    const rd = comp.allRowData[comp.currentRow];
+    if (rd) {
+      nativeW = rd.imgs[comp.currentCol]?.naturalWidth || nativeW;
+      const offset = Math.round(rd.rowDiv.offsetWidth);
+      return { nativeW, screenW: offset || oneToOneWidth(nativeW) };
     }
   }
-  return 0;
+  return { nativeW, screenW: oneToOneWidth(nativeW) };
 }
 
 /** Native pixel width of the ACTIVE column's image (from any loaded row), so 1:1
@@ -355,15 +372,11 @@ export function zoomToast(): string | ToastLine[] {
   const lines: ToastLine[] = [{ text: briefLabel, size: "large" }];
 
   if (showDevice) {
-    const nativeW = activeColumnRawWidth() || getSizerNaturalWidth();
-    // The CSS width the row actually renders at, by mode.
-    const cssW = zoomMode === "fit" ? window.innerWidth
-      : zoomMode === "1:1" ? oneToOneWidth(nativeW)
-        : zoomWidth;
+    const { nativeW, screenW } = currentRowReadout();
     if (nativeW) {
-      lines.push({ text: "Native " + nativeW + "px", size: "small", color: TOAST_NATIVE_COLOR });
+      lines.push({ text: "Original " + nativeW + "px", size: "small", color: TOAST_NATIVE_COLOR });
       lines.push({
-        text: "On screen " + Math.round(cssW) + "px@" + dpr + "x",
+        text: "On screen " + screenW + "px@" + dpr + "x",
         size: "small",
         color: TOAST_SCREEN_COLOR,
       });
