@@ -1055,6 +1055,16 @@ test.describe("1:1 on a HiDPI (2x) display", () => {
       .poll(() => row.evaluate((el) => parseFloat((el as HTMLElement).style.width) || 0))
       .toBeGreaterThan(100);
   });
+
+  test("device native/on-screen info also shows when zooming with +/- (custom mode)", async ({ page }) => {
+    await openViewer(page);
+    const row = page.locator("._scf_comp_row").first();
+    await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("960px");
+    await page.keyboard.press("Equal"); // + → custom 960 × 1.25 = 1200 CSS px
+    const toast = page.locator("#_scf_toast_");
+    await expect(toast).toContainText("Native 1920px");
+    await expect(toast).toContainText("On screen 1200px@2x");
+  });
 });
 
 test("viewer opens horizontally centered on a 1:1 image wider than the viewport", async ({ page }) => {
