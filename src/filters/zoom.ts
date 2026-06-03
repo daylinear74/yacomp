@@ -294,12 +294,27 @@ export function applyZoom(anchors: CapturedZoomAnchor[] = []): void {
 
 function getReferenceWidth(): number {
   if (zoomPercentBase() === "fit") return window.innerWidth;
-  return activeColumnNaturalWidth() || getSizerNaturalWidth() || window.innerWidth;
+  // Device-adjusted so 1:1 reads as 100% (physical) in device mode.
+  return activeColumnNaturalWidth() || oneToOneWidth(getSizerNaturalWidth()) || window.innerWidth;
 }
 
+/** Raw source-pixel width of the column-0 sizer (NOT device-adjusted) — the
+ *  image's true native width, for the toast's "Native" readout. */
 function getSizerNaturalWidth(): number {
   const sizer = getShadowRoot().querySelector("._scf_comp_sizer") as HTMLImageElement | null;
-  return oneToOneWidth(sizer?.naturalWidth || 0);
+  return sizer?.naturalWidth || 0;
+}
+
+/** Raw source-pixel width of the ACTIVE column's image (NOT device-adjusted). */
+function activeColumnRawWidth(): number {
+  const comp = activeComps[activeComps.length - 1];
+  if (comp) {
+    for (const rd of comp.allRowData) {
+      const img = rd.imgs[comp.currentCol];
+      if (img?.naturalWidth) return img.naturalWidth;
+    }
+  }
+  return 0;
 }
 
 /** Native pixel width of the ACTIVE column's image (from any loaded row), so 1:1
@@ -319,6 +334,9 @@ function activeColumnNaturalWidth(): number {
   return 0;
 }
 
+const TOAST_NATIVE_COLOR = "#7ee0a0"; // green — the image's native resolution
+const TOAST_SCREEN_COLOR = "#8ab4f8"; // blue — what it renders at on this screen
+
 export function zoomToast(): string | ToastLine[] {
   const briefLabel = zoomMode === "fit"
     ? "🔍 Fit"
@@ -326,16 +344,35 @@ export function zoomToast(): string | ToastLine[] {
       ? "🔍 1:1"
       : "🔍 " + Math.round((zoomWidth / getReferenceWidth()) * 100) + "%";
 
-  if (!verboseZoom()) return briefLabel;
+  // At 1:1 in device mode on a HiDPI screen, a source pixel ≠ a CSS pixel, so a
+  // single "Npx / N%" hides what's happening — call out native vs on-screen.
+  const dpr = window.devicePixelRatio || 1;
+  const showDevice = zoomMode === "1:1" && oneToOnePixels() === "device" && dpr !== 1;
+
+  if (!verboseZoom() && !showDevice) return briefLabel;
+
+  const lines: ToastLine[] = [{ text: briefLabel, size: "large" }];
+
+  if (showDevice) {
+    const nativeW = activeColumnRawWidth() || getSizerNaturalWidth();
+    if (nativeW) {
+      lines.push({ text: "Native " + nativeW + "px", size: "small", color: TOAST_NATIVE_COLOR });
+      lines.push({
+        text: "On screen " + oneToOneWidth(nativeW) + "px@" + dpr + "x",
+        size: "small",
+        color: TOAST_SCREEN_COLOR,
+      });
+    }
+    if (verboseZoom()) {
+      lines.push({ text: "Viewport " + window.innerWidth + "px", size: "tiny", muted: true });
+    }
+    return lines;
+  }
 
   const vw = window.innerWidth;
   const ow = getSizerNaturalWidth();
   const ew = zoomMode === "fit" ? vw : zoomWidth;
-
-  const lines: ToastLine[] = [
-    { text: briefLabel, size: "large" },
-    { text: ew + "px", size: "normal" },
-  ];
+  lines.push({ text: ew + "px", size: "normal" });
 
   if (ow && ow === vw) {
     lines.push({ text: "Viewport · Original " + vw + "px (" + Math.round((ew / vw) * 100) + "%)", size: "small", muted: true });
@@ -369,7 +406,14 @@ export function snapZoom(base: number, next: number): number {
 
 export function doZoomStep(dir: number): void {
   const anchors = captureActiveZoomAnchors();
-  const base = zoomMode === "fit" ? window.innerWidth : zoomWidth;
+  // At 1:1 the global zoomWidth can still be 0 (the active image hadn't measured
+  // when 1:1 was applied — per-row sizing doesn't set it), so read the live 1:1
+  // width; guard any 0 with the viewport so a first +/- never collapses to 0px.
+  const base = (
+    zoomMode === "fit" ? window.innerWidth
+      : zoomMode === "1:1" ? activeColumnNaturalWidth()
+        : zoomWidth
+  ) || window.innerWidth;
   zoomWidth = snapZoom(base, calcZoom(base, dir));
   zoomMode = "custom";
   applyZoom(anchors);
