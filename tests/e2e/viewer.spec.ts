@@ -1036,6 +1036,25 @@ test.describe("1:1 on a HiDPI (2x) display", () => {
     const row = page.locator("._scf_comp_row").first();
     await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("1920px");
   });
+
+  test("device mode 1:1 toast distinguishes native vs on-screen width", async ({ page }) => {
+    await openViewer(page); // 1:1, device, DPR 2
+    const row = page.locator("._scf_comp_row").first();
+    await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("960px");
+    await page.keyboard.press("KeyO"); // re-trigger 1:1 so the toast shows (open is silent)
+    const toast = page.locator("#_scf_toast_");
+    await expect(toast).toContainText("Native 1920px");
+    await expect(toast).toContainText("On screen 960px@2x");
+  });
+
+  test("+ from 1:1 never collapses to 0px (zoomWidth was unset)", async ({ page }) => {
+    await openViewer(page); // opens at 1:1, device mode
+    const row = page.locator("._scf_comp_row").first();
+    await page.keyboard.press("Equal"); // first action is a zoom-in
+    await expect
+      .poll(() => row.evaluate((el) => parseFloat((el as HTMLElement).style.width) || 0))
+      .toBeGreaterThan(100);
+  });
 });
 
 test("viewer opens horizontally centered on a 1:1 image wider than the viewport", async ({ page }) => {
