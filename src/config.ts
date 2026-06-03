@@ -64,6 +64,9 @@ export interface YacompConfig {
   // What clicking a PTP grid tile does: open the yacomp viewer at that image,
   // or open the full image in a new browser tab.
   ptpGridClick: "viewer" | "tab";
+  // What clicking an HDBits comparison image does: open the yacomp viewer at
+  // that shot, or leave HDBits' native behavior (open the full image).
+  hdbitsImageClick: "viewer" | "native";
   // The PTP grid toggle's label style: a preset glyph/word pair, or "custom"
   // to use the free-text labels below.
   ptpGridToggleStyle: "grid" | "triangles" | "text" | "custom";
@@ -103,6 +106,7 @@ export const DEFAULTS: Readonly<YacompConfig> = {
   uiHideDelay: 1000,
   ptpGridImageSize: "thumbnail" as const,
   ptpGridClick: "viewer" as const,
+  hdbitsImageClick: "viewer" as const,
   ptpGridToggleStyle: "grid" as const,
   ptpGridToggleCollapsed: "▦",
   ptpGridToggleExpanded: "▦",
@@ -220,6 +224,10 @@ export function validate(raw: Record<string, unknown>): YacompConfig {
       raw.ptpGridClick === "viewer" || raw.ptpGridClick === "tab"
         ? raw.ptpGridClick
         : DEFAULTS.ptpGridClick,
+    hdbitsImageClick:
+      raw.hdbitsImageClick === "viewer" || raw.hdbitsImageClick === "native"
+        ? raw.hdbitsImageClick
+        : DEFAULTS.hdbitsImageClick,
     ptpGridToggleStyle:
       raw.ptpGridToggleStyle === "grid" || raw.ptpGridToggleStyle === "triangles" ||
       raw.ptpGridToggleStyle === "text" || raw.ptpGridToggleStyle === "custom"
@@ -274,6 +282,7 @@ export function uiChromeMode(): "always" | "default" | "autohide" { return confi
 export function uiHideDelay(): number { return config.uiHideDelay; }
 export function ptpGridImageSize(): "thumbnail" | "full" { return config.ptpGridImageSize; }
 export function ptpGridClick(): "viewer" | "tab" { return config.ptpGridClick; }
+export function hdbitsImageClick(): "viewer" | "native" { return config.hdbitsImageClick; }
 export function ptpGridToggleStyle(): "grid" | "triangles" | "text" | "custom" { return config.ptpGridToggleStyle; }
 export function ptpGridToggleCollapsed(): string { return config.ptpGridToggleCollapsed; }
 export function ptpGridToggleExpanded(): string { return config.ptpGridToggleExpanded; }
@@ -348,4 +357,24 @@ export function saveConfig(partial: Partial<YacompConfig>): void {
 export function resetConfig(): void {
   config = { ...DEFAULTS };
   persist();
+}
+
+/** Pretty-printed JSON of the current config — for the settings export button. */
+export function exportConfig(): string {
+  return JSON.stringify(config, null, 2);
+}
+
+/** Replace the whole config from imported JSON (validated + migrated). Returns
+ *  false on parse error or non-object payload; the current config is untouched. */
+export function importConfig(json: string): boolean {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(json);
+  } catch {
+    return false;
+  }
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return false;
+  config = validate(migrate(raw as Record<string, unknown>));
+  persist();
+  return true;
 }

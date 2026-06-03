@@ -9,6 +9,7 @@ import {
   FILTER_MODE_IDS, type FilterModeId,
   GAMMA_PRESET_IDS, type GammaPresetId,
   shortcutPairFor, setShortcutPair, resetShortcuts, findShortcutConflict,
+  exportConfig, importConfig,
 } from "../config";
 import { injectCSS } from "./css";
 import { getShadowRoot } from "./shadow";
@@ -193,6 +194,16 @@ const GROUPS: SettingGroup[] = [
       },
       {
         type: "radio",
+        key: "hdbitsImageClick",
+        label: "HDBits image click",
+        tooltip: "What clicking a comparison image on HDBits does. Viewer opens the yacomp comparison viewer at that shot; Native keeps HDBits' default (open the full image).",
+        options: [
+          { label: "Viewer", value: "viewer" },
+          { label: "Native", value: "native" },
+        ],
+      },
+      {
+        type: "radio",
         key: "ptpGridToggleStyle",
         label: "PTP grid button",
         tooltip: "The fold toggle beside PTP's \"Show comparison\". ▦ is a single glyph; ▶ ▼ swaps between closed/open arrows; Text reads \"Show grid\"/\"Hide grid\"; Custom lets you type your own.",
@@ -275,6 +286,9 @@ const SITES_TOOLTIP =
   "Per-site toggle. Disabling stops yacomp from injecting on that site without uninstalling.";
 const FILTER_CYCLE_TOOLTIP =
   "Visual filters reachable via F / Shift+F. Uncheck to skip; drag enabled rows to reorder.";
+const BACKUP_TOOLTIP =
+  "Export all settings to a JSON file, or import one to restore them. Importing replaces every current setting.";
+
 const SHORTCUTS_TOOLTIP =
   "Click a field, then press a key (modifiers included) or pick a mouse button. Every action needs a main shortcut; the extra is optional (× clears it). Esc cancels capture; a duplicate binding is rejected.";
 
@@ -808,6 +822,71 @@ function buildShortcutsEditor(renderers: Renderer[]): HTMLElement {
   return container;
 }
 
+// ── Import / export ──────────────────────────────────────────────────────────
+
+function downloadText(filename: string, text: string): void {
+  const blob = new Blob([text], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Push freshly-imported config into any open viewer + the settings rows. */
+function applyImportedConfig(renderers: Renderer[]): void {
+  for (const r of renderers) r();
+  for (const c of activeComps) {
+    c.updateCloseBtn?.();
+    c.syncAutoHide?.();
+    c.updateFillCanvasBtn?.();
+    c.updateSourceMenu?.();
+  }
+  refreshPTPGridToggles();
+}
+
+function buildBackupSection(renderers: Renderer[]): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "_scf_settings_backup";
+
+  const exportBtn = document.createElement("button");
+  exportBtn.type = "button";
+  exportBtn.className = "_scf_settings_reset";
+  exportBtn.textContent = "Export";
+  exportBtn.addEventListener("click", () => downloadText("yacomp-config.json", exportConfig()));
+
+  const importBtn = document.createElement("button");
+  importBtn.type = "button";
+  importBtn.className = "_scf_settings_reset";
+  importBtn.textContent = "Import";
+
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.accept = "application/json,.json";
+  fileInput.style.display = "none";
+  fileInput.addEventListener("change", () => {
+    const file = fileInput.files?.[0];
+    fileInput.value = "";
+    if (!file) return;
+    void file.text().then((text) => {
+      if (importConfig(text)) {
+        applyImportedConfig(renderers);
+        showToast("Settings imported");
+      } else {
+        showToast("Couldn't import — not a valid config file");
+      }
+    });
+  });
+  importBtn.addEventListener("click", () => fileInput.click());
+
+  row.append(exportBtn, importBtn, fileInput);
+  return row;
+}
+
 function close(): void {
   if (overlay) {
     overlay.remove();
@@ -921,6 +1000,10 @@ export function openSettings(): void {
   // Shortcuts editor
   body.appendChild(buildGroupLabel("Shortcuts", SHORTCUTS_TOOLTIP));
   body.appendChild(buildShortcutsEditor(renderers));
+
+  // Backup (import / export)
+  body.appendChild(buildGroupLabel("Backup", BACKUP_TOOLTIP));
+  body.appendChild(buildBackupSection(renderers));
 
   // Footer
   const footer = document.createElement("div");

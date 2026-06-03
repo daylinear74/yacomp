@@ -13,6 +13,7 @@
 
 import { setupHDBitsCore } from "../../../src/sites/hdbits";
 import { setupKeyboard } from "../../../src/keyboard";
+import { saveConfig, getConfig, resetConfig } from "../../../src/config";
 
 // Test-only GM_xmlhttpRequest stub: serve a canned slow.pics collection page for
 // any slow.pics/c/<key> request so the slow.pics rescue/enrichment paths can be
@@ -42,6 +43,7 @@ function run(): void {
   // test presses a digit to populate it before reading source names.
   setupKeyboard();
   setupHDBitsCore();
+  (window as unknown as { __yacomp: unknown }).__yacomp = { saveConfig, getConfig, resetConfig };
   (window as unknown as { __yacomp_test_ready: boolean }).__yacomp_test_ready = true;
 }
 
