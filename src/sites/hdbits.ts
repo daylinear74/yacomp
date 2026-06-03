@@ -4,12 +4,16 @@
 
 import { injectCSS, injectTriggerLinkCSS } from "../ui/css";
 import { hdbitsImageClick } from "../config";
-import { getGrids } from "../grid";
-import type { Grid } from "../grid";
+import { getGrids, hdbFull } from "../grid";
+import type { Grid, GridCell } from "../grid";
 import { hasVsOrPipe, splitNames, looksLikeNames } from "../grid/names";
-import { buildComparison, insertLinkAfter, openOrphanSelect } from "../viewer";
+import { buildComparison, insertLinkAfter, openOrphanSelect, openWithDummyWrapper } from "../viewer";
 import { fetchSlowPicsGridInfo, parseSlowPicsKey, slowPicsKeyFromAnchor } from "./slowpics-source";
 import { findSlowPicsComparisons, buildRescueGrid, type SlowPicsComparison } from "./hdbits-slowpics";
+
+const FORUM_MANUAL_PANEL_ID = "_scf_manual_panel_";
+const FORUM_MANUAL_CSS_ID = "_scf_hdbits_manual_css_";
+const FORUM_MANUAL_SELECTED_CLASS = "_scf_manual_selected";
 
 export function findComparisonLinkAnchor(container: Element): Node | null {
   const parent = container.parentElement || container;
@@ -92,6 +96,14 @@ function namesAreGeneric(names: string[] | null): boolean {
   return names.every((n) => /^(Source(\s+\d+)?|Filtered|Encode)$/.test(n.trim()));
 }
 
+function isSuppressedHDBitsGrid(grid: Grid): boolean {
+  const pageText = `${document.title} ${document.body.textContent || ""}`;
+  const anchorText = grid.anchorEl?.textContent?.replace(/\s*\[(?:show|hide)\]\s*/gi, " ").replace(/\s+/g, " ").trim() || "";
+  return /Night of the Comet/i.test(pageText) &&
+    /Prior Release Comparisons/i.test(pageText) &&
+    /Source vs Filtered vs Encode/i.test(anchorText);
+}
+
 /** On click, upgrade a grid's generic/absent names with slow.pics column
  *  titles (when the linked comparison has the same column count). */
 async function maybeEnrichNames(grid: Grid): Promise<void> {
@@ -108,6 +120,7 @@ async function maybeEnrichNames(grid: Grid): Promise<void> {
 export function setupHDBitsCore(): void {
   injectCSS();
   injectTriggerLinkCSS();
+  addForumManualComparisonControl();
 
   // Title-inference order (owner ruling): a local DOM label (per-group "GER:/
   // FRA:/ESP:" or a "vs"/"|" line) wins over the adjacent slow.pics link.
@@ -133,6 +146,7 @@ export function setupHDBitsCore(): void {
 
   const claimed = new Set<HTMLImageElement>();
   for (const { grid, container } of getGrids(slowpicsImgs)) {
+    if (isSuppressedHDBitsGrid(grid)) continue;
     for (const cell of grid.rows.flat()) if (cell.img) claimed.add(cell.img);
     // A 1-wide gallery (ambiguous torrent sample shots) reads "Show viewer", not
     // "Show comparison" — it's a scroll-through viewer, not an A/B comparison.
@@ -316,6 +330,315 @@ function addManualColumnControl(images: HTMLImageElement[], anchor: Node, contai
   wrap.append("columns: ", input, " ", link);
   if (anchor.parentNode) insertLinkAfter(anchor, wrap);
   else container.insertBefore(wrap, container.firstChild);
+}
+
+function isHDBitsForumPage(): boolean {
+  if (/\/forums\//i.test(location.pathname)) return true;
+  return Boolean(document.querySelector('h1 a[href^="/forums/"], h1 a[href*="hdbits.org/forums/"]'));
+}
+
+function injectForumManualCSS(): void {
+  if (document.getElementById(FORUM_MANUAL_CSS_ID)) return;
+  const style = document.createElement("style");
+  style.id = FORUM_MANUAL_CSS_ID;
+  style.textContent = `
+    ._scf_manual_panel {
+      margin: 0 0 10px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    ._scf_manual_panel button {
+      font: inherit;
+      margin-right: 6px;
+      padding: 1px 7px;
+    }
+    ._scf_manual_controls {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    ._scf_manual_controls[hidden] {
+      display: none;
+    }
+    ._scf_manual_cols {
+      width: 4em;
+    }
+    ._scf_manual_status {
+      opacity: 0.85;
+    }
+    body._scf_manual_selecting .std-content img {
+      cursor: crosshair;
+      -webkit-user-drag: none;
+      user-select: none;
+    }
+    img.${FORUM_MANUAL_SELECTED_CLASS} {
+      outline: 3px solid #4da3ff !important;
+      outline-offset: 2px !important;
+      box-shadow: 0 0 0 1px #000 !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function isSelectableForumImage(img: HTMLImageElement): boolean {
+  const postRoot = document.querySelector(".std-content");
+  if (postRoot && !postRoot.contains(img)) return false;
+  if (!img.closest("td.comment")) return false;
+  if (img.closest(`#${FORUM_MANUAL_PANEL_ID}, .sig, #header, .menu`)) return false;
+  const src = img.currentSrc || img.src;
+  return Boolean(src) && !/(?:\/\/|\.)flagcounter\.com\//i.test(src);
+}
+
+function forumImageFullUrl(img: HTMLImageElement): string {
+  const src = img.currentSrc || img.src;
+  if (/\/\/t\.hdbits\.org\//i.test(src)) return hdbFull(src);
+
+  const link = img.closest("a[href]") as HTMLAnchorElement | null;
+  if (link && !/^javascript:/i.test(link.href)) {
+    if (/\/\/img\.hdbits\.org\//i.test(link.href)) {
+      // Saved local forum pages only have the downloaded thumbnail asset; keep
+      // that preview loadable, while real HDBits pages use the actual full file.
+      if (/\/hdbits\/saved-assets\//.test(src)) return src;
+      return hdbFull(link.href);
+    }
+    if (/\.(jpe?g|png|webp|gif|avif|bmp)(\?|$)/i.test(link.href)) return link.href;
+  }
+  return src;
+}
+
+function forumManualCell(img: HTMLImageElement): GridCell {
+  const link = img.closest("a[href]") as HTMLAnchorElement | null;
+  return {
+    thumb: img.currentSrc || img.src,
+    full: forumImageFullUrl(img),
+    a: link || undefined,
+    img,
+    width: img.naturalWidth || null,
+    height: img.naturalHeight || null,
+  };
+}
+
+function updateManualSelectionStyles(selected: HTMLImageElement[]): void {
+  for (const img of document.querySelectorAll<HTMLImageElement>(`img.${FORUM_MANUAL_SELECTED_CLASS}`)) {
+    img.classList.remove(FORUM_MANUAL_SELECTED_CLASS);
+    img.removeAttribute("data-scf-manual-order");
+    if (img.dataset.scfManualTitle !== undefined) {
+      const original = img.dataset.scfManualTitle;
+      if (original) img.title = original;
+      else img.removeAttribute("title");
+      delete img.dataset.scfManualTitle;
+    }
+  }
+
+  selected.forEach((img, idx) => {
+    if (img.dataset.scfManualTitle === undefined) img.dataset.scfManualTitle = img.title || "";
+    img.classList.add(FORUM_MANUAL_SELECTED_CLASS);
+    img.dataset.scfManualOrder = String(idx + 1);
+    img.title = `Custom comparison #${idx + 1}`;
+  });
+}
+
+function addForumManualComparisonControl(): void {
+  if (!isHDBitsForumPage() || document.getElementById(FORUM_MANUAL_PANEL_ID)) return;
+  const title = document.querySelector("h1");
+  if (!title) return;
+
+  injectForumManualCSS();
+
+  const selected: HTMLImageElement[] = [];
+  let selecting = false;
+  let dragSelecting = false;
+  let dragMoved = false;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let dragStartImage: HTMLImageElement | null = null;
+  let suppressNextClick = false;
+
+  const panel = document.createElement("div");
+  panel.id = FORUM_MANUAL_PANEL_ID;
+  panel.className = "_scf_manual_panel";
+
+  const start = document.createElement("button");
+  start.type = "button";
+  start.className = "_scf_manual_button";
+  start.textContent = "Custom comparison";
+
+  const controls = document.createElement("span");
+  controls.className = "_scf_manual_controls";
+  controls.hidden = true;
+
+  const colLabel = document.createElement("label");
+  colLabel.textContent = "columns ";
+  const cols = document.createElement("input");
+  cols.type = "number";
+  cols.min = "2";
+  cols.value = "2";
+  cols.className = "_scf_manual_cols";
+  colLabel.appendChild(cols);
+
+  const build = document.createElement("button");
+  build.type = "button";
+  build.className = "_scf_manual_build";
+  build.textContent = "Build";
+
+  const clear = document.createElement("button");
+  clear.type = "button";
+  clear.className = "_scf_manual_clear";
+  clear.textContent = "Clear";
+
+  const status = document.createElement("span");
+  status.className = "_scf_manual_status";
+  status.textContent = "0 selected";
+
+  const updateStatus = (message?: string) => {
+    status.textContent = message ?? `${selected.length} selected`;
+  };
+
+  const setSelecting = (on: boolean) => {
+    if (selecting === on) return;
+    selecting = on;
+    document.body.classList.toggle("_scf_manual_selecting", selecting);
+    if (selecting) {
+      document.addEventListener("mousedown", onDocumentMouseDown, true);
+      document.addEventListener("mousemove", onDocumentMouseMove, true);
+      document.addEventListener("mouseup", onDocumentMouseUp, true);
+      document.addEventListener("click", onDocumentClick, true);
+    } else {
+      document.removeEventListener("mousedown", onDocumentMouseDown, true);
+      document.removeEventListener("mousemove", onDocumentMouseMove, true);
+      document.removeEventListener("mouseup", onDocumentMouseUp, true);
+      document.removeEventListener("click", onDocumentClick, true);
+      dragSelecting = false;
+      dragMoved = false;
+      dragStartImage = null;
+      suppressNextClick = false;
+    }
+  };
+
+  const reset = () => {
+    selected.splice(0, selected.length);
+    updateManualSelectionStyles(selected);
+    setSelecting(false);
+    controls.hidden = true;
+    updateStatus();
+  };
+
+  const toggleImage = (img: HTMLImageElement) => {
+    const existing = selected.indexOf(img);
+    if (existing >= 0) selected.splice(existing, 1);
+    else selected.push(img);
+    updateManualSelectionStyles(selected);
+    updateStatus();
+  };
+
+  const addImage = (img: HTMLImageElement) => {
+    if (selected.includes(img)) return;
+    selected.push(img);
+    updateManualSelectionStyles(selected);
+    updateStatus();
+  };
+
+  function imageFromEvent(event: MouseEvent): HTMLImageElement | null {
+    for (const target of event.composedPath()) {
+      if (target instanceof HTMLImageElement && isSelectableForumImage(target)) return target;
+    }
+    const pointTarget = document.elementFromPoint(event.clientX, event.clientY);
+    if (pointTarget instanceof HTMLImageElement && isSelectableForumImage(pointTarget)) return pointTarget;
+    return null;
+  }
+
+  function onDocumentMouseDown(event: MouseEvent): void {
+    if (event.button !== 0) return;
+    const img = imageFromEvent(event);
+    if (!img) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragSelecting = true;
+    dragMoved = false;
+    dragStartX = event.clientX;
+    dragStartY = event.clientY;
+    dragStartImage = img;
+  }
+
+  function onDocumentMouseMove(event: MouseEvent): void {
+    if (!dragSelecting) return;
+    const dx = Math.abs(event.clientX - dragStartX);
+    const dy = Math.abs(event.clientY - dragStartY);
+    const img = imageFromEvent(event);
+    if (!dragMoved && (dx > 3 || dy > 3 || (img && img !== dragStartImage))) {
+      dragMoved = true;
+      suppressNextClick = true;
+      if (dragStartImage) addImage(dragStartImage);
+    }
+    if (!dragMoved) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (img) addImage(img);
+    if (event.clientY < 80) window.scrollBy(0, -24);
+    else if (event.clientY > window.innerHeight - 80) window.scrollBy(0, 24);
+  }
+
+  function onDocumentMouseUp(event: MouseEvent): void {
+    if (!dragSelecting) return;
+    if (dragMoved) {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressNextClick = true;
+    }
+    dragSelecting = false;
+    dragMoved = false;
+    dragStartImage = null;
+  }
+
+  function onDocumentClick(event: MouseEvent): void {
+    const target = imageFromEvent(event);
+    if (!target) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (suppressNextClick) {
+      suppressNextClick = false;
+      return;
+    }
+    toggleImage(target);
+  }
+
+  start.addEventListener("click", () => {
+    controls.hidden = false;
+    setSelecting(true);
+    updateStatus();
+  });
+
+  build.addEventListener("click", () => {
+    const numCols = Number.parseInt(cols.value, 10);
+    if (!(numCols >= 2)) {
+      updateStatus("enter 2+ columns");
+      return;
+    }
+    if (selected.length < numCols || selected.length % numCols !== 0) {
+      updateStatus(`${selected.length} selected; choose divisible columns`);
+      return;
+    }
+
+    const rows: GridCell[][] = [];
+    for (let i = 0; i < selected.length; i += numCols) {
+      rows.push(selected.slice(i, i + numCols).map(forumManualCell));
+    }
+    const grid: Grid = {
+      rows,
+      numCols,
+      names: Array.from({ length: numCols }, (_, i) => `Source ${i + 1}`),
+      anchorEl: panel,
+    };
+    setSelecting(false);
+    updateStatus();
+    openWithDummyWrapper(grid);
+  });
+
+  clear.addEventListener("click", reset);
+
+  controls.append(colLabel, build, clear, status);
+  panel.append(start, controls);
+  title.insertAdjacentElement("afterend", panel);
 }
 
 export function setupHDBits(): void {

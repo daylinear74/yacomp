@@ -12,10 +12,20 @@
 // the HDBits pages load test-entry.ts (which calls setupHDBitsCore so
 // the parser runs without a real hdbits.org host).
 
+import { basename, join } from "node:path";
+
 const PORT = 4173;
+const HOSTNAME = "127.0.0.1";
 const VIEWER_DIR = "tests/fixtures/viewer";
 const HDBITS_DIR = "tests/fixtures/hdbits";
 const PTP_DIR = "tests/fixtures/ptp";
+const SAVED_HDBITS_FORUM_HTML = Bun.env.YACOMP_SAVED_HDBITS_FORUM_HTML || "";
+const SAVED_HDBITS_ASSETS_DIR = SAVED_HDBITS_FORUM_HTML
+  ? SAVED_HDBITS_FORUM_HTML.replace(/\.html?$/i, "") + "_files"
+  : "";
+const SAVED_HDBITS_ASSETS_BASENAME = SAVED_HDBITS_ASSETS_DIR
+  ? basename(SAVED_HDBITS_ASSETS_DIR)
+  : "";
 
 const DEFAULT_TORRENT_TITLE = "Demo Movie 2025 1080p BluRay x264-DemoEncoder";
 const DEFAULT_THREAD_TITLE = "Demo comparison thread";
@@ -175,6 +185,58 @@ function injectTestEntry(html: string): string {
   );
 }
 
+function stripSavedPluginState(html: string): string {
+  let out = html
+    .replace(/<style id="_scf_comp_link_css_">[\s\S]*?<\/style>/g, "")
+    .replace(/<a\b[^>]*class="[^"]*\b_scf_comp_link\b[^"]*"[^>]*>[\s\S]*?<\/a>\s*(?:<br>)?/g, "");
+
+  const scfRoot = out.indexOf('<div id="_scf_root_"');
+  if (scfRoot >= 0) {
+    const beforeScfBodyClose = out.lastIndexOf("</body>", scfRoot);
+    const cutAt = beforeScfBodyClose >= 0 ? beforeScfBodyClose : scfRoot;
+    out = out.slice(0, cutAt) + "</body></html>";
+  }
+  return out;
+}
+
+async function serveSavedHdbitsForum(): Promise<Response> {
+  if (!SAVED_HDBITS_FORUM_HTML) {
+    return new Response("Set YACOMP_SAVED_HDBITS_FORUM_HTML to preview a saved HDBits forum page", { status: 404 });
+  }
+  const file = Bun.file(SAVED_HDBITS_FORUM_HTML);
+  if (!(await file.exists())) return new Response(`Saved forum HTML not found: ${SAVED_HDBITS_FORUM_HTML}`, { status: 404 });
+
+  let html = stripSavedPluginState(await file.text());
+  if (SAVED_HDBITS_ASSETS_BASENAME) {
+    html = html.replaceAll(`./${SAVED_HDBITS_ASSETS_BASENAME}/`, "/hdbits/saved-assets/");
+  }
+  return new Response(injectTestEntry(html), {
+    headers: { "content-type": "text/html" },
+  });
+}
+
+function assetContentType(path: string): string {
+  if (/\.css$/i.test(path)) return "text/css";
+  if (/\.js$/i.test(path)) return "application/javascript";
+  if (/\.png$/i.test(path)) return "image/png";
+  if (/\.jpe?g$/i.test(path)) return "image/jpeg";
+  if (/\.gif$/i.test(path)) return "image/gif";
+  if (/\.webp$/i.test(path)) return "image/webp";
+  return "application/octet-stream";
+}
+
+async function serveSavedHdbitsAsset(name: string): Promise<Response> {
+  if (!SAVED_HDBITS_ASSETS_DIR) return new Response("Saved forum assets not configured", { status: 404 });
+  const safeName = decodeURIComponent(name);
+  if (safeName.includes("/") || safeName.includes("\\")) return new Response("Bad asset path", { status: 400 });
+  const path = join(SAVED_HDBITS_ASSETS_DIR, safeName);
+  const file = Bun.file(path);
+  if (!(await file.exists())) return new Response(`Asset not found: ${safeName}`, { status: 404 });
+  return new Response(file, {
+    headers: { "content-type": assetContentType(path) },
+  });
+}
+
 async function serveHdbitsCase(slug: string): Promise<Response> {
   const file = Bun.file(`${HDBITS_DIR}/cases/${slug}.html`);
   if (!(await file.exists())) {
@@ -235,6 +297,7 @@ async function serveHdbitsCase(slug: string): Promise<Response> {
 // ─── server ─────────────────────────────────────────────────────────────────
 
 const server = Bun.serve({
+  hostname: HOSTNAME,
   port: PORT,
   async fetch(req) {
     const url = new URL(req.url);
@@ -264,11 +327,17 @@ const server = Bun.serve({
       const slug = url.pathname.slice("/hdbits/case/".length);
       return await serveHdbitsCase(slug);
     }
+    if (url.pathname === "/hdbits/saved/forum") {
+      return await serveSavedHdbitsForum();
+    }
+    if (url.pathname.startsWith("/hdbits/saved-assets/")) {
+      return await serveSavedHdbitsAsset(url.pathname.slice("/hdbits/saved-assets/".length));
+    }
 
     return new Response("Not found", { status: 404 });
   },
 });
 
-console.log(`Fixture server running at http://127.0.0.1:${server.port}`);
+console.log(`Fixture server running at http://${HOSTNAME}:${server.port}`);
 
 export {};

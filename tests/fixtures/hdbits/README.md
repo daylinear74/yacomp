@@ -25,6 +25,14 @@ The corner cases are real-world DOM shapes that don't fit a tidy spec.
 A case here is the only way to lock down behavior so a fix to one
 shape doesn't quietly break another.
 
+Forum comparison threads are especially irregular: a post can mix quoted
+screenshots, external galleries, slow.pics links, inline labels, and reply
+context in ways that are hard to generalize without harming torrent-page
+detection. For forum pages, yacomp therefore keeps the automatic parser
+conservative and also provides a manual custom-comparison fallback. That
+fallback is the escape hatch when a real forum post is useful but too
+case-specific to parse safely.
+
 ## Directory layout
 
 ```
@@ -121,6 +129,41 @@ On a `/forums/viewtopic?topicid=…` page:
 Same pattern — pick a body, drop it in a case file with
 `slot: forum.post`. Set `thread_title` if your case depends on
 H1-fallback name detection.
+
+## Manual forum fallback
+
+On HDBits forum pages, `setupHDBitsCore()` adds a **Custom comparison**
+control below the thread title. It is intentionally limited to forum
+content images inside `td.comment`, so avatars and page chrome do not enter
+the picker.
+
+Use it on real forum pages when automatic detection is either absent or too
+ambiguous to fix with a robust general rule:
+
+1. Click **Custom comparison**.
+2. Select screenshots by clicking them, or hold the left mouse button and drag
+   across many screenshots to add them in one pass.
+3. Enter the column count.
+4. Build the viewer. Column names are generated as `Source 1`, `Source 2`,
+   ... `Source N`.
+5. Use **Clear** to remove the custom selection and start over.
+
+The selected image order becomes the grid order; the column count groups that
+list row by row. HDBits image-page URLs such as `https://img.hdbits.org/<id>`
+are normalized to full image URLs before the viewer opens.
+
+Regression coverage lives in
+`cases/154-forum-post-manual-custom-comparison.html` and
+`tests/e2e/hdbits.spec.ts`. There is also an optional preview path for a
+browser-saved real forum page:
+
+```bash
+YACOMP_SAVED_HDBITS_FORUM_HTML="/path/to/[Comparisons] ... __ HDBits.html" bun run fixture
+```
+
+Then open `http://127.0.0.1:4173/hdbits/saved/forum`. The fixture server serves
+the saved page's adjacent `_files` directory, strips any previously injected
+`_scf` markup from the saved HTML, and injects the current test entry.
 
 ## Sanitization checklist
 

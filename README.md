@@ -29,6 +29,10 @@ install the latest release](https://github.com/daylinear74/yacomp/releases/lates
 
 - On grid-detection sites, yacomp adds a **Show comparison** link near detected
   screenshot grids.
+- On HDB forum pages, yacomp also adds a **Custom comparison** fallback below
+  the page title. Use it when forum markup is too irregular for safe automatic
+  detection: click or drag across screenshots, enter the column count, and build
+  a viewer with `Source 1`, `Source 2`, ... column names.
 - On native-viewer sites, use the site's comparison UI as usual; yacomp takes
   over when the viewer opens.
 - On slow.pics and comp.pics, yacomp adds a native-style button that opens the

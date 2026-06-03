@@ -15,6 +15,7 @@ import { join } from "node:path";
 // for the case file format and extraction instructions.
 
 const CASES_DIR = "tests/fixtures/hdbits/cases";
+const SAVED_HDBITS_FORUM_HTML = process.env.YACOMP_SAVED_HDBITS_FORUM_HTML;
 
 interface CaseMetadata {
   slot: "torrent.description" | "torrent.comment" | "forum.post" | "forum.reply";
@@ -73,6 +74,14 @@ async function stubHdbitsImages(page: Page): Promise<void> {
   );
 }
 
+async function waitForHdbitsReady(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => (window as unknown as { __yacomp_test_ready?: boolean }).__yacomp_test_ready === true,
+    undefined,
+    { timeout: 5000 },
+  );
+}
+
 async function readGridNames(page: Page, linkIndex: number): Promise<string[]> {
   // Click the Nth comparison link, read source names off the viewer's
   // label, then close the viewer so the next assertion starts clean.
@@ -98,6 +107,21 @@ async function readGridNames(page: Page, linkIndex: number): Promise<string[]> {
   await page.keyboard.press("Escape");
   await expect(comp).not.toBeVisible();
   return names;
+}
+
+async function dragAcrossScreenshots(page: Page, selector: string, count: number): Promise<void> {
+  const boxes = [];
+  for (let i = 0; i < count; i++) {
+    const box = await page.locator(selector).nth(i).boundingBox();
+    if (!box) throw new Error(`screenshot ${i} has no bounding box`);
+    boxes.push(box);
+  }
+  await page.mouse.move(boxes[0].x + boxes[0].width / 2, boxes[0].y + boxes[0].height / 2);
+  await page.mouse.down();
+  for (const box of boxes.slice(1)) {
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 4 });
+  }
+  await page.mouse.up();
 }
 
 const cases = readCases();
@@ -398,6 +422,98 @@ test("hdbits: closing the viewer restores the page scroll position", async ({ pa
   await page.keyboard.press("Escape");
   await expect(page.locator("._scf_comp")).not.toBeVisible();
   expect(await page.evaluate(() => window.scrollY)).toBe(before);
+});
+
+test("hdbits: forum manual custom comparison builds a Source N grid from selected screenshots", async ({ page }) => {
+  await stubHdbitsImages(page);
+  const requested = new Set<string>();
+  page.on("request", (request) => {
+    const url = request.url();
+    if (/manual0[1-4]|img\.hdbits\.org|i\.hdbits\.org/.test(url)) requested.add(url);
+  });
+  await page.goto("/hdbits/case/154-forum-post-manual-custom-comparison");
+  await waitForHdbitsReady(page);
+
+  const panel = page.locator("h1 + ._scf_manual_panel");
+  await expect(panel).toHaveCount(1);
+  await panel.locator("._scf_manual_button").click();
+
+  const screenshots = page.locator('img[src*="t.hdbits.org/manual"]');
+  await screenshots.nth(0).click();
+  await screenshots.nth(1).click();
+  await screenshots.nth(2).click();
+  await screenshots.nth(3).click();
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(4);
+  await expect(panel.locator("._scf_manual_status")).toHaveText("4 selected");
+
+  await panel.locator("._scf_manual_cols").fill("2");
+  await panel.locator("._scf_manual_build").click();
+
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(2);
+  await expect.poll(() => [...requested].some((url) => url.includes("https://i.hdbits.org/manual01.png"))).toBe(true);
+  expect([...requested].some((url) => url.includes("https://img.hdbits.org/manual01"))).toBe(false);
+  await page.keyboard.press("Digit1");
+  const names = (await page.locator("._scf_comp_label span").allTextContents())
+    .map((t) => t.replace(/^\d+\.\s*/, "").trim())
+    .filter(Boolean);
+  expect(names).toEqual(["Source 1", "Source 2"]);
+});
+
+test("hdbits: forum manual custom comparison clear resets selected screenshots", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/154-forum-post-manual-custom-comparison");
+  await waitForHdbitsReady(page);
+
+  const panel = page.locator("._scf_manual_panel");
+  await panel.locator("._scf_manual_button").click();
+  const screenshots = page.locator('img[src*="t.hdbits.org/manual"]');
+  await screenshots.nth(0).click();
+  await screenshots.nth(1).click();
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(2);
+
+  await panel.locator("._scf_manual_clear").click();
+
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(0);
+  await expect(panel.locator("._scf_manual_status")).toHaveText("0 selected");
+});
+
+test("hdbits: forum manual custom comparison supports drag selection across screenshots", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/154-forum-post-manual-custom-comparison");
+  await waitForHdbitsReady(page);
+
+  const panel = page.locator("._scf_manual_panel");
+  await panel.locator("._scf_manual_button").click();
+  await dragAcrossScreenshots(page, 'td.comment img[src*="t.hdbits.org/manual"]', 4);
+
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(4);
+  await expect(panel.locator("._scf_manual_status")).toHaveText("4 selected");
+});
+
+test("hdbits: saved Over the Garden Wall forum page uses the current manual fallback", async ({ page }) => {
+  test.skip(!SAVED_HDBITS_FORUM_HTML, "Set YACOMP_SAVED_HDBITS_FORUM_HTML to a saved HDBits forum HTML file");
+
+  await page.goto("/hdbits/saved/forum");
+  await waitForHdbitsReady(page);
+
+  await expect(page).toHaveTitle(/\[Comparisons\] Over the Garden Wall :: HDBits/);
+  const panel = page.locator("h1 + ._scf_manual_panel");
+  await expect(panel).toHaveCount(1);
+  await expect(page.locator("td.comment a[href*='img.hdbits.org'] img")).toHaveCount(56);
+
+  await panel.locator("._scf_manual_button").click();
+  await dragAcrossScreenshots(page, "td.comment a[href*='img.hdbits.org'] img", 6);
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(6);
+
+  await panel.locator("._scf_manual_cols").fill("6");
+  await panel.locator("._scf_manual_build").click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await page.keyboard.press("Digit1");
+  const names = (await page.locator("._scf_comp_label span").allTextContents())
+    .map((t) => t.replace(/^\d+\.\s*/, "").trim())
+    .filter(Boolean);
+  expect(names).toEqual(["Source 1", "Source 2", "Source 3", "Source 4", "Source 5", "Source 6"]);
 });
 
 for (const { file, meta } of cases) {
