@@ -2,7 +2,7 @@
 // ║  Zoom state                                                               ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
-import { zoomScaleFactor, zoomPercentBase, verboseZoom } from "../config";
+import { zoomScaleFactor, zoomPercentBase, verboseZoom, oneToOnePixels } from "../config";
 import { showToast, type ToastLine } from "../ui/toast";
 import { getShadowRoot } from "../ui/shadow";
 import type { Comp, RowData } from "../viewer/types";
@@ -218,6 +218,22 @@ export function centerOnActiveCell(comp: Comp): void {
   comp.compDiv.scrollTop = next.scrollTop;
 }
 
+/** How many source pixels collapse into one CSS pixel at 1:1. In "device" mode
+ *  that's the live devicePixelRatio (so a source pixel maps to a physical screen
+ *  pixel — a 4K shot fills a 4K@2x panel); in "logical" mode it's 1 (the
+ *  browser's CSS 100%). Read live so dragging across monitors / browser zoom
+ *  takes effect on the next applyZoom. */
+function oneToOneScale(): number {
+  if (oneToOnePixels() !== "device") return 1;
+  return window.devicePixelRatio || 1;
+}
+
+/** CSS-pixel width for a source image at 1:1, HiDPI-compensated. */
+function oneToOneWidth(naturalWidth: number): number {
+  if (!naturalWidth) return 0;
+  return Math.round(naturalWidth / oneToOneScale());
+}
+
 /** Size one row to its ACTIVE column's native pixel width at 1:1 — each image at
  *  its own resolution, so a comparison that mixes resolutions across rows (057:
  *  785px bitrate charts alongside 1920px screenshots) no longer squashes every
@@ -227,15 +243,15 @@ export function centerOnActiveCell(comp: Comp): void {
 function size1to1Row(rd: RowData, comp: Comp): void {
   const img = rd.imgs[comp.currentCol];
   if (img?.naturalWidth) {
-    rd.rowDiv.style.width = `${img.naturalWidth}px`;
+    rd.rowDiv.style.width = `${oneToOneWidth(img.naturalWidth)}px`;
     return;
   }
-  rd.rowDiv.style.width = rd.sizer?.naturalWidth ? `${rd.sizer.naturalWidth}px` : "100vw";
+  rd.rowDiv.style.width = rd.sizer?.naturalWidth ? `${oneToOneWidth(rd.sizer.naturalWidth)}px` : "100vw";
   img?.addEventListener(
     "load",
     () => {
       if (zoomMode === "1:1" && rd.imgs[comp.currentCol] === img && img.naturalWidth) {
-        rd.rowDiv.style.width = `${img.naturalWidth}px`;
+        rd.rowDiv.style.width = `${oneToOneWidth(img.naturalWidth)}px`;
       }
     },
     { once: true },
@@ -283,7 +299,7 @@ function getReferenceWidth(): number {
 
 function getSizerNaturalWidth(): number {
   const sizer = getShadowRoot().querySelector("._scf_comp_sizer") as HTMLImageElement | null;
-  return sizer?.naturalWidth || 0;
+  return oneToOneWidth(sizer?.naturalWidth || 0);
 }
 
 /** Native pixel width of the ACTIVE column's image (from any loaded row), so 1:1
@@ -295,7 +311,7 @@ function activeColumnNaturalWidth(): number {
   if (comp) {
     for (const rd of comp.allRowData) {
       const img = rd.imgs[comp.currentCol];
-      if (img?.naturalWidth) return img.naturalWidth;
+      if (img?.naturalWidth) return oneToOneWidth(img.naturalWidth);
     }
   }
   // 0 (not "the sizer") when the active column hasn't measured, so doZoom1to1 /
