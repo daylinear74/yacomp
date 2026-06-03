@@ -31,6 +31,29 @@ function makeShowComparisonLink(label = "Show comparison"): HTMLAnchorElement {
   return link;
 }
 
+// One image-click handler per on-page image, across both the getGrids and
+// slow.pics-rescue paths.
+const wiredImages = new WeakSet<HTMLImageElement>();
+
+function onImageClickOpen(
+  img: HTMLImageElement | undefined,
+  anchor: HTMLAnchorElement | undefined,
+  open: (e: Event) => void,
+): void {
+  if (!img || wiredImages.has(img)) return;
+  wiredImages.add(img);
+  (anchor ?? img).addEventListener(
+    "click",
+    (e) => {
+      if (hdbitsImageClick() !== "viewer") return; // leave HDBits' native behavior
+      e.preventDefault();
+      e.stopPropagation();
+      open(e);
+    },
+    true, // capture, to beat any page-level image handler
+  );
+}
+
 /** Make each of a comparison's on-page images open the yacomp viewer at that
  *  shot (config `hdbitsImageClick`). The "Show comparison" link still opens the
  *  whole grid; this just adds a per-image entry point at the right row/col.
@@ -39,23 +62,12 @@ function attachGridImageClicks(grid: Grid, container: HTMLElement, link: HTMLAnc
   for (let r = 0; r < grid.rows.length; r++) {
     const row = grid.rows[r];
     for (let c = 0; c < row.length; c++) {
-      const target = row[c].a ?? row[c].img;
-      if (!target) continue;
-      target.addEventListener(
-        "click",
-        async (e) => {
-          if (hdbitsImageClick() !== "viewer") return; // leave HDBits' native behavior
-          e.preventDefault();
-          e.stopPropagation();
-          await maybeEnrichNames(grid);
-          if (grid.partial) {
-            openOrphanSelect(grid, container, link);
-          } else {
-            buildComparison({ ...grid, initialRow: r, initialCol: c }, container, link);
-          }
-        },
-        true, // capture, to beat any page-level image handler
-      );
+      onImageClickOpen(row[c].img, row[c].a, () => {
+        void maybeEnrichNames(grid).then(() => {
+          if (grid.partial) openOrphanSelect(grid, container, link);
+          else buildComparison({ ...grid, initialRow: r, initialCol: c }, container, link);
+        });
+      });
     }
   }
 }
@@ -251,6 +263,30 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
     link.remove();
     addManualColumnControl(images, spLink, container);
   });
+
+  // Click any of this comparison's images to open the viewer at that shot.
+  // Rescued comparisons aren't in getGrids, so the column shape is only known
+  // after the slow.pics fetch — reshape then, mapping the flat index to row/col.
+  images.forEach((img, idx) => {
+    onImageClickOpen(img, (img.closest("a") as HTMLAnchorElement | null) ?? undefined, () => {
+      void fetchSlowPicsGridInfo(key).then((info) => {
+        if (info) {
+          const names = headingNamesBeforeLink(spLink, info.numCols, container) ?? info.names;
+          const grid = buildRescueGrid(images, { ...info, names }, spLink);
+          if (grid) {
+            buildComparison(
+              { ...grid, initialRow: Math.floor(idx / grid.numCols), initialCol: idx % grid.numCols },
+              container,
+              link,
+            );
+            return;
+          }
+        }
+        link.click(); // couldn't shape it — fall back to the link's own flow
+      });
+    });
+  });
+
   insertLinkAfter(spLink, link);
 }
 
