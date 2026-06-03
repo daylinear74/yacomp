@@ -354,6 +354,52 @@ test("hdbits: with Native set, an image click stays HDBits' own (no viewer)", as
   await expect(page.locator("._scf_comp")).toHaveCount(0);
 });
 
+test("hdbits: clicking an image in a slow.pics-rescued comparison opens the viewer at that shot", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/087-forum-post-slowpics-rescue-dirty-line-fix");
+  await page.waitForFunction(
+    () => (window as unknown as { __yacomp_test_ready?: boolean }).__yacomp_test_ready === true,
+    undefined,
+    { timeout: 5000 },
+  );
+  // First rescued comparison is 3 cols (S/F/E heading "…, Geek, …"); g02 is the
+  // 2nd image → row 0, column 1 ("Geek"). Rescue grids aren't in getGrids, so
+  // this exercises the slow.pics-fetch image-click path.
+  await page.locator('img[src*="/g02.jpg"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  const label = page.locator("._scf_comp_label");
+  await expect(label.locator("span", { hasText: "Geek" }).first()).toHaveCSS("opacity", "1");
+});
+
+test("hdbits: closing the viewer restores the page scroll position", async ({ page }) => {
+  // Tall images so the post is scrollable and hiding it collapses the page —
+  // which is what clamps the scroll on open and stranded it before the fix.
+  await page.route(/[ti]\.hdbits\.org/, (route) =>
+    route.fulfill({
+      contentType: "image/svg+xml",
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="900"><rect width="160" height="900" fill="#333"/></svg>',
+    }),
+  );
+  await page.goto("/hdbits/case/087-forum-post-slowpics-rescue-dirty-line-fix");
+  await page.waitForFunction(
+    () => (window as unknown as { __yacomp_test_ready?: boolean }).__yacomp_test_ready === true,
+    undefined,
+    { timeout: 5000 },
+  );
+  // A lower "Show comparison" link, scrolled into view so the click doesn't move
+  // the page itself.
+  const link = page.locator("._scf_comp_link").last();
+  await link.scrollIntoViewIfNeeded();
+  const before = await page.evaluate(() => window.scrollY);
+  expect(before).toBeGreaterThan(0);
+
+  await link.click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("._scf_comp")).not.toBeVisible();
+  expect(await page.evaluate(() => window.scrollY)).toBe(before);
+});
+
 for (const { file, meta } of cases) {
   test(`hdbits: ${file}`, async ({ page }) => {
     await stubHdbitsImages(page);

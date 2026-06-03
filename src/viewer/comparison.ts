@@ -425,11 +425,19 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   }
   window.addEventListener("resize", onResize);
 
+  // The page scroll position at open — restored on close so dismissing the
+  // viewer never moves the page (hiding the container would otherwise reflow it).
+  const pageScrollX = window.scrollX;
+  const pageScrollY = window.scrollY;
+  // Re-centers the active cell as it measures; disconnected on settle/close.
+  let openCenterRO: ResizeObserver | null = null;
+
   function closeThis() {
     window.removeEventListener("mousemove", onDragMove);
     window.removeEventListener("mouseup", onDragEnd);
     window.removeEventListener("resize", onResize);
     if (spacerResizeObserver) spacerResizeObserver.disconnect();
+    openCenterRO?.disconnect();
 
     rowObserver.disconnect();
     resetWheelZoomGesture(wheelZoomGesture);
@@ -444,6 +452,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     document.body.style.overflow = "";
     container.style.display = origContainerDisplay;
     btn.style.display = origBtnDisplay;
+    window.scrollTo(pageScrollX, pageScrollY);
 
     // Label persists in the shadow root (reused by id) — leave it hidden so it
     // doesn't flash on the next open until the first reveal.
@@ -478,32 +487,28 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   // Always open centered on the active cell — every entry path (Show
   // comparison, an HDBits/PTP image click, V), at any zoom, and for images both
   // smaller and larger than the viewport.
-  let centeredScroll: { top: number; left: number } | null = null;
   const centerNow = (): void => {
     comp.updateScrollSpacers?.();
     centerOnActiveCell(comp);
-    centeredScroll = { top: compDiv.scrollTop, left: compDiv.scrollLeft };
     comp.updateNavMap();
   };
   requestAnimationFrame(centerNow);
-  // The active image may not be measured yet (lazy/deferred), so the first
-  // center used placeholder geometry — re-center once it lands, but only if the
-  // user hasn't scrolled away from where we put them.
-  const activeImg = allRowData[initialPosition.row]?.imgs[initialPosition.col];
-  if (activeImg && !activeImg.complete) {
-    activeImg.addEventListener(
-      "load",
-      () => requestAnimationFrame(() => {
-        if (
-          centeredScroll &&
-          Math.abs(compDiv.scrollTop - centeredScroll.top) < 2 &&
-          Math.abs(compDiv.scrollLeft - centeredScroll.left) < 2
-        ) {
-          centerNow();
-        }
-      }),
-      { once: true },
-    );
+  // The active image is usually unmeasured at open (lazy / still loading), so
+  // the first center used placeholder geometry — which lands the cell off
+  // (top-left, or "half this row half the next"). Re-center as the active row
+  // resizes (image lands, 1:1 width applies) until it has settled, or until the
+  // user takes over. A ResizeObserver is robust to the exact load timing.
+  const activeRow = allRowData[initialPosition.row]?.rowDiv;
+  if (activeRow && typeof ResizeObserver !== "undefined") {
+    openCenterRO = new ResizeObserver(() => {
+      requestAnimationFrame(centerNow);
+      const img = allRowData[initialPosition.row]?.imgs[initialPosition.col];
+      if (img?.complete && img.naturalWidth) openCenterRO?.disconnect();
+    });
+    openCenterRO.observe(activeRow);
+    const stop = (): void => openCenterRO?.disconnect();
+    compDiv.addEventListener("wheel", stop, { once: true, passive: true });
+    compDiv.addEventListener("mousedown", stop, { once: true });
   }
 }
 
