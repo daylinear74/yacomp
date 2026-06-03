@@ -1043,7 +1043,7 @@ test.describe("1:1 on a HiDPI (2x) display", () => {
     await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("960px");
     await page.keyboard.press("KeyO"); // re-trigger 1:1 so the toast shows (open is silent)
     const toast = page.locator("#_scf_toast_");
-    await expect(toast).toContainText("Native 1920px");
+    await expect(toast).toContainText("Original 1920px");
     await expect(toast).toContainText("On screen 960px@2x");
   });
 
@@ -1062,9 +1062,23 @@ test.describe("1:1 on a HiDPI (2x) display", () => {
     await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("960px");
     await page.keyboard.press("Equal"); // + → custom 960 × 1.25 = 1200 CSS px
     const toast = page.locator("#_scf_toast_");
-    await expect(toast).toContainText("Native 1920px");
+    await expect(toast).toContainText("Original 1920px");
     await expect(toast).toContainText("On screen 1200px@2x");
   });
+});
+
+test("zoom: + scales mixed-resolution rows proportionally, not to one width", async ({ page }) => {
+  // Row 0 is a 1920px-wide source, row 1 a 1480px pillar source. Background-load
+  // so both measure; default DPR is 1 so device == logical width.
+  await openViewer(page, { config: { bgLoadDefault: true } });
+  const row0 = page.locator("._scf_comp_row").nth(0);
+  const row1 = page.locator("._scf_comp_row").nth(1);
+  await expect.poll(() => row0.evaluate((el) => (el as HTMLElement).style.width)).toBe("1920px");
+  await expect.poll(() => row1.evaluate((el) => (el as HTMLElement).style.width)).toBe("1480px");
+
+  await page.keyboard.press("Equal"); // +25% — each row scales from its OWN native
+  await expect.poll(() => row0.evaluate((el) => (el as HTMLElement).style.width)).toBe("2400px");
+  await expect.poll(() => row1.evaluate((el) => (el as HTMLElement).style.width)).toBe("1850px");
 });
 
 test("viewer opens horizontally centered on a 1:1 image wider than the viewport", async ({ page }) => {
