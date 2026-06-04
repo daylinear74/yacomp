@@ -576,6 +576,100 @@ export function injectCSS(): void {
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    ._scf_help_button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      min-width: 44px;
+      min-height: 44px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 999px;
+      background: rgba(12,12,12,.82);
+      color: #fff;
+      box-shadow: 0 2px 10px rgba(0,0,0,.4);
+      backdrop-filter: blur(8px);
+      font: 700 19px/1 system-ui, sans-serif;
+      cursor: pointer;
+      padding: 0;
+      opacity: .48;
+      transition: opacity .15s ease, background .15s ease, border-color .15s ease;
+    }
+    ._scf_help_button:hover,
+    ._scf_help_button:focus-visible {
+      opacity: 1;
+      border-color: rgba(255,255,255,.32);
+      background: rgba(24,24,24,.9);
+    }
+    ._scf_help_button:focus-visible {
+      outline: 2px solid rgba(255,255,255,.72);
+      outline-offset: 2px;
+    }
+    ._scf_help_overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483647;
+    }
+    ._scf_help_panel {
+      position: absolute;
+      top: 24px;
+      left: 24px;
+      max-height: calc(100vh - 48px);
+      overflow: auto;
+      min-width: 300px;
+      max-width: min(92vw, 440px);
+      padding: 14px 22px 18px;
+      background: rgba(18,18,20,.96);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 14px;
+      box-shadow: 0 14px 44px rgba(0,0,0,.6);
+      backdrop-filter: blur(10px);
+      color: #e8e8e8;
+      font: 500 14px/1.3 system-ui, sans-serif;
+      text-align: left;
+    }
+    ._scf_help_section {
+      margin: 15px 0 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+      color: #80808a;
+    }
+    ._scf_help_section:first-child {
+      margin-top: 2px;
+    }
+    ._scf_help_row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 4px 0;
+    }
+    ._scf_help_keys {
+      flex: 0 0 104px;
+      display: flex;
+    }
+    ._scf_help_chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 28px;
+      padding: 3px 10px;
+      border: 1px solid rgba(255,255,255,.2);
+      border-radius: 7px;
+      background: rgba(255,255,255,.05);
+      font: 600 13px/1 ui-monospace, "SF Mono", Menlo, monospace;
+      color: #fff;
+      white-space: nowrap;
+    }
+    ._scf_help_desc {
+      font-weight: 600;
+      color: #f0f0f0;
+    }
+    ._scf_help_note {
+      font-weight: 500;
+      color: #93939b;
+    }
     ._scf_settings_overlay {
       position: fixed;
       top: 0;

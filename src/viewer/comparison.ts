@@ -27,6 +27,7 @@ import { createRowNav } from "./row-nav";
 import { createSourceMenu } from "./source-menu";
 import { createFillCanvasBtn } from "./fill-canvas-btn";
 import { createToolbar } from "./toolbar";
+import { toggleHelpOverlay, hideHelpOverlay } from "./help-overlay";
 import { normalizeGridInitialPosition, normalizeGridInitialZoom } from "./initial-state";
 import { createCloseBtn } from "./close-btn";
 import { createAutoHide } from "./auto-hide";
@@ -367,7 +368,23 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   // Bottom-left toolbar (hosts source menu + fill canvas toggle)
   const toolbar = createToolbar();
 
-  // Fill canvas toggle button (added first → appears above source menu)
+  // Shortcuts help button (added first → sits at the top) → toggles the legend.
+  const helpBtnEl = document.createElement("div");
+  helpBtnEl.className = "_scf_help_btn";
+  const helpButton = document.createElement("button");
+  helpButton.type = "button";
+  helpButton.className = "_scf_help_button";
+  helpButton.title = "Keyboard shortcuts (?)";
+  helpButton.setAttribute("aria-label", "Keyboard shortcuts");
+  helpButton.textContent = "?";
+  helpButton.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleHelpOverlay();
+  });
+  helpBtnEl.appendChild(helpButton);
+  toolbar.toolbarEl.appendChild(helpBtnEl);
+
+  // Fill canvas toggle button (added next → appears below help)
   const fillCanvasBtn = createFillCanvasBtn(toolbar);
   comp.updateFillCanvasBtn = fillCanvasBtn.updateFillCanvasBtn;
 
@@ -456,6 +473,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     closeBtn.cleanup();
     toolbar.cleanup();
     autoHide.cleanup();
+    hideHelpOverlay();
     document.body.style.overflow = "";
     container.style.display = origContainerDisplay;
     btn.style.display = origBtnDisplay;

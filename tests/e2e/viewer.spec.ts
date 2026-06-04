@@ -88,6 +88,45 @@ test("viewer closes on Escape", async ({ page }) => {
   await expect(page.locator("._scf_comp")).not.toBeVisible();
 });
 
+test("viewer: ? opens the shortcuts legend; Esc closes the legend, not the viewer", async ({ page }) => {
+  await openViewer(page);
+
+  // ? (Shift+/) opens the legend overlay.
+  await page.keyboard.press("Shift+Slash");
+  const panel = page.locator("._scf_help_panel");
+  await expect(panel).toBeVisible();
+  await expect(panel.locator("._scf_help_section").first()).toHaveText("Navigation");
+  // The legend is generated from LIVE bindings — the close row reads "Esc".
+  await expect(
+    panel.locator("._scf_help_row", { hasText: "Reset adjustments / close" }).locator("._scf_help_chip"),
+  ).toHaveText("Esc");
+
+  // Escape dismisses the legend but leaves the viewer open.
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+  await expect(page.locator("._scf_comp")).toBeVisible();
+
+  // ? toggles: open, then ? again closes.
+  await page.keyboard.press("Shift+Slash");
+  await expect(page.locator("._scf_help_panel")).toBeVisible();
+  await page.keyboard.press("Shift+Slash");
+  await expect(page.locator("._scf_help_panel")).toHaveCount(0);
+
+  // The bottom-left ? toolbar button toggles it too.
+  await page.locator("._scf_help_button").click();
+  await expect(page.locator("._scf_help_panel")).toBeVisible();
+});
+
+test("viewer: the shortcuts legend reflects custom key bindings", async ({ page }) => {
+  await openViewer(page, {
+    config: { shortcuts: { "zoom.in": { main: { t: "key", code: "KeyZ" }, extra: null } } },
+  });
+  await page.keyboard.press("Shift+Slash");
+  await expect(
+    page.locator("._scf_help_row", { hasText: "Zoom in" }).locator("._scf_help_chip"),
+  ).toHaveText("Z");
+});
+
 test("column switching with number keys", async ({ page }) => {
   await openViewer(page);
 

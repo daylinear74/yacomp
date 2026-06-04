@@ -12,7 +12,7 @@ export type ActionId =
   | "filter.next" | "filter.prev" | "gamma.next" | "gamma.prev"
   | "bright.up" | "bright.down" | "contrast.up" | "contrast.down"
   | "adjust.resetSource" | "adjust.resetAll"
-  | "viewer.close";
+  | "viewer.help" | "viewer.close";
 
 export interface ActionMeta {
   id: ActionId;
@@ -62,6 +62,7 @@ export const ACTIONS: ActionMeta[] = [
   { id: "adjust.resetAll", label: "Reset all adjustments", group: "Adjust", defaultMain: key("Backslash", { shift: true }), defaultExtra: null, phase: "up" },
 
   // ── Viewer ──
+  { id: "viewer.help", label: "Toggle shortcuts help", group: "Viewer", defaultMain: key("Slash", { shift: true }), defaultExtra: null },
   { id: "viewer.close", label: "Close viewer", group: "Viewer", defaultMain: key("Escape"), defaultExtra: null },
 ];
 

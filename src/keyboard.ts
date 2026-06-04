@@ -25,6 +25,7 @@ import {
 import { openSlowPicsViewer } from "./sites/slowpics";
 import { visibleColumnOffset } from "./viewer/source-visibility";
 import { getShadowRoot } from "./ui/shadow";
+import { isHelpOpen, hideHelpOverlay, toggleHelpOverlay } from "./viewer/help-overlay";
 import { ACTIONS, type ActionId } from "./shortcuts/registry";
 import { keyShortcutMatchesEvent, mouseShortcutMatches, type MouseShortcut } from "./shortcuts/types";
 import { isShortcutCapturing } from "./shortcuts/capture-state";
@@ -224,6 +225,7 @@ const HANDLERS: Record<ActionId, (ctx: ActionCtx) => void> = {
   "adjust.resetSource": () => resetAdjustmentsAction(false),
   "adjust.resetAll": () => resetAdjustmentsAction(true),
 
+  "viewer.help": () => toggleHelpOverlay(),
   "viewer.close": (ctx) => closeViewer(ctx.source),
 };
 
@@ -307,6 +309,23 @@ export function setupKeyboard(hostname?: string): void {
       const hasComp = activeComps.length > 0;
       if (!hasComp && !siteBehaviorEnabled(hostname)) return;
 
+      // While the shortcuts legend is up it is modal: a close binding (its own
+      // key, or Escape) dismisses it; every other key is swallowed so it doesn't
+      // drive the viewer underneath.
+      if (isHelpOpen()) {
+        const help = shortcutPairFor("viewer.help");
+        if (
+          e.code === "Escape" ||
+          keyShortcutMatchesEvent(help.main, e) ||
+          (help.extra != null && keyShortcutMatchesEvent(help.extra, e))
+        ) {
+          e.preventDefault();
+          hideHelpOverlay();
+        }
+        e.stopPropagation();
+        return;
+      }
+
       // V: open viewer on slow.pics / comp.pics (no viewer open yet).
       if (e.code === "KeyV" && !hasComp && !e.ctrlKey && !e.altKey && !e.metaKey) {
         const btn = document.querySelector<HTMLElement>("[data-yacomp-comppics]");
@@ -345,6 +364,12 @@ export function setupKeyboard(hostname?: string): void {
       if (isShortcutCapturing() || isEditing()) return;
       const hasComp = activeComps.length > 0;
       if (!hasComp && !siteBehaviorEnabled(hostname)) return;
+
+      // Modal legend: swallow key-ups too so a held key doesn't leak through.
+      if (isHelpOpen()) {
+        e.stopPropagation();
+        return;
+      }
 
       // No viewer open: Escape clears page-level filter adjustments.
       if (
