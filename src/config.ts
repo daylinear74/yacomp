@@ -104,7 +104,7 @@ export const DEFAULTS: Readonly<YacompConfig> = {
   lazyLoadMargin: 200,
   mouseSwitch: true,
   zoomPercentBase: "original",
-  oneToOnePixels: "device" as const,
+  oneToOnePixels: "logical" as const,
   verboseZoom: false,
   closeBtnPosition: "auto" as const,
   uiChromeMode: "default" as const,

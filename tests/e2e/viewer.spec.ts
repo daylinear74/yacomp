@@ -1091,8 +1091,14 @@ test("settings: Reset shortcuts restores defaults", async ({ page }) => {
 test.describe("1:1 on a HiDPI (2x) display", () => {
   test.use({ deviceScaleFactor: 2 });
 
-  test("device mode (default) maps source pixels to physical pixels — halves the CSS width", async ({ page }) => {
-    await openViewer(page); // default oneToOnePixels = "device"
+  test("logical mode (default) keeps the full source width", async ({ page }) => {
+    await openViewer(page); // default oneToOnePixels is now "logical"
+    const row = page.locator("._scf_comp_row").first();
+    await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("1920px");
+  });
+
+  test("device mode maps source pixels to physical pixels — halves the CSS width", async ({ page }) => {
+    await openViewer(page, { config: { oneToOnePixels: "device" } });
     await expect(page.locator("._scf_comp")).toHaveClass(/_scf_zoomed/);
     // Active column is the 1920px-wide source → at 1:1 device on DPR 2, 960 CSS px
     // (= 1920 physical px), so it isn't drawn 2x oversized.
@@ -1100,27 +1106,24 @@ test.describe("1:1 on a HiDPI (2x) display", () => {
     await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("960px");
   });
 
-  test("logical mode keeps the full source width (the old 2x-magnified behavior)", async ({ page }) => {
-    await openViewer(page, { config: { oneToOnePixels: "logical" } });
-    const row = page.locator("._scf_comp_row").first();
-    await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("1920px");
-  });
-
-  test("1:1 settles to the DEVICE width even when the image loads slowly (no stuck real-ratio)", async ({ page }) => {
-    // Delay the image so the row opens on the fit-width fallback; once it lands
-    // it must reach the device 1:1 width (960px), not stay at the logical/"real"
-    // width — the bug was the row getting stranded at the non-HiDPI size.
+  test("device 1:1 settles even when the image loads slowly AND the column is swept mid-load", async ({ page }) => {
+    // The row opens on the fit-width fallback; sweeping to another column before
+    // the image lands is width-neutral, which used to strand the row at the
+    // logical/"real" width. It must still settle to the device width (960px).
     await page.route(/i\.slow\.pics/, async (route) => {
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 700));
       await route.fulfill({ contentType: "image/svg+xml", body: fixtureSvg({ width: 1920, height: 804 }) });
     });
-    await openViewer(page);
+    await openViewer(page, { config: { oneToOnePixels: "device" } });
     const row = page.locator("._scf_comp_row").first();
+    // Sweep to a right-hand column while the image is still loading.
+    const box = await row.boundingBox();
+    await page.mouse.move(box!.x + box!.width * 0.85, box!.y + box!.height / 2);
     await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("960px");
   });
 
   test("device mode 1:1 toast distinguishes native vs on-screen width", async ({ page }) => {
-    await openViewer(page); // 1:1, device, DPR 2
+    await openViewer(page, { config: { oneToOnePixels: "device" } });
     const row = page.locator("._scf_comp_row").first();
     await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("960px");
     await page.keyboard.press("KeyO"); // re-trigger 1:1 so the toast shows (open is silent)
@@ -1129,8 +1132,23 @@ test.describe("1:1 on a HiDPI (2x) display", () => {
     await expect(toast).toContainText("On screen 960×402@2x");
   });
 
+  test("logical/verbose toast reports the CURRENT image's W×H, not the first image's", async ({ page }) => {
+    // Row 0 is 1920×804, row 1 is 1480×1080 (a different image). In logical mode
+    // with the verbose readout, moving to row 1 must report ROW 1's resolution.
+    await openViewer(page, {
+      config: { oneToOnePixels: "logical", verboseZoom: true, bgLoadDefault: true },
+    });
+    const row1 = page.locator("._scf_comp_row").nth(1);
+    await expect.poll(() => row1.evaluate((el) => (el as HTMLElement).style.width)).toBe("1480px");
+    await page.keyboard.press("ArrowDown"); // → row 1 is the current row
+    await page.keyboard.press("KeyO"); // re-show the toast for the current image
+    const toast = page.locator("#_scf_toast_");
+    await expect(toast).toContainText("Original 1480×1080");
+    await expect(toast).not.toContainText("1920");
+  });
+
   test("+ from 1:1 never collapses to 0px (zoomWidth was unset)", async ({ page }) => {
-    await openViewer(page); // opens at 1:1, device mode
+    await openViewer(page, { config: { oneToOnePixels: "device" } });
     const row = page.locator("._scf_comp_row").first();
     await page.keyboard.press("Equal"); // first action is a zoom-in
     await expect
@@ -1139,7 +1157,7 @@ test.describe("1:1 on a HiDPI (2x) display", () => {
   });
 
   test("ctrl+wheel from 1:1 uses the live 1:1 width when zoomWidth is stale", async ({ page }) => {
-    await openViewer(page);
+    await openViewer(page, { config: { oneToOnePixels: "device" } });
     const comp = page.locator("._scf_comp");
     const row = page.locator("._scf_comp_row").first();
     await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("960px");
@@ -1164,7 +1182,7 @@ test.describe("1:1 on a HiDPI (2x) display", () => {
   });
 
   test("device native/on-screen info also shows when zooming with +/- (custom mode)", async ({ page }) => {
-    await openViewer(page);
+    await openViewer(page, { config: { oneToOnePixels: "device" } });
     const row = page.locator("._scf_comp_row").first();
     await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("960px");
     await page.keyboard.press("Equal"); // + → custom 960 × 1.25 = 1200 CSS px

@@ -103,8 +103,8 @@ const GROUPS: SettingGroup[] = [
         label: "1:1 pixels",
         tooltip: "What a source pixel maps to at 1:1 on a HiDPI / Retina screen. Device = one physical screen pixel (a 4K shot fills a 1080p@2x panel, pixel-perfect); Logical = one CSS pixel (the browser's 100%, ~2x magnified on Retina). No effect on standard displays.",
         options: [
-          { label: "Device", value: "device" },
           { label: "Logical", value: "logical" },
+          { label: "Device", value: "device" },
         ],
         onSave: () => { refit1to1(); if (activeComps.length) showToast(zoomToast()); },
       },

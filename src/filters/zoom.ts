@@ -277,9 +277,16 @@ function sizeRowScaled(rd: RowData, comp: Comp, scale: number): void {
     rd.sizer.addEventListener(
       "load",
       () => {
-        if (zoomMode !== "fit" && !rd.imgs[comp.currentCol]?.naturalWidth && rd.sizer?.naturalWidth) {
-          rd.rowDiv.style.width = `${Math.round(oneToOneWidth(rd.sizer.naturalWidth) * currentZoomScale())}px`;
-        }
+        // Settle the row only while it is STILL on the fit-width fallback (never
+        // sized) — robust to a mouse-sweep that changed the active column
+        // mid-load and left the original column's one-shot listener
+        // guard-skipped. The sizer always lands for a visible row, so the row
+        // can't stay stranded at "100vw" (which reads as the logical / "real"
+        // width on a HiDPI screen until you press O).
+        if (zoomMode === "fit") return;
+        if (rd.rowDiv.style.width && rd.rowDiv.style.width !== "100vw") return;
+        const nw = rd.imgs[comp.currentCol]?.naturalWidth || rd.sizer?.naturalWidth || 0;
+        if (nw) rd.rowDiv.style.width = `${Math.round(oneToOneWidth(nw) * currentZoomScale())}px`;
       },
       { once: true },
     );
@@ -399,40 +406,23 @@ export function zoomToast(): string | ToastLine[] {
 
   const lines: ToastLine[] = [{ text: briefLabel, size: "large" }];
 
-  if (showDevice) {
-    const { nativeW, nativeH, screenW } = currentRowReadout();
-    if (nativeW) {
-      // On-screen height from the image's own aspect (per-image, not the row).
-      const screenH = nativeH ? Math.round((screenW * nativeH) / nativeW) : 0;
-      const nativeRes = nativeH ? nativeW + "×" + nativeH : nativeW + "px";
-      const screenRes = screenH ? screenW + "×" + screenH : screenW + "px";
-      lines.push({ text: "Original " + nativeRes, size: "small", color: TOAST_NATIVE_COLOR });
-      lines.push({
-        text: "On screen " + screenRes + "@" + dprLabel + "x",
-        size: "small",
-        color: TOAST_SCREEN_COLOR,
-      });
-    }
-    if (verboseZoom()) {
-      lines.push({ text: "Viewport " + window.innerWidth + "px", size: "tiny", muted: true });
-    }
-    return lines;
+  // The CURRENT image's resolution + its on-screen size — in BOTH pixel modes
+  // (device annotates the HiDPI factor "@Nx"; logical / custom zoom shows the
+  // rendered %). Tracks the row + column you're actually viewing, not the first
+  // loaded image.
+  const { nativeW, nativeH, screenW } = currentRowReadout();
+  if (nativeW) {
+    // On-screen height from the image's own aspect (per-image, not the row).
+    const screenH = nativeH ? Math.round((screenW * nativeH) / nativeW) : 0;
+    const nativeRes = nativeH ? nativeW + "×" + nativeH : nativeW + "px";
+    const screenRes = screenH ? screenW + "×" + screenH : screenW + "px";
+    const suffix = showDevice ? "@" + dprLabel + "x" : " (" + Math.round((screenW / nativeW) * 100) + "%)";
+    lines.push({ text: "Original " + nativeRes, size: "small", color: TOAST_NATIVE_COLOR });
+    lines.push({ text: "On screen " + screenRes + suffix, size: "small", color: TOAST_SCREEN_COLOR });
   }
-
-  const vw = window.innerWidth;
-  const ow = getSizerNaturalWidth();
-  const ew = zoomMode === "fit" ? vw : zoomWidth;
-  lines.push({ text: ew + "px", size: "normal" });
-
-  if (ow && ow === vw) {
-    lines.push({ text: "Viewport · Original " + vw + "px (" + Math.round((ew / vw) * 100) + "%)", size: "small", muted: true });
-  } else {
-    lines.push({ text: "Viewport " + vw + "px (" + Math.round((ew / vw) * 100) + "%)", size: "small", muted: true });
-    if (ow) {
-      lines.push({ text: "Original " + ow + "px (" + Math.round((ew / ow) * 100) + "%)", size: "small", muted: true });
-    }
+  if (verboseZoom()) {
+    lines.push({ text: "Viewport " + window.innerWidth + "px", size: "tiny", muted: true });
   }
-
   return lines;
 }
 
