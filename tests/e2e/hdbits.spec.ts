@@ -356,6 +356,34 @@ test("hdbits: clicking a comparison image opens the viewer at that shot", async 
   await expect(label.locator("span", { hasText: "Encode" })).toHaveCSS("opacity", "1");
 });
 
+test("hdbits: the opened row reserves its aspect from the loaded thumbnail (no 16/9 reflow)", async ({ page }) => {
+  // Thumbnails are 2:1 (200×100), NOT 16/9; the full images are delayed. The
+  // opened row must reserve the thumbnail's true aspect immediately instead of a
+  // 16/9 placeholder that would reflow on load — which shifts the centered cell
+  // and recomputes the top/bottom spacers (the "jump on open" bug).
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><rect width="200" height="100" fill="#333"/></svg>';
+  await page.route(/\/\/t\.hdbits\.org/, (route) =>
+    route.fulfill({ contentType: "image/svg+xml", body: svg }),
+  );
+  await page.route(/\/\/i\.hdbits\.org/, async (route) => {
+    await new Promise((r) => setTimeout(r, 2000)); // full image lands late
+    await route.fulfill({ contentType: "image/svg+xml", body: svg });
+  });
+  await page.goto("/hdbits/case/116-zoom-mixed-dims");
+  await waitForHdbitsReady(page);
+  const thumb = page.locator('img[src*="cB0"]').first();
+  await expect.poll(() => thumb.evaluate((el) => (el as HTMLImageElement).naturalWidth)).toBe(200);
+
+  await thumb.click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  // Aspect is reserved from the thumbnail within the first second — well before
+  // the 2s-delayed full image could supply it.
+  const row = page.locator("._scf_comp_row").first();
+  await expect
+    .poll(() => row.evaluate((el) => (el as HTMLElement).style.aspectRatio), { timeout: 1200 })
+    .toBe("200 / 100");
+});
+
 test("hdbits: with Native set, an image click stays HDBits' own (no viewer)", async ({ page }) => {
   await page.route(/[ti]\.hdbits\.org|img\.hdbits\.org/, (route) =>
     route.fulfill({ contentType: "image/svg+xml", body: STUB_SVG }),

@@ -234,6 +234,16 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   }
 
   for (let ri = 0; ri < grid.rows.length; ri++) {
+    // Reserve each row's TRUE aspect ratio from the page thumbnails (already
+    // loaded in the grid). Without this a row falls back to a 16/9 placeholder
+    // until its full image lands, then reflows — which shifts the centered cell
+    // and recomputes the top/bottom spacers, so the viewer "jumps" on open.
+    for (const cell of grid.rows[ri]) {
+      if ((cell.width == null || cell.height == null) && cell.img?.naturalWidth && cell.img.naturalHeight) {
+        cell.width = cell.img.naturalWidth;
+        cell.height = cell.img.naturalHeight;
+      }
+    }
     const rowData = buildRow(
       grid.rows[ri],
       grid.numCols,

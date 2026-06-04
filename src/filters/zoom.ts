@@ -268,6 +268,22 @@ function sizeRowScaled(rd: RowData, comp: Comp, scale: number): void {
     },
     { once: true },
   );
+  // The sizer (the row's col-0 full image) is a reliable resolution source: if
+  // the active column's own image is still loading — or its one-shot load was
+  // missed — size from the sizer the moment it lands so the row reaches its
+  // device-1:1 width instead of being stranded at the fit-width fallback (which
+  // reads as the logical/"real" size on a HiDPI screen).
+  if (rd.sizer && !rd.sizer.naturalWidth) {
+    rd.sizer.addEventListener(
+      "load",
+      () => {
+        if (zoomMode !== "fit" && !rd.imgs[comp.currentCol]?.naturalWidth && rd.sizer?.naturalWidth) {
+          rd.rowDiv.style.width = `${Math.round(oneToOneWidth(rd.sizer.naturalWidth) * currentZoomScale())}px`;
+        }
+      },
+      { once: true },
+    );
+  }
 }
 
 /** Scroll-in / deliberate-switch hook (row.ts): size a row to its active column

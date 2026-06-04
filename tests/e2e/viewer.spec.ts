@@ -1106,6 +1106,19 @@ test.describe("1:1 on a HiDPI (2x) display", () => {
     await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("1920px");
   });
 
+  test("1:1 settles to the DEVICE width even when the image loads slowly (no stuck real-ratio)", async ({ page }) => {
+    // Delay the image so the row opens on the fit-width fallback; once it lands
+    // it must reach the device 1:1 width (960px), not stay at the logical/"real"
+    // width — the bug was the row getting stranded at the non-HiDPI size.
+    await page.route(/i\.slow\.pics/, async (route) => {
+      await new Promise((r) => setTimeout(r, 500));
+      await route.fulfill({ contentType: "image/svg+xml", body: fixtureSvg({ width: 1920, height: 804 }) });
+    });
+    await openViewer(page);
+    const row = page.locator("._scf_comp_row").first();
+    await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("960px");
+  });
+
   test("device mode 1:1 toast distinguishes native vs on-screen width", async ({ page }) => {
     await openViewer(page); // 1:1, device, DPR 2
     const row = page.locator("._scf_comp_row").first();
