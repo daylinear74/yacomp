@@ -1530,6 +1530,67 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
 
 let _grids: { grid: Grid; container: Element }[] | null = null;
 
+/** A block that holds ONLY screenshot links/images (a bare comparison row) —
+ *  no label text, caption, or other markup of its own. */
+function isBareScreenshotRow(el: Element): boolean {
+  if (!/^(?:DIV|CENTER|P)$/i.test(el.tagName)) return false;
+  const imgs = [...el.querySelectorAll("img")];
+  if (imgs.length < 1) return false;
+  // Every image must be a local HDBits thumbnail. A row padded with external
+  // images (079) isn't a clean split-gallery row and stays a per-div parse.
+  if (!imgs.every((img) => /\/\/t\.hdbits\.org\//i.test(img.src))) return false;
+  for (const child of el.children) {
+    if (child.tagName === "BR" || child.tagName === "IMG") continue;
+    if (child.tagName === "A" && child.querySelector("img")) continue;
+    return false; // a label, table, captioned span, etc. → not a bare row
+  }
+  for (let node = el.firstChild; node; node = node.nextSibling) {
+    if (node.nodeType === Node.TEXT_NODE && (node.textContent || "").trim()) return false;
+  }
+  return true;
+}
+
+/** The adjacent sibling block that holds at least one image, skipping only <br>
+ *  and whitespace. Returns null at a real text run or a non-image element — a
+ *  section boundary. Walks the whole image-block run, dirty rows included, so
+ *  the caller can reject a run that isn't uniformly clean. */
+function adjacentImageBlock(el: Element, dir: "next" | "previous"): Element | null {
+  const step = (n: Node): Node | null => (dir === "next" ? n.nextSibling : n.previousSibling);
+  for (let node = step(el); node; node = step(node)) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      if ((node.textContent || "").trim()) return null;
+      continue;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+    const e = node as Element;
+    if (e.tagName === "BR") continue;
+    if (/^(?:DIV|CENTER|P)$/i.test(e.tagName) && e.querySelector("img")) return e;
+    return null; // any other element ends the run
+  }
+  return null;
+}
+
+/** When a comparison's rows are each wrapped in their OWN block (a "split
+ *  gallery" — ten <div align="center"> rows instead of one <div> with <br>
+ *  breaks), the per-row block is the wrong parse scope: every row would become
+ *  its own one-row grid. Climb to the parent so the whole run parses as one
+ *  multi-row grid. Only fires when the ENTIRE adjacent image-block run is a
+ *  uniform set of clean local screenshot rows — a run with any external-padded
+ *  or odd-width block (079) is left as separate per-div comparisons. */
+function splitGalleryParent(container: Element): Element | null {
+  if (!isBareScreenshotRow(container)) return null;
+  const width = screenshotImagesIn(container).length;
+  const run: Element[] = [container];
+  for (const dir of ["previous", "next"] as const) {
+    for (let sib = adjacentImageBlock(container, dir); sib; sib = adjacentImageBlock(sib, dir)) {
+      run.push(sib);
+    }
+  }
+  if (run.length < 2) return null;
+  if (!run.every((el) => isBareScreenshotRow(el) && screenshotImagesIn(el).length === width)) return null;
+  return container.parentElement;
+}
+
 function hdbGridParseContainer(container: Element): Element {
   while (
     /^(?:STRONG|B|I|EM|U|SPAN|FONT)$/i.test(container.tagName) &&
@@ -1539,6 +1600,9 @@ function hdbGridParseContainer(container: Element): Element {
   ) {
     container = container.parentElement;
   }
+
+  const galleryParent = splitGalleryParent(container);
+  if (galleryParent) container = galleryParent;
 
   const hiddenContent = container.closest("div.div_showhide");
   const label = hiddenContent?.previousElementSibling;

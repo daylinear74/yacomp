@@ -38,7 +38,7 @@ function looksLikeTechnicalParts(parts: string[]): boolean {
   return trimmed.every((part) => /^(?:format settings|reference frames(?:\s*:.*)?|input\s*=.*|output\s*=.*)$/i.test(part));
 }
 
-const GENERIC_HEADING_PREFIX_RE = /^\s*(?:screenshots?\s+comparison|comparison|screenshots?)\s*:?\s*/i;
+const GENERIC_HEADING_PREFIX_RE = /^\s*(?:screenshots?\s+comparison|comparison|screenshots?)(?:\s+images?)?(?:\s*\([^)]*\))?\s*:?\s*/i;
 // A mediainfo FIELD prefix on a comparison line ("Video: GER … | USA …",
 // "Audio: …") merely states what kind of comparison it is — strip it so the
 // real source names remain (owner ruling, 2221/2425).
@@ -585,12 +585,27 @@ function plainSplit(c: string): string[] {
   return [c];
 }
 
+/** Unwrap a label ENTIRELY enclosed in one balanced paren group, e.g.
+ *  "(Remux / RandomBytes)" → "Remux / RandomBytes", so the inner separator
+ *  becomes top-level. A label whose first "(" closes before the end ("(A) vs
+ *  (B)") or that isn't paren-wrapped is returned unchanged. */
+function unwrapOuterParens(text: string): string {
+  const t = text.trim();
+  if (t.length < 2 || t[0] !== "(" || t[t.length - 1] !== ")") return text;
+  let depth = 0;
+  for (let i = 0; i < t.length; i++) {
+    if (t[i] === "(") depth++;
+    else if (t[i] === ")" && --depth === 0 && i !== t.length - 1) return text;
+  }
+  return depth === 0 ? t.slice(1, -1).trim() : text;
+}
+
 export function splitNames(text: string): string[] {
   // Repair a separator "vs" with a missing space on either/both sides
   // ("GERvsUSA", "A vsB", "…Sharp)vsPhantom Thread…") so it is detected. Only a
   // LOWERCASE "vs" bounded by token chars / "(" / ")" is touched, so a name's
   // own "VS" / "AVS" (AviSynth) stays intact.
-  const candidate = cleanNameCandidate(text)
+  const candidate = unwrapOuterParens(cleanNameCandidate(text))
     .replace(/([A-Za-z0-9)\]])vs(?=[A-Z(]|\s)/g, "$1 vs ")
     .replace(/(\s)vs(?=[A-Z(])/g, "$1vs ");
   // Prefer a TOP-LEVEL separator (one outside parentheses), but only when the
