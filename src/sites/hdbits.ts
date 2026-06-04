@@ -379,6 +379,34 @@ function injectForumManualCSS(): void {
       outline-offset: 2px !important;
       box-shadow: 0 0 0 1px #000 !important;
     }
+    ._scf_manual_panel._scf_manual_floating {
+      position: fixed;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 2147483600;
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0;
+      padding: 8px 12px;
+      max-width: 96vw;
+      background: #15171c;
+      color: #eaeaea;
+      border: 1px solid #4da3ff;
+      border-radius: 8px;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+    }
+    ._scf_manual_panel._scf_manual_floating label,
+    ._scf_manual_panel._scf_manual_floating ._scf_manual_status {
+      color: #eaeaea;
+      opacity: 1;
+    }
+    ::highlight(_scf_manual_title) {
+      background-color: #6a4dff;
+      color: #fff;
+    }
   `;
   document.head.appendChild(style);
 }
@@ -524,6 +552,28 @@ function forumTextUnderPointer(event: MouseEvent): string | null {
   return null;
 }
 
+const FORUM_TITLE_HIGHLIGHT = "_scf_manual_title";
+
+/** Paint the chosen title text with the CSS Custom Highlight API so it stays
+ *  marked on the page after the native selection is cleared. Returns false when
+ *  the API is unavailable (older browsers keep the native selection instead). */
+function setForumTitleHighlight(range: Range): boolean {
+  const win = window as unknown as {
+    CSS?: { highlights?: { set(key: string, highlight: unknown): void } };
+    Highlight?: new (range: Range) => unknown;
+  };
+  if (win.CSS?.highlights && win.Highlight) {
+    win.CSS.highlights.set(FORUM_TITLE_HIGHLIGHT, new win.Highlight(range.cloneRange()));
+    return true;
+  }
+  return false;
+}
+
+function clearForumTitleHighlight(): void {
+  (window as unknown as { CSS?: { highlights?: { delete(key: string): void } } })
+    .CSS?.highlights?.delete(FORUM_TITLE_HIGHLIGHT);
+}
+
 function addForumManualComparisonControl(): void {
   if (!isHDBitsForumPage() || document.getElementById(FORUM_MANUAL_PANEL_ID)) return;
   const title = document.querySelector("h1");
@@ -593,6 +643,10 @@ function addForumManualComparisonControl(): void {
     if (selecting === on) return;
     selecting = on;
     document.body.classList.toggle("_scf_manual_selecting", selecting);
+    // While selecting, float the controls as a fixed top bar so they stay
+    // reachable as you scroll a long post; the inline trigger button hides.
+    panel.classList.toggle("_scf_manual_floating", selecting);
+    start.style.display = selecting ? "none" : "";
     if (selecting) {
       document.addEventListener("mousedown", onDocumentMouseDown, true);
       document.addEventListener("mousemove", onDocumentMouseMove, true);
@@ -607,6 +661,7 @@ function addForumManualComparisonControl(): void {
       dragMoved = false;
       dragStartImage = null;
       suppressNextClick = false;
+      clearForumTitleHighlight();
     }
   };
 
@@ -643,6 +698,32 @@ function addForumManualComparisonControl(): void {
 
   const setColumns = (n: number) => {
     if (n >= 2) cols.value = String(n);
+  };
+
+  // Fill the column names (and matching count) from a label, optionally keeping
+  // the source text highlighted on the page so the choice is visible.
+  const applyTitle = (parts: string[], range?: Range) => {
+    namesInput.value = parts.join(" | ");
+    setColumns(parts.length);
+    updateStatus(`title: ${parts.join(" | ")}`);
+    if (range && setForumTitleHighlight(range)) {
+      window.getSelection()?.removeAllRanges();
+    }
+  };
+
+  // A non-collapsed text selection inside the post that parses to 2+ names is a
+  // title pick — apply it and mark the text. Returns true when it was used.
+  const tryTitleFromSelection = (): boolean => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return false;
+    const text = sel.toString().trim();
+    if (!text) return false;
+    const host = sel.anchorNode instanceof Element ? sel.anchorNode : sel.anchorNode?.parentElement;
+    if (!host?.closest("td.comment")) return false;
+    const parts = splitNames(text);
+    if (parts.length < 2 || !looksLikeNames(parts)) return false;
+    applyTitle(parts, sel.getRangeAt(0));
+    return true;
   };
 
   // Additive single-image add used by the drag sweep.
@@ -694,7 +775,11 @@ function addForumManualComparisonControl(): void {
   }
 
   function onDocumentMouseUp(event: MouseEvent): void {
-    if (!dragSelecting) return;
+    if (!dragSelecting) {
+      // Not an image drag — a text selection in the post may be a title pick.
+      tryTitleFromSelection();
+      return;
+    }
     if (dragMoved) {
       event.preventDefault();
       event.stopPropagation();
@@ -738,9 +823,7 @@ function addForumManualComparisonControl(): void {
     if (parts.length >= 2 && looksLikeNames(parts)) {
       event.preventDefault();
       event.stopPropagation();
-      namesInput.value = parts.join(" | ");
-      setColumns(parts.length);
-      updateStatus(`titles: ${parts.join(" | ")}`);
+      applyTitle(parts);
     }
   }
 

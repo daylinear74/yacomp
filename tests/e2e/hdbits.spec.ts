@@ -564,6 +564,44 @@ test("hdbits: forum manual — clicking a label fills the column names and count
   expect(names).toEqual(["Source", "Encode"]);
 });
 
+test("hdbits: forum manual — the toolbar floats while selecting", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/155-forum-post-grouped-manual-selection");
+  await waitForHdbitsReady(page);
+
+  const panel = page.locator("._scf_manual_panel");
+  await expect(panel).not.toHaveClass(/_scf_manual_floating/);
+  await panel.locator("._scf_manual_button").click();
+  await expect(panel).toHaveClass(/_scf_manual_floating/);
+  expect(await panel.evaluate((el) => getComputedStyle(el).position)).toBe("fixed");
+  // Leaving selecting mode returns the panel inline.
+  await panel.locator("._scf_manual_clear").click();
+  await expect(panel).not.toHaveClass(/_scf_manual_floating/);
+});
+
+test("hdbits: forum manual — selecting label text sets the title and marks it", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/155-forum-post-grouped-manual-selection");
+  await waitForHdbitsReady(page);
+
+  const panel = page.locator("._scf_manual_panel");
+  await panel.locator("._scf_manual_button").click();
+
+  // Highlight the label text, then release the mouse → the selection is the title.
+  await page.locator(".cmp-label").selectText();
+  await page.evaluate(() => document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true })));
+
+  await expect(panel.locator("._scf_manual_names")).toHaveValue("Source | Encode");
+  await expect(panel.locator("._scf_manual_cols")).toHaveValue("2");
+  // The chosen text stays marked via the Custom Highlight API.
+  expect(
+    await page.evaluate(() => {
+      const reg = (window as unknown as { CSS?: { highlights?: { has(k: string): boolean } } }).CSS?.highlights;
+      return reg ? reg.has("_scf_manual_title") : null;
+    }),
+  ).toBe(true);
+});
+
 test("hdbits: saved Over the Garden Wall forum page uses the current manual fallback", async ({ page }) => {
   test.skip(!SAVED_HDBITS_FORUM_HTML, "Set YACOMP_SAVED_HDBITS_FORUM_HTML to a saved HDBits forum HTML file");
 
