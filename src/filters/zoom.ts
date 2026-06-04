@@ -360,6 +360,11 @@ function activeColumnNaturalWidth(): number {
 const TOAST_NATIVE_COLOR = "#7ee0a0"; // green — the image's native resolution
 const TOAST_SCREEN_COLOR = "#8ab4f8"; // blue — what it renders at on this screen
 
+export function formatDevicePixelRatio(dpr: number): string {
+  if (!Number.isFinite(dpr) || dpr <= 0) return "1";
+  return String(Number(dpr.toFixed(2)));
+}
+
 export function zoomToast(): string | ToastLine[] {
   const briefLabel = zoomMode === "fit"
     ? "🔍 Fit"
@@ -371,7 +376,8 @@ export function zoomToast(): string | ToastLine[] {
   // "Npx / N%" hides what's happening — call out native vs on-screen at every
   // zoom level (1:1, +/- custom, and fit), not just 1:1.
   const dpr = window.devicePixelRatio || 1;
-  const showDevice = oneToOnePixels() === "device" && dpr !== 1;
+  const dprLabel = formatDevicePixelRatio(dpr);
+  const showDevice = oneToOnePixels() === "device" && dprLabel !== "1";
 
   if (!verboseZoom() && !showDevice) return briefLabel;
 
@@ -386,7 +392,7 @@ export function zoomToast(): string | ToastLine[] {
       const screenRes = screenH ? screenW + "×" + screenH : screenW + "px";
       lines.push({ text: "Original " + nativeRes, size: "small", color: TOAST_NATIVE_COLOR });
       lines.push({
-        text: "On screen " + screenRes + "@" + dpr + "x",
+        text: "On screen " + screenRes + "@" + dprLabel + "x",
         size: "small",
         color: TOAST_SCREEN_COLOR,
       });
@@ -432,16 +438,21 @@ export function snapZoom(base: number, next: number): number {
   return next;
 }
 
-export function doZoomStep(dir: number): void {
-  const anchors = captureActiveZoomAnchors();
+export function zoomStepBaseWidth(): number {
   // At 1:1 the global zoomWidth can still be 0 (the active image hadn't measured
   // when 1:1 was applied — per-row sizing doesn't set it), so read the live 1:1
-  // width; guard any 0 with the viewport so a first +/- never collapses to 0px.
-  const base = (
+  // width; guard any 0 with the viewport so a first +/- or Ctrl+Wheel never
+  // collapses to 0px.
+  return (
     zoomMode === "fit" ? window.innerWidth
       : zoomMode === "1:1" ? activeColumnNaturalWidth()
         : zoomWidth
   ) || window.innerWidth;
+}
+
+export function doZoomStep(dir: number): void {
+  const anchors = captureActiveZoomAnchors();
+  const base = zoomStepBaseWidth();
   zoomWidth = snapZoom(base, calcZoom(base, dir));
   zoomMode = "custom";
   applyZoom(anchors);

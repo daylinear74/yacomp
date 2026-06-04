@@ -647,6 +647,7 @@ interface YacompTestHooks {
   resetConfig: () => void;
   getConfig: () => { closeBtnPosition: "auto" | "left" | "right" | "hide" };
   openSettings: () => void;
+  setZoomState: (mode: "fit" | "1:1" | "custom", width: number) => void;
 }
 
 async function setConfig(
@@ -1054,6 +1055,31 @@ test.describe("1:1 on a HiDPI (2x) display", () => {
     await expect
       .poll(() => row.evaluate((el) => parseFloat((el as HTMLElement).style.width) || 0))
       .toBeGreaterThan(100);
+  });
+
+  test("ctrl+wheel from 1:1 uses the live 1:1 width when zoomWidth is stale", async ({ page }) => {
+    await openViewer(page);
+    const comp = page.locator("._scf_comp");
+    const row = page.locator("._scf_comp_row").first();
+    await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("960px");
+
+    await page.evaluate(() => {
+      (window as unknown as { __yacomp: YacompTestHooks })
+        .__yacomp.setZoomState("1:1", 0);
+    });
+    await comp.evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      el.dispatchEvent(new WheelEvent("wheel", {
+        bubbles: true,
+        cancelable: true,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2,
+        ctrlKey: true,
+        deltaY: -100,
+      }));
+    });
+
+    await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("1200px");
   });
 
   test("device native/on-screen info also shows when zooming with +/- (custom mode)", async ({ page }) => {

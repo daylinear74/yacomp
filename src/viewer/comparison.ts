@@ -13,9 +13,9 @@ import {
   mouseSwitch as cfgMouseSwitch,
 } from "../config";
 import {
-  zoomMode, zoomWidth, setZoomMode, setZoomWidth,
+  setZoomMode, setZoomWidth,
   applyZoom, calcZoom, snapZoom, captureZoomAnchor, zoomToast, navMapEnabled,
-  doZoom1to1, refit1to1, centerOnActiveCell,
+  doZoom1to1, refit1to1, centerOnActiveCell, zoomStepBaseWidth,
   fillCanvasEnabled, applyFillCanvas, setFillCanvas, setNavMap,
   activeComps, addComp, removeComp,
   type CapturedZoomAnchor,
@@ -144,7 +144,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   compDiv.addEventListener("wheel", (e) => {
     if (!e.ctrlKey) return;
     e.preventDefault();
-    const oldW = zoomMode === "fit" ? window.innerWidth : zoomWidth;
+    const oldW = zoomStepBaseWidth();
     const anchor = getWheelZoomGestureAnchor(wheelZoomGesture, comp, e);
     setZoomWidth(snapZoom(oldW, calcZoom(oldW, e.deltaY < 0 ? 1 : -1)));
     setZoomMode("custom");
