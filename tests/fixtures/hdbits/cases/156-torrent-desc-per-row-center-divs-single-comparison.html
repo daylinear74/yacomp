@@ -1,11 +1,16 @@
 <!--
 slot: torrent.description
-expected_grids: 1
-expected_names: [["Remux", "RandomBytes"]]
+expected_grids: 2
+expected_names: [["Encode","Source"],["Remux","RandomBytes"]]
 torrent_title: "Demo Movie 2025 2160p UHD BluRay Remux HDR HEVC-RandomBytes"
-notes: a 2-wide Remux/RandomBytes comparison laid out as ten separate <div align="center"> rows (one image pair per div), under a single "(Remux / RandomBytes)" label. These sibling row-divs must merge into ONE 10-row grid (one "Show comparison"), not ten one-row grids. A separate single slow.pics link (3-col, incl. TERMiNAL HDR) precedes it and must not split the local gallery.
+notes: faithful real-page shape. A "DV plot" showhide (Encode/Source) is its own grid. Then a 2-wide Remux/RandomBytes comparison is laid out as ten separate <div align="center"> rows (one image pair per div), under the adjacent "Comparison images (tonemapped for reference): (Remux / RandomBytes)" label. Those sibling row-divs must merge into ONE 10-row grid titled from THAT adjacent label (Remux / RandomBytes), NOT from the preceding slow.pics "(Remux / RandomBytes / TERMiNAL (HDR))" line nor any earlier section.
 -->
 
+<div><label class="label_showhide" onclick="showHideBB(this);">DV plot <span>[show]</span></label><div class="div_showhide"><div style="text-align: left;">Encode:<br>
+<a href="https://img.hdbits.org/Fk4sexC"><img src="https://t.hdbits.org/Fk4sexC.jpg"></a><br>
+Source:<br>
+<a href="https://img.hdbits.org/PGxzznw"><img src="https://t.hdbits.org/PGxzznw.jpg"></a><br>
+</div></div></div><br>
 <strong>Slowpic comparison images (tonemapped for reference):</strong><br>
 <a href="/redir.php?url=aHR0cHM6Ly9zbG93LnBpY3MvYy84aERVWlM4Vg%3D%3D">https://slow.pics/c/8hDUZS8V</a> (Remux / RandomBytes / TERMiNAL (HDR)) <br>
 <br>

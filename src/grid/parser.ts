@@ -1530,19 +1530,16 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
 
 let _grids: { grid: Grid; container: Element }[] | null = null;
 
-/** A block that holds ONLY screenshot links/images (a bare comparison row) —
- *  no label text, caption, or other markup of its own. */
-function isBareScreenshotRow(el: Element): boolean {
+/** A block holding ONLY images/links (a bare comparison row) — no label text,
+ *  caption, or other markup. External images are allowed: a row is bare as long
+ *  as it contains nothing but <a><img> / <img> / <br> / whitespace. */
+function isBareImageRow(el: Element): boolean {
   if (!/^(?:DIV|CENTER|P)$/i.test(el.tagName)) return false;
-  const imgs = [...el.querySelectorAll("img")];
-  if (imgs.length < 1) return false;
-  // Every image must be a local HDBits thumbnail. A row padded with external
-  // images (079) isn't a clean split-gallery row and stays a per-div parse.
-  if (!imgs.every((img) => /\/\/t\.hdbits\.org\//i.test(img.src))) return false;
+  if (!el.querySelector("img")) return false;
   for (const child of el.children) {
     if (child.tagName === "BR" || child.tagName === "IMG") continue;
     if (child.tagName === "A" && child.querySelector("img")) continue;
-    return false; // a label, table, captioned span, etc. → not a bare row
+    return false; // a label, table, captioned span, or text link → not bare
   }
   for (let node = el.firstChild; node; node = node.nextSibling) {
     if (node.nodeType === Node.TEXT_NODE && (node.textContent || "").trim()) return false;
@@ -1550,11 +1547,10 @@ function isBareScreenshotRow(el: Element): boolean {
   return true;
 }
 
-/** The adjacent sibling block that holds at least one image, skipping only <br>
- *  and whitespace. Returns null at a real text run or a non-image element — a
- *  section boundary. Walks the whole image-block run, dirty rows included, so
- *  the caller can reject a run that isn't uniformly clean. */
-function adjacentImageBlock(el: Element, dir: "next" | "previous"): Element | null {
+/** The adjacent bare-image-row sibling in `dir`, skipping only <br> and
+ *  whitespace. Returns null at real text or any non-bare element — the section
+ *  boundary that separates one comparison from the next. */
+function adjacentBareImageRow(el: Element, dir: "next" | "previous"): Element | null {
   const step = (n: Node): Node | null => (dir === "next" ? n.nextSibling : n.previousSibling);
   for (let node = step(el); node; node = step(node)) {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -1564,31 +1560,95 @@ function adjacentImageBlock(el: Element, dir: "next" | "previous"): Element | nu
     if (node.nodeType !== Node.ELEMENT_NODE) continue;
     const e = node as Element;
     if (e.tagName === "BR") continue;
-    if (/^(?:DIV|CENTER|P)$/i.test(e.tagName) && e.querySelector("img")) return e;
-    return null; // any other element ends the run
+    return isBareImageRow(e) ? e : null;
   }
   return null;
 }
 
-/** When a comparison's rows are each wrapped in their OWN block (a "split
- *  gallery" — ten <div align="center"> rows instead of one <div> with <br>
- *  breaks), the per-row block is the wrong parse scope: every row would become
- *  its own one-row grid. Climb to the parent so the whole run parses as one
- *  multi-row grid. Only fires when the ENTIRE adjacent image-block run is a
- *  uniform set of clean local screenshot rows — a run with any external-padded
- *  or odd-width block (079) is left as separate per-div comparisons. */
-function splitGalleryParent(container: Element): Element | null {
-  if (!isBareScreenshotRow(container)) return null;
-  const width = screenshotImagesIn(container).length;
-  const run: Element[] = [container];
-  for (const dir of ["previous", "next"] as const) {
-    for (let sib = adjacentImageBlock(container, dir); sib; sib = adjacentImageBlock(sib, dir)) {
-      run.push(sib);
+/** The full run of adjacent bare image rows `c` belongs to (≥2), in document
+ *  order. Bounded by anything that isn't a bare image row — a text line, a
+ *  label, a table — so the rows of ONE comparison split across their own
+ *  <div align="center"> are gathered, while a label between two galleries keeps
+ *  them apart. Returns null when `c` is a standalone row. */
+function splitGalleryRun(c: Element): Element[] | null {
+  if (!isBareImageRow(c)) return null;
+  let first = c;
+  for (let p = adjacentBareImageRow(first, "previous"); p; p = adjacentBareImageRow(first, "previous")) {
+    first = p;
+  }
+  const run: Element[] = [];
+  for (let d: Element | null = first; d; d = adjacentBareImageRow(d, "next")) run.push(d);
+  return run.length >= 2 ? run : null;
+}
+
+/** The nearest inline label line above the run's first row (text / <strong> /
+ *  <font>), stopping at a block element, image block, or blank line — the "most
+ *  adjacent" comparison title. Parsed permissively so "/"-separated and fully
+ *  paren-wrapped "(A / B)" titles resolve. */
+function splitGalleryLabelNames(firstRow: Element): { names: string[]; anchorEl: ChildNode | null } | null {
+  let text = "";
+  let el: ChildNode | null = null;
+  for (let node: ChildNode | null = firstRow.previousSibling; node; node = node.previousSibling) {
+    if (node.nodeName === "BR") {
+      if (text.trim()) break;
+      continue;
+    }
+    if (node.nodeType === 1) {
+      const e = node as Element;
+      if (e.nodeName === "IMG" || e.querySelector?.("img")) break; // a previous gallery
+      const frag = e.textContent || "";
+      const isBlock = /^(?:DIV|P|PRE|TABLE|BLOCKQUOTE|UL|OL|HR|CENTER)$/.test(e.nodeName);
+      if (isBlock) {
+        // A block label sits on its own line ("<div>SOURCE vs ENCODE</div>"):
+        // take it only when no inline label has accumulated yet, then stop.
+        if (text.trim() || !frag.trim()) break;
+        text = frag;
+        el = e;
+        break;
+      }
+      if (!frag.trim()) continue;
+      text = frag + text; // an inline <strong>/<font> fragment of the title line
+      el = e;
+    } else if (node.nodeType === 3) {
+      text = (node.textContent || "") + text;
     }
   }
-  if (run.length < 2) return null;
-  if (!run.every((el) => isBareScreenshotRow(el) && screenshotImagesIn(el).length === width)) return null;
-  return container.parentElement;
+  const names = asColumnTitles(text);
+  return names && names.length >= 2 ? { names, anchorEl: el } : null;
+}
+
+/** Build ONE grid from a split-gallery run: each bare row is a grid row, titled
+ *  by the nearest preceding label (or generic Source 1..N when none fits). */
+function buildSplitGalleryGrid(run: Element[], excludeImgs: Set<HTMLImageElement>): Grid | null {
+  const rows: GridCell[][] = [];
+  for (const div of run) {
+    const row: GridCell[] = [];
+    for (const img of div.querySelectorAll<HTMLImageElement>("img")) {
+      if (excludeImgs.has(img) || isNonScreenshotImg(img)) continue;
+      const anchor = img.closest("a");
+      const isHdb = /\/\/t\.hdbits\.org\//i.test(img.src);
+      const full = isHdb
+        ? hdbFull(img.src)
+        : anchor && /\.(jpe?g|png|webp|gif|avif|bmp)(\?|$)/i.test(anchor.href)
+          ? anchor.href
+          : img.src;
+      row.push({ thumb: img.src, full, a: anchor ?? undefined, img });
+    }
+    if (row.length) rows.push(row);
+  }
+  if (rows.length < 2) return null;
+  const allCells = rows.flat();
+  if (allCells.length < 2) return null;
+  const label = splitGalleryLabelNames(run[0]);
+  const names = label && allCells.length % label.names.length === 0 ? label.names : null;
+  const shaped = reshapeGrid(rows, allCells, names);
+  if (!shaped) return null;
+  return {
+    rows: shaped.gridRows,
+    numCols: shaped.numCols,
+    names: finalizeNames(names) ?? genericSourceNames(shaped.numCols),
+    anchorEl: label?.anchorEl ?? null,
+  };
 }
 
 function hdbGridParseContainer(container: Element): Element {
@@ -1600,9 +1660,6 @@ function hdbGridParseContainer(container: Element): Element {
   ) {
     container = container.parentElement;
   }
-
-  const galleryParent = splitGalleryParent(container);
-  if (galleryParent) container = galleryParent;
 
   const hiddenContent = container.closest("div.div_showhide");
   const label = hiddenContent?.previousElementSibling;
@@ -1637,6 +1694,19 @@ export function getGrids(preClaimed?: Set<HTMLImageElement>): { grid: Grid; cont
     if (!a) continue;
     const c = a.parentElement;
     if (!c) continue;
+    // A single comparison whose rows are each wrapped in their own bare <div>
+    // (separated only by <br>) is ONE grid, not one grid per row. Gather the
+    // adjacent bare-row run and title it from the nearest preceding label.
+    const run = splitGalleryRun(c);
+    if (run && !run.some((d) => seen.has(d))) {
+      const grid = buildSplitGalleryGrid(run, claimed);
+      if (grid) {
+        for (const d of run) seen.add(d);
+        for (const cell of grid.rows.flat()) if (cell.img) claimed.add(cell.img);
+        _grids.push({ grid, container: c });
+        continue;
+      }
+    }
     const parseContainer = hdbGridParseContainer(c);
     if (seen.has(parseContainer)) continue;
     seen.add(parseContainer);
