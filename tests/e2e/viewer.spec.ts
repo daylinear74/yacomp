@@ -96,10 +96,22 @@ test("viewer: ? opens the shortcuts legend; Esc closes the legend, not the viewe
   const panel = page.locator("._scf_help_panel");
   await expect(panel).toBeVisible();
   await expect(panel.locator("._scf_help_section").first()).toHaveText("Navigation");
-  // The legend is generated from LIVE bindings — the close row reads "Esc".
+  // The legend is generated from LIVE bindings — the close row reads "Esc",
+  // but mouse gestures are documented separately because they only fire on the
+  // image grid.
   await expect(
-    panel.locator("._scf_help_row", { hasText: "Reset adjustments / close" }).locator("._scf_help_chip"),
+    panel.locator("._scf_help_row", { hasText: "Reset filters, then close viewer" }).locator("._scf_help_chip"),
   ).toHaveText("Esc");
+  await expect(
+    panel.locator("._scf_help_row", { hasText: "Open viewer from page image grid" }).locator("._scf_help_chip"),
+  ).toHaveText("Click image");
+  await expect(
+    panel.locator("._scf_help_row", { hasText: "Zoom at cursor" }).locator("._scf_help_chip"),
+  ).toHaveText("Ctrl + Wheel");
+  const keyFont = await panel.locator("._scf_help_chip").first().evaluate((el) =>
+    getComputedStyle(el).fontFamily.toLowerCase(),
+  );
+  expect(keyFont).toContain("mono");
 
   // Escape dismisses the legend but leaves the viewer open.
   await page.keyboard.press("Escape");
@@ -115,6 +127,23 @@ test("viewer: ? opens the shortcuts legend; Esc closes the legend, not the viewe
   // The bottom-left ? toolbar button toggles it too.
   await page.locator("._scf_help_button").click();
   await expect(page.locator("._scf_help_panel")).toBeVisible();
+});
+
+test("viewer: mouse close binding is shown as image-grid only, separate from Esc", async ({ page }) => {
+  await openViewer(page, {
+    config: {
+      shortcuts: { "viewer.close": { main: { t: "key", code: "Escape" }, extra: { t: "mouse", g: "click" } } },
+    },
+  });
+  await page.keyboard.press("Shift+Slash");
+  const panel = page.locator("._scf_help_panel");
+  const closeRow = panel.locator("._scf_help_row", { hasText: "Reset filters, then close viewer" });
+  await expect(closeRow.locator("._scf_help_chip")).toHaveText("Esc");
+  await expect(closeRow).not.toContainText("Click");
+
+  const mouseCloseRow = panel.locator("._scf_help_row", { hasText: "Close viewer from viewer image grid" });
+  await expect(mouseCloseRow.locator("._scf_help_chip")).toHaveText("Click");
+  await expect(mouseCloseRow).toContainText("Only when assigned");
 });
 
 test("viewer: the shortcuts legend reflects custom key bindings", async ({ page }) => {

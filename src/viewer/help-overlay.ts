@@ -4,8 +4,10 @@
 
 import { getShadowRoot } from "../ui/shadow";
 import { shortcutPairFor } from "../config";
-import { formatShortcut } from "../shortcuts/types";
+import { formatShortcut, type Shortcut } from "../shortcuts/types";
 import type { ActionId } from "../shortcuts/registry";
+
+type BindingScope = "all" | "key" | "mouse";
 
 interface LegendRow {
   /** Registry actions whose LIVE bindings render as the key chip (custom
@@ -16,6 +18,10 @@ interface LegendRow {
   desc: string;
   /** A faint modifier hint, e.g. "Shift = contrast". */
   note?: string;
+  /** Limit live action bindings to keyboard or mouse gestures. */
+  binding?: BindingScope;
+  /** Skip rows whose live binding filter produced no visible chip. */
+  hideIfEmpty?: boolean;
 }
 
 interface LegendSection {
@@ -45,6 +51,20 @@ const LEGEND: LegendSection[] = [
     ],
   },
   {
+    title: "Mouse",
+    rows: [
+      { keys: ["Click image"], desc: "Open viewer from page image grid" },
+      { keys: ["Ctrl + Wheel"], desc: "Zoom at cursor on viewer image grid" },
+      {
+        actions: ["viewer.close"],
+        binding: "mouse",
+        desc: "Close viewer from viewer image grid",
+        note: "Only when assigned in Settings",
+        hideIfEmpty: true,
+      },
+    ],
+  },
+  {
     title: "Adjustments",
     rows: [
       { actions: ["bright.down", "bright.up"], desc: "Brightness", note: "Shift = contrast" },
@@ -66,7 +86,12 @@ const LEGEND: LegendSection[] = [
     title: "Other",
     rows: [
       { actions: ["viewer.help"], desc: "Toggle this help" },
-      { actions: ["viewer.close"], desc: "Reset adjustments / close" },
+      {
+        actions: ["viewer.close"],
+        binding: "key",
+        desc: "Reset filters, then close viewer",
+        hideIfEmpty: true,
+      },
     ],
   },
 ];
@@ -76,19 +101,25 @@ const PRETTY_KEY: Record<string, string> = {
   "Shift + /": "?",
 };
 
-function rowChip(row: LegendRow): string {
-  if (row.keys) return row.keys.join(" ");
+function bindingMatches(scope: BindingScope, shortcut: Shortcut): boolean {
+  return scope === "all" || shortcut.t === scope;
+}
+
+function prettyShortcut(shortcut: Shortcut): string {
+  const label = formatShortcut(shortcut);
+  return PRETTY_KEY[label] ?? label;
+}
+
+function rowChips(row: LegendRow): string[] {
+  if (row.keys) return row.keys;
   const chips: string[] = [];
+  const scope = row.binding ?? "all";
   for (const id of row.actions ?? []) {
     const pair = shortcutPairFor(id);
-    const main = formatShortcut(pair.main);
-    chips.push(PRETTY_KEY[main] ?? main);
-    if (pair.extra) {
-      const extra = formatShortcut(pair.extra);
-      chips.push(PRETTY_KEY[extra] ?? extra);
-    }
+    if (bindingMatches(scope, pair.main)) chips.push(prettyShortcut(pair.main));
+    if (pair.extra && bindingMatches(scope, pair.extra)) chips.push(prettyShortcut(pair.extra));
   }
-  return chips.join(" ");
+  return chips;
 }
 
 let overlayEl: HTMLElement | null = null;
@@ -128,15 +159,20 @@ export function showHelpOverlay(): void {
     panel.appendChild(title);
 
     for (const row of section.rows) {
+      const chipLabels = rowChips(row);
+      if (row.hideIfEmpty && chipLabels.length === 0) continue;
+
       const rowEl = document.createElement("div");
       rowEl.className = "_scf_help_row";
 
       const keys = document.createElement("span");
       keys.className = "_scf_help_keys";
-      const chip = document.createElement("kbd");
-      chip.className = "_scf_help_chip";
-      chip.textContent = rowChip(row);
-      keys.appendChild(chip);
+      for (const label of chipLabels) {
+        const chip = document.createElement("kbd");
+        chip.className = "_scf_help_chip";
+        chip.textContent = label;
+        keys.appendChild(chip);
+      }
 
       const desc = document.createElement("span");
       desc.className = "_scf_help_desc";

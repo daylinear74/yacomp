@@ -646,8 +646,10 @@ export function injectCSS(): void {
       padding: 4px 0;
     }
     ._scf_help_keys {
-      flex: 0 0 104px;
+      flex: 0 0 118px;
       display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
     }
     ._scf_help_chip {
       display: inline-flex;
