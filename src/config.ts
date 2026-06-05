@@ -28,7 +28,7 @@ export const SITE_LABELS: Record<SiteKey, string> = {
 };
 
 export const FILTER_MODE_IDS = [
-  "solar1", "solar2", "residual", "luma", "chroma",
+  "solar1", "solar2", "residual", "luma", "lumaFull", "chroma", "chromaFull",
 ] as const;
 export type FilterModeId = typeof FILTER_MODE_IDS[number];
 
@@ -86,7 +86,7 @@ export interface YacompConfig {
 }
 
 const STORAGE_KEY = "yacomp_config";
-const CURRENT_VERSION = 2;
+const CURRENT_VERSION = 3;
 
 const ALL_SITES_ENABLED = Object.fromEntries(
   SITE_KEYS.map((k) => [k, true]),
@@ -257,6 +257,15 @@ export function migrate(raw: Record<string, unknown>): Record<string, unknown> {
     raw.enabledSites ??= DEFAULTS.enabledSites;
     raw.filterCycle ??= DEFAULTS.filterCycle;
     raw.gammaCycle ??= DEFAULTS.gammaCycle;
+  }
+  if (v < 3 && Array.isArray(raw.filterCycle)) {
+    const hasLumaFull = raw.filterCycle.includes("lumaFull");
+    const hasChromaFull = raw.filterCycle.includes("chromaFull");
+    raw.filterCycle = raw.filterCycle.flatMap((id) => {
+      if (id === "luma" && !hasLumaFull) return [id, "lumaFull"];
+      if (id === "chroma" && !hasChromaFull) return [id, "chromaFull"];
+      return [id];
+    });
   }
   return raw;
 }

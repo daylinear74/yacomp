@@ -26,11 +26,25 @@ export const MODES: Mode[] = [
     toast: "⬜  Luma",
   },
   {
+    id: "lumaFull",
+    f709: "url(#scf-luma709-full)",
+    f2020: "url(#scf-luma2020-full)",
+    label: "⬜ Luma Full",
+    toast: "⬜  Luma Full",
+  },
+  {
     id: "chroma",
     f709: "url(#scf-chroma709)",
     f2020: "url(#scf-chroma2020)",
     label: "🌈 Chroma",
     toast: "🌈  Chroma",
+  },
+  {
+    id: "chromaFull",
+    f709: "url(#scf-chroma709-full)",
+    f2020: "url(#scf-chroma2020-full)",
+    label: "🌈 Chroma Full",
+    toast: "🌈  Chroma Full",
   },
 ];
 

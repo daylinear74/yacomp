@@ -17,7 +17,7 @@ function matrixValues(markup: string, filterId: string): number[] {
 }
 
 describe("SVG luma/chroma filters", () => {
-  test("luma filters map display RGB into limited Y range 16..235", () => {
+  test("luma filters expose the limited Y preview", () => {
     const values = matrixValues(svgFilterDefsMarkup(), "scf-luma709");
 
     expectValuesClose(values.slice(0, 5), [
@@ -29,7 +29,19 @@ describe("SVG luma/chroma filters", () => {
     ]);
   });
 
-  test("chroma filters use limited chroma range 16..240, centered at 128", () => {
+  test("full luma filters keep display RGB luma in full range", () => {
+    const values = matrixValues(svgFilterDefsMarkup(), "scf-luma709-full");
+
+    expectValuesClose(values.slice(0, 5), [
+      0.2126,
+      0.7152,
+      0.0722,
+      0,
+      0,
+    ]);
+  });
+
+  test("chroma filters expose the limited chroma preview", () => {
     const values = matrixValues(svgFilterDefsMarkup(), "scf-chroma709");
 
     expectValuesClose(values.slice(0, 5), [
@@ -38,6 +50,18 @@ describe("SVG luma/chroma filters", () => {
       -0.0722 * 224 / 255,
       0,
       128 / 255,
+    ]);
+  });
+
+  test("full chroma filters keep full-range RGB residuals over neutral luma", () => {
+    const values = matrixValues(svgFilterDefsMarkup(), "scf-chroma709-full");
+
+    expectValuesClose(values.slice(0, 5), [
+      1 - 0.2126,
+      -0.7152,
+      -0.0722,
+      0,
+      (128 - 16) / 219,
     ]);
   });
 });

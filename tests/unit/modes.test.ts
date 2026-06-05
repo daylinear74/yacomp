@@ -23,17 +23,17 @@ beforeEach(() => {
 describe("cycleMode — full default cycle", () => {
   test("forward from off walks every enabled mode then returns to off", () => {
     const seen: string[] = [];
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 9; i++) {
       cycleMode(1);
       seen.push(curId());
     }
     expect(seen).toEqual([
-      "solar1", "solar2", "residual", "luma", "chroma", "off", "solar1",
+      "solar1", "solar2", "residual", "luma", "lumaFull", "chroma", "chromaFull", "off", "solar1",
     ]);
   });
   test("backward from off lands on the last enabled mode", () => {
     cycleMode(-1);
-    expect(curId()).toBe("chroma");
+    expect(curId()).toBe("chromaFull");
   });
 });
 

@@ -11,11 +11,16 @@ const LIMITED_LUMA_OFFSET = 16 / 255;
 const LIMITED_CHROMA_SCALE = 224 / 255;
 const LIMITED_CHROMA_OFFSET = 128 / 255;
 
+// Full-range chroma preview variant: RGB residual over limited-range neutral
+// Y=128 converted to display RGB. Kept as a separate test filter so real-world
+// comparisons can decide whether it beats the historical limited preview.
+const LIMITED_NEUTRAL_LUMA_RGB = (128 - 16) / 219;
+
 function matrixRows(values: number[][]): string {
   return values.map((row) => row.map(String).join(" ")).join(" ");
 }
 
-function lumaMatrix(kr: number, kg: number, kb: number): string {
+function lumaLimitedMatrix(kr: number, kg: number, kb: number): string {
   const row = [
     kr * LIMITED_LUMA_SCALE,
     kg * LIMITED_LUMA_SCALE,
@@ -31,7 +36,17 @@ function lumaMatrix(kr: number, kg: number, kb: number): string {
   ]);
 }
 
-function chromaResidualMatrix(kr: number, kg: number, kb: number): string {
+function lumaFullMatrix(kr: number, kg: number, kb: number): string {
+  const row = [kr, kg, kb, 0, 0];
+  return matrixRows([
+    row,
+    row,
+    row,
+    [0, 0, 0, 1, 0],
+  ]);
+}
+
+function chromaLimitedMatrix(kr: number, kg: number, kb: number): string {
   return matrixRows([
     [
       (1 - kr) * LIMITED_CHROMA_SCALE,
@@ -53,6 +68,33 @@ function chromaResidualMatrix(kr: number, kg: number, kb: number): string {
       (1 - kb) * LIMITED_CHROMA_SCALE,
       0,
       LIMITED_CHROMA_OFFSET,
+    ],
+    [0, 0, 0, 1, 0],
+  ]);
+}
+
+function chromaFullMatrix(kr: number, kg: number, kb: number): string {
+  return matrixRows([
+    [
+      1 - kr,
+      -kg,
+      -kb,
+      0,
+      LIMITED_NEUTRAL_LUMA_RGB,
+    ],
+    [
+      -kr,
+      1 - kg,
+      -kb,
+      0,
+      LIMITED_NEUTRAL_LUMA_RGB,
+    ],
+    [
+      -kr,
+      -kg,
+      1 - kb,
+      0,
+      LIMITED_NEUTRAL_LUMA_RGB,
     ],
     [0, 0, 0, 1, 0],
   ]);
@@ -116,19 +158,35 @@ export function svgFilterDefsMarkup(): string {
     </filter>
     <filter id="scf-luma709" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
       <feColorMatrix type="matrix"
-        values="${lumaMatrix(0.2126, 0.7152, 0.0722)}"/>
+        values="${lumaLimitedMatrix(0.2126, 0.7152, 0.0722)}"/>
+    </filter>
+    <filter id="scf-luma709-full" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
+      <feColorMatrix type="matrix"
+        values="${lumaFullMatrix(0.2126, 0.7152, 0.0722)}"/>
     </filter>
     <filter id="scf-luma2020" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
       <feColorMatrix type="matrix"
-        values="${lumaMatrix(0.2627, 0.6780, 0.0593)}"/>
+        values="${lumaLimitedMatrix(0.2627, 0.6780, 0.0593)}"/>
+    </filter>
+    <filter id="scf-luma2020-full" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
+      <feColorMatrix type="matrix"
+        values="${lumaFullMatrix(0.2627, 0.6780, 0.0593)}"/>
     </filter>
     <filter id="scf-chroma709" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
       <feColorMatrix type="matrix"
-        values="${chromaResidualMatrix(0.2126, 0.7152, 0.0722)}"/>
+        values="${chromaLimitedMatrix(0.2126, 0.7152, 0.0722)}"/>
+    </filter>
+    <filter id="scf-chroma709-full" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
+      <feColorMatrix type="matrix"
+        values="${chromaFullMatrix(0.2126, 0.7152, 0.0722)}"/>
     </filter>
     <filter id="scf-chroma2020" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
       <feColorMatrix type="matrix"
-        values="${chromaResidualMatrix(0.2627, 0.6780, 0.0593)}"/>
+        values="${chromaLimitedMatrix(0.2627, 0.6780, 0.0593)}"/>
+    </filter>
+    <filter id="scf-chroma2020-full" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
+      <feColorMatrix type="matrix"
+        values="${chromaFullMatrix(0.2627, 0.6780, 0.0593)}"/>
     </filter>
     ${gammaMismatchCheckFilterDefs()}
   </defs>`;
