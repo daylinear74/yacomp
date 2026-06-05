@@ -5,6 +5,8 @@
 import { injectCSS } from "../ui/css";
 import { getShadowRoot } from "../ui/shadow";
 import { injectFilters } from "../filters/svg";
+import { syncAll } from "../filters/imaging";
+import { active as modeActive, cur } from "../filters/modes";
 import { showToast } from "../ui/toast";
 import { updateHUD } from "../ui/hud";
 import {
@@ -230,7 +232,8 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
       }
     }
     comp.updateSourceMenu?.();
-    updateHUD();
+    if (modeActive(cur())) syncAll();
+    else updateHUD();
   }
 
   for (let ri = 0; ri < grid.rows.length; ri++) {
@@ -509,6 +512,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   comp.updateScrollSpacers();
 
   addComp(comp);
+  if (modeActive(cur())) syncAll();
   if (fillCanvasEnabled) applyFillCanvas();
   if (initialZoom.mode === "custom") {
     applyZoom();

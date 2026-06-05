@@ -4,6 +4,10 @@ import {
   orderedColumnsAroundAnchor,
   orderedCompImageTargetsByAnchor,
   partitionAnchorTargets,
+  markPageFilterColumn,
+  setPageFilterColumnForTesting,
+  shouldApplyModeFilterToCompTarget,
+  shouldApplyModeFilterToPageImage,
   applyAnchorsThenQueue,
   runBoundedFilterQueue,
   yieldToBrowserPaint,
@@ -190,6 +194,42 @@ describe("anchor partitioning — visible cell(s) separated from the rest", () =
     expect(anchors).toHaveLength(2);
     expect(anchors.map((a) => a.comp)).toEqual([compA, compB]);
     expect(rest).toHaveLength(2);
+  });
+});
+
+// ─── contract: single-column mode filters ───────────────────────────────────
+
+describe("single-column mode filters", () => {
+  test("viewer mode filters apply only to the current source column", () => {
+    const comp = makeFakeComp({ rows: 1, cols: 3, currentRow: 0, currentCol: 1 });
+    const targets = orderedCompImageTargetsByAnchor(comp);
+
+    expect(targets.map((target) => shouldApplyModeFilterToCompTarget(target))).toEqual([
+      true,
+      false,
+      false,
+    ]);
+  });
+
+  test("page images without grid-column metadata keep the legacy all-image behavior", () => {
+    const img = { dataset: {} } as HTMLImageElement;
+
+    expect(shouldApplyModeFilterToPageImage(img)).toBe(true);
+  });
+
+  test("tagged page grid images default to column 0 and can switch to another column", () => {
+    const col0 = { dataset: {}, addEventListener: () => {} } as unknown as HTMLImageElement;
+    const col1 = { dataset: {}, addEventListener: () => {} } as unknown as HTMLImageElement;
+
+    setPageFilterColumnForTesting(0);
+    markPageFilterColumn(col0, 0);
+    markPageFilterColumn(col1, 1);
+    expect(shouldApplyModeFilterToPageImage(col0)).toBe(true);
+    expect(shouldApplyModeFilterToPageImage(col1)).toBe(false);
+
+    setPageFilterColumnForTesting(1);
+    expect(shouldApplyModeFilterToPageImage(col0)).toBe(false);
+    expect(shouldApplyModeFilterToPageImage(col1)).toBe(true);
   });
 });
 

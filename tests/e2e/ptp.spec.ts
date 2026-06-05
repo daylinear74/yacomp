@@ -98,6 +98,40 @@ test("ptp: the grid lays out one column per source", async ({ page }) => {
   expect(cols).toBe("repeat(3, 1fr)");
 });
 
+test("ptp: page-level visual filters apply to one grid column at a time", async ({ page }) => {
+  await openPtp(page);
+  await page.locator("._scf_ptp_grid_toggle").click();
+  const imgs = page.locator("._scf_ptp_grid img");
+  await expect(imgs).toHaveCount(6);
+
+  await page.evaluate(() => {
+    (window as unknown as { __yacomp: { filterNext: () => void } })
+      .__yacomp.filterNext();
+  });
+  await expect
+    .poll(async () => imgs.evaluateAll((nodes) => nodes.map((node) => (node as HTMLImageElement).style.filter)))
+    .toEqual([
+      "url(\"#scf-s1\")",
+      "",
+      "",
+      "url(\"#scf-s1\")",
+      "",
+      "",
+    ]);
+
+  await imgs.nth(1).hover();
+  await expect
+    .poll(async () => imgs.evaluateAll((nodes) => nodes.map((node) => (node as HTMLImageElement).style.filter)))
+    .toEqual([
+      "",
+      "url(\"#scf-s1\")",
+      "",
+      "",
+      "url(\"#scf-s1\")",
+      "",
+    ]);
+});
+
 test("ptp: the toggle is a single ▦ glyph by default", async ({ page }) => {
   await openPtp(page);
   await expect(page.locator("._scf_ptp_grid_toggle")).toHaveText("▦");

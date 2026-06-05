@@ -4,6 +4,7 @@
 
 import { injectCSS, injectTriggerLinkCSS } from "../ui/css";
 import { hdbitsImageClick } from "../config";
+import { markPageFilterColumn } from "../filters/imaging";
 import { getGrids, hdbFull } from "../grid";
 import type { Grid, GridCell } from "../grid";
 import { hasVsOrPipe, splitNames, looksLikeNames } from "../grid/names";
@@ -66,7 +67,9 @@ function attachGridImageClicks(grid: Grid, container: HTMLElement, link: HTMLAnc
   for (let r = 0; r < grid.rows.length; r++) {
     const row = grid.rows[r];
     for (let c = 0; c < row.length; c++) {
-      onImageClickOpen(row[c].img, row[c].a, () => {
+      const cell = row[c];
+      if (cell.img) markPageFilterColumn(cell.img, c);
+      onImageClickOpen(cell.img, cell.a, () => {
         void maybeEnrichNames(grid).then(() => {
           if (grid.partial) openOrphanSelect(grid, container, link);
           else buildComparison({ ...grid, initialRow: r, initialCol: c }, container, link);
