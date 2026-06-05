@@ -6,37 +6,18 @@ import { lut } from "./lut";
 import { GAMMA_MISMATCH_CHECK_PRESETS, gammaMismatchCheckExponent } from "./gamma-check";
 import { getShadowRoot } from "../ui/shadow";
 
-const LIMITED_LUMA_SCALE = 219 / 255;
-const LIMITED_LUMA_OFFSET = 16 / 255;
-const LIMITED_CHROMA_SCALE = 224 / 255;
-const LIMITED_CHROMA_OFFSET = 128 / 255;
-
-// Full-range chroma preview variant: RGB residual over limited-range neutral
-// Y=128 converted to display RGB. Kept as a separate test filter so real-world
-// comparisons can decide whether it beats the historical limited preview.
-const LIMITED_NEUTRAL_LUMA_RGB = (128 - 16) / 219;
+// Chroma preview neutral: the limited-range luma midpoint (Y=128) expressed as
+// a full-range display-RGB level, so the colour residual rides over a
+// perceptually neutral grey rather than mathematical 0.5.
+const CHROMA_NEUTRAL_RGB = (128 - 16) / 219;
 
 function matrixRows(values: number[][]): string {
   return values.map((row) => row.map(String).join(" ")).join(" ");
 }
 
-function lumaLimitedMatrix(kr: number, kg: number, kb: number): string {
-  const row = [
-    kr * LIMITED_LUMA_SCALE,
-    kg * LIMITED_LUMA_SCALE,
-    kb * LIMITED_LUMA_SCALE,
-    0,
-    LIMITED_LUMA_OFFSET,
-  ];
-  return matrixRows([
-    row,
-    row,
-    row,
-    [0, 0, 0, 1, 0],
-  ]);
-}
-
-function lumaFullMatrix(kr: number, kg: number, kb: number): string {
+// Y′ luma as full-range display RGB (no studio-swing compression): the
+// Rec.709/2020 weighted sum written identically to R, G and B.
+function lumaMatrix(kr: number, kg: number, kb: number): string {
   const row = [kr, kg, kb, 0, 0];
   return matrixRows([
     row,
@@ -46,56 +27,12 @@ function lumaFullMatrix(kr: number, kg: number, kb: number): string {
   ]);
 }
 
-function chromaLimitedMatrix(kr: number, kg: number, kb: number): string {
+// Chroma residual (input − luma) over the neutral grey above, full range.
+function chromaMatrix(kr: number, kg: number, kb: number): string {
   return matrixRows([
-    [
-      (1 - kr) * LIMITED_CHROMA_SCALE,
-      -kg * LIMITED_CHROMA_SCALE,
-      -kb * LIMITED_CHROMA_SCALE,
-      0,
-      LIMITED_CHROMA_OFFSET,
-    ],
-    [
-      -kr * LIMITED_CHROMA_SCALE,
-      (1 - kg) * LIMITED_CHROMA_SCALE,
-      -kb * LIMITED_CHROMA_SCALE,
-      0,
-      LIMITED_CHROMA_OFFSET,
-    ],
-    [
-      -kr * LIMITED_CHROMA_SCALE,
-      -kg * LIMITED_CHROMA_SCALE,
-      (1 - kb) * LIMITED_CHROMA_SCALE,
-      0,
-      LIMITED_CHROMA_OFFSET,
-    ],
-    [0, 0, 0, 1, 0],
-  ]);
-}
-
-function chromaFullMatrix(kr: number, kg: number, kb: number): string {
-  return matrixRows([
-    [
-      1 - kr,
-      -kg,
-      -kb,
-      0,
-      LIMITED_NEUTRAL_LUMA_RGB,
-    ],
-    [
-      -kr,
-      1 - kg,
-      -kb,
-      0,
-      LIMITED_NEUTRAL_LUMA_RGB,
-    ],
-    [
-      -kr,
-      -kg,
-      1 - kb,
-      0,
-      LIMITED_NEUTRAL_LUMA_RGB,
-    ],
+    [1 - kr, -kg, -kb, 0, CHROMA_NEUTRAL_RGB],
+    [-kr, 1 - kg, -kb, 0, CHROMA_NEUTRAL_RGB],
+    [-kr, -kg, 1 - kb, 0, CHROMA_NEUTRAL_RGB],
     [0, 0, 0, 1, 0],
   ]);
 }
@@ -158,35 +95,19 @@ export function svgFilterDefsMarkup(): string {
     </filter>
     <filter id="scf-luma709" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
       <feColorMatrix type="matrix"
-        values="${lumaLimitedMatrix(0.2126, 0.7152, 0.0722)}"/>
-    </filter>
-    <filter id="scf-luma709-full" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
-      <feColorMatrix type="matrix"
-        values="${lumaFullMatrix(0.2126, 0.7152, 0.0722)}"/>
+        values="${lumaMatrix(0.2126, 0.7152, 0.0722)}"/>
     </filter>
     <filter id="scf-luma2020" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
       <feColorMatrix type="matrix"
-        values="${lumaLimitedMatrix(0.2627, 0.6780, 0.0593)}"/>
-    </filter>
-    <filter id="scf-luma2020-full" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
-      <feColorMatrix type="matrix"
-        values="${lumaFullMatrix(0.2627, 0.6780, 0.0593)}"/>
+        values="${lumaMatrix(0.2627, 0.6780, 0.0593)}"/>
     </filter>
     <filter id="scf-chroma709" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
       <feColorMatrix type="matrix"
-        values="${chromaLimitedMatrix(0.2126, 0.7152, 0.0722)}"/>
-    </filter>
-    <filter id="scf-chroma709-full" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
-      <feColorMatrix type="matrix"
-        values="${chromaFullMatrix(0.2126, 0.7152, 0.0722)}"/>
+        values="${chromaMatrix(0.2126, 0.7152, 0.0722)}"/>
     </filter>
     <filter id="scf-chroma2020" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
       <feColorMatrix type="matrix"
-        values="${chromaLimitedMatrix(0.2627, 0.6780, 0.0593)}"/>
-    </filter>
-    <filter id="scf-chroma2020-full" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
-      <feColorMatrix type="matrix"
-        values="${chromaFullMatrix(0.2627, 0.6780, 0.0593)}"/>
+        values="${chromaMatrix(0.2627, 0.6780, 0.0593)}"/>
     </filter>
     ${gammaMismatchCheckFilterDefs()}
   </defs>`;

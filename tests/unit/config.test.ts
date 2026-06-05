@@ -225,9 +225,15 @@ describe("validate — enabledSites", () => {
 describe("validate — ordered id lists (filterCycle, gammaCycle)", () => {
   test("filters out unknown ids and dedupes preserved order", () => {
     const cycle = validate({
-      filterCycle: ["chromaFull", "bogus", "solar1", "chromaFull", "lumaFull"],
+      filterCycle: ["chroma", "bogus", "solar1", "chroma", "luma"],
     }).filterCycle;
-    expect(cycle).toEqual(["chromaFull", "solar1", "lumaFull"]);
+    expect(cycle).toEqual(["chroma", "solar1", "luma"]);
+  });
+  test("drops the retired full-range variant ids (prerelease v3 cleanup)", () => {
+    const cycle = validate({
+      filterCycle: ["solar1", "luma", "lumaFull", "chroma", "chromaFull"],
+    }).filterCycle;
+    expect(cycle).toEqual(["solar1", "luma", "chroma"]);
   });
   test("accepts empty list (user disabled every entry)", () => {
     expect(validate({ filterCycle: [] }).filterCycle).toEqual([]);
@@ -253,24 +259,16 @@ describe("migrate", () => {
   });
   test("v<2 keeps user-provided cycle data intact", () => {
     const migrated = migrate({ v: 1, filterCycle: ["chroma"] });
-    expect(migrated.filterCycle).toEqual(["chroma", "chromaFull"]);
+    expect(migrated.filterCycle).toEqual(["chroma"]);
   });
-  test("v<3 inserts full-range luma/chroma variants beside existing limited entries", () => {
-    const migrated = migrate({ v: 2, filterCycle: ["solar1", "luma", "chroma"] });
-    expect(migrated.filterCycle).toEqual([
-      "solar1",
-      "luma",
-      "lumaFull",
-      "chroma",
-      "chromaFull",
-    ]);
-  });
-  test("v<3 migration does not duplicate full-range variants", () => {
-    const migrated = migrate({ v: 2, filterCycle: ["luma", "lumaFull", "chromaFull"] });
+  test("retired full-range ids survive migrate (validate strips them later)", () => {
+    // migrate no longer rewrites the cycle past v2; the dead lumaFull/chromaFull
+    // ids are removed downstream by validate, not here.
+    const migrated = migrate({ v: 3, filterCycle: ["luma", "lumaFull", "chromaFull"] });
     expect(migrated.filterCycle).toEqual(["luma", "lumaFull", "chromaFull"]);
   });
-  test("v=3 is left alone", () => {
-    const raw = { v: 3, bcStep: 0.1 };
+  test("current-version config is left alone", () => {
+    const raw = { v: 4, bcStep: 0.1 };
     const migrated = migrate({ ...raw });
     expect(migrated).toEqual(raw);
   });

@@ -481,9 +481,7 @@ const FILTER_MODE_LABELS: Record<FilterModeId, string> = {
   solar2: "Solar x2",
   residual: "Residual",
   luma: "Luma",
-  lumaFull: "Luma Full",
   chroma: "Chroma",
-  chromaFull: "Chroma Full",
 };
 
 const GAMMA_PRESET_LABELS: Record<GammaPresetId, string> = {
