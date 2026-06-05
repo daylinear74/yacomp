@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Yet Another Comparison Viewer dev3
+// @name         Yet Another Comparison Viewer
 // @namespace    https://github.com/daylinear74/yacomp
 // @version      __VERSION__
 // @description  Screenshot comparison viewer for HDBits, PTP, UNIT3D, BHD, GPW, SSD, FRDS, slow.pics, and comp.pics — hover to switch sources, visual filters (solar/luma/chroma), auto BT.709/2020, zoom/pan, brightness/contrast
