@@ -86,7 +86,7 @@ export interface YacompConfig {
 }
 
 const STORAGE_KEY = "yacomp_config";
-const CURRENT_VERSION = 2;
+const CURRENT_VERSION = 4;
 
 const ALL_SITES_ENABLED = Object.fromEntries(
   SITE_KEYS.map((k) => [k, true]),
@@ -258,6 +258,10 @@ export function migrate(raw: Record<string, unknown>): Record<string, unknown> {
     raw.filterCycle ??= DEFAULTS.filterCycle;
     raw.gammaCycle ??= DEFAULTS.gammaCycle;
   }
+  // v3 (prerelease only) added separate "lumaFull"/"chromaFull" cycle entries.
+  // The luma/chroma filters are now full-range by default, so those ids are
+  // gone; validateOrderedIdList drops them from any stored cycle and the
+  // version bump re-persists the cleaned config.
   return raw;
 }
 
