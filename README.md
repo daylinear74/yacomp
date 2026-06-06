@@ -45,8 +45,7 @@ install the latest release](https://github.com/daylinear74/yacomp/releases/lates
 - **Zoom & pan** — fit, 1:1, incremental zoom, `Ctrl` + wheel cursor-centered
   zoom, drag panning, a minimap, and a row-navigation sidebar.
 - **Visual filters** — Solar ×1 / ×2, Residual, Luma, and Chroma modes for
-  artifact and channel inspection, applied to one source column at a time so a
-  single image can be A/B'd against its neighbours.
+  artifact and channel inspection.
 - **Per-source adjustments** — brightness, contrast, and gamma-mismatch checks
   (sRGB ↔ BT.1886, the 0.88 AE/QuickTime fix, Legacy Mac) for the selected
   source only.

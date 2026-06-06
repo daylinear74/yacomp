@@ -13,7 +13,6 @@ import { activeComps } from "./zoom";
 import type { Comp } from "../viewer/types";
 
 export const LUMA_CHROMA_FILTER_CONCURRENCY = 4;
-const PAGE_FILTER_COLUMN_DATASET_KEY = "scfFilterCol";
 
 export interface CompImageFilterTarget {
   comp: Comp;
@@ -27,12 +26,9 @@ export interface FilterApplyOptions {
   contrast?: number;
   gammaCheck?: GammaMismatchCheckId | null;
   shouldApply?: () => boolean;
-  applyModeFilter?: boolean;
 }
 
 let filterSyncGeneration = 0;
-let pageFilterColumn = 0;
-const markedPageFilterImages = new WeakSet<HTMLImageElement>();
 
 export function currentFilterSyncGuard(): () => boolean {
   const generation = filterSyncGeneration;
@@ -101,47 +97,6 @@ export function getImages(): HTMLImageElement[] {
   return [...document.querySelectorAll("img")].filter(shouldApplyFilterToImage) as HTMLImageElement[];
 }
 
-function normalizeFilterColumn(col: number): number {
-  return Math.max(0, Math.trunc(Number.isFinite(col) ? col : 0));
-}
-
-function markedPageFilterColumn(img: HTMLImageElement): number | null {
-  const raw = img.dataset[PAGE_FILTER_COLUMN_DATASET_KEY];
-  if (raw === undefined) return null;
-  const col = Number(raw);
-  return Number.isFinite(col) ? normalizeFilterColumn(col) : null;
-}
-
-function setPageFilterColumn(col: number): void {
-  const next = normalizeFilterColumn(col);
-  if (next === pageFilterColumn) return;
-  pageFilterColumn = next;
-  if (active(cur())) syncAll();
-}
-
-export function setPageFilterColumnForTesting(col: number): void {
-  pageFilterColumn = normalizeFilterColumn(col);
-}
-
-export function markPageFilterColumn(img: HTMLImageElement, col: number): void {
-  img.dataset[PAGE_FILTER_COLUMN_DATASET_KEY] = String(normalizeFilterColumn(col));
-  if (markedPageFilterImages.has(img)) return;
-  markedPageFilterImages.add(img);
-  img.addEventListener("mouseenter", () => {
-    const markedCol = markedPageFilterColumn(img);
-    if (markedCol !== null) setPageFilterColumn(markedCol);
-  });
-}
-
-export function shouldApplyModeFilterToPageImage(img: HTMLImageElement): boolean {
-  const col = markedPageFilterColumn(img);
-  return col === null || col === pageFilterColumn;
-}
-
-export function shouldApplyModeFilterToCompTarget(target: CompImageFilterTarget): boolean {
-  return target.col === target.comp.currentCol;
-}
-
 export async function resolveFilter(src: string): Promise<string> {
   const mode = cur();
   if (mode.f709) {
@@ -172,7 +127,7 @@ export async function applyFilterToImg(
 ): Promise<void> {
   const shouldApply = options.shouldApply ?? currentFilterSyncGuard();
   const filter = buildFilter(
-    options.applyModeFilter === false ? "" : await resolveFilter(img.src),
+    await resolveFilter(img.src),
     options.brightness,
     options.contrast,
     options.gammaCheck ?? null,
@@ -196,7 +151,6 @@ async function applyToCompTargetIfCurrent(
     contrast: comp.colContrast[col],
     gammaCheck: comp.colGammaCheck[col],
     shouldApply,
-    applyModeFilter: shouldApplyModeFilterToCompTarget(target),
   });
 }
 
@@ -316,10 +270,7 @@ async function applyFilterTargetsConcurrently(
       if (task.type === "viewer") {
         await applyToCompTargetIfCurrent(task.target, shouldApply);
       } else {
-        await applyFilterToImg(task.img, {
-          shouldApply,
-          applyModeFilter: shouldApplyModeFilterToPageImage(task.img),
-        });
+        await applyFilterToImg(task.img, { shouldApply });
       }
     },
     yieldToBrowserPaint,
@@ -339,10 +290,7 @@ export function syncAll(): void {
       return;
     }
     pageImages.forEach((img) => {
-      void applyFilterToImg(img, {
-        shouldApply,
-        applyModeFilter: shouldApplyModeFilterToPageImage(img),
-      });
+      void applyFilterToImg(img, { shouldApply });
     });
   } else {
     for (const img of pageImages) {

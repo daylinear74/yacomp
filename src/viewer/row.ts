@@ -130,7 +130,6 @@ function loadCellSrc(
     brightness: comp.colBrightness[ci],
     contrast: comp.colContrast[ci],
     gammaCheck: comp.colGammaCheck[ci],
-    applyModeFilter: ci === comp.currentCol,
   });
   img.addEventListener("load", () => adjustRowAR(img), { once: true });
 }

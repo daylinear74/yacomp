@@ -4,8 +4,6 @@
 
 import { injectPTPGrids, refreshPTPGridToggles } from "../../../src/sites/ptp";
 import { saveConfig, resetConfig, getConfig } from "../../../src/config";
-import { cycleMode } from "../../../src/filters/modes";
-import { syncAll } from "../../../src/filters/imaging";
 
 function boot(): void {
   injectPTPGrids(document);
@@ -16,10 +14,6 @@ function boot(): void {
     getConfig,
     // The real settings UI calls this on save; the test drives it directly.
     refreshGridToggles: refreshPTPGridToggles,
-    filterNext: () => {
-      cycleMode(1);
-      syncAll();
-    },
   };
   (window as unknown as { __yacomp_test_ready: boolean }).__yacomp_test_ready = true;
 }

@@ -7,7 +7,6 @@ import {
   ptpGridImageSize, ptpGridClick, ptpGridToggleStyle,
   ptpGridToggleCollapsed, ptpGridToggleExpanded,
 } from "../config";
-import { markPageFilterColumn } from "../filters/imaging";
 import { openWithDummyWrapper } from "../viewer";
 import type { Grid, GridCell } from "../grid";
 
@@ -135,7 +134,6 @@ function populatePTPGrid(gridEl: HTMLElement, grid: Grid): void {
     img.className = "_scf_ptp_grid_img";
     img.loading = "lazy";
     img.src = tile.src;
-    markPageFilterColumn(img, col);
     a.appendChild(img);
     frag.appendChild(a);
   });
@@ -216,10 +214,8 @@ function hijackPTPComparison(ptpContainer: HTMLElement): void {
   for (const row of ptpRows) {
     const imgs = row.querySelectorAll(".screenshot-comparison__image") as NodeListOf<HTMLImageElement>;
     const rowData: GridCell[] = [];
-    for (let col = 0; col < imgs.length; col++) {
-      const img = imgs[col];
-      markPageFilterColumn(img, col);
-      rowData.push({ full: img.src, img });
+    for (const img of imgs) {
+      rowData.push({ full: img.src });
     }
     if (rowData.length > 0) {
       gridRows.push(rowData);

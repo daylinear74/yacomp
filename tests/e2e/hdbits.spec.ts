@@ -171,47 +171,6 @@ test("hdbits: host trigger link inherits page color and opens the viewer", async
   await expect(page.locator("._scf_comp")).toBeVisible();
 });
 
-test("hdbits: page-level visual filters apply to one screenshot column at a time", async ({ page }) => {
-  const largeStubSvg =
-    '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180">' +
-    '<rect width="320" height="180" fill="#3a3a3a"/></svg>';
-  await page.route(/[ti]\.hdbits\.org/, (route) =>
-    route.fulfill({ contentType: "image/svg+xml", body: largeStubSvg }),
-  );
-  await page.goto("/hdbits/case/001-torrent-desc-simple-grid");
-  await waitForHdbitsReady(page);
-
-  const imgs = page.locator('img[src*="t.hdbits.org"]');
-  await expect(imgs).toHaveCount(6);
-
-  await page.evaluate(() => {
-    (window as unknown as { __yacomp: { filterNext: () => void } })
-      .__yacomp.filterNext();
-  });
-  await expect
-    .poll(async () => imgs.evaluateAll((nodes) => nodes.map((node) => (node as HTMLImageElement).style.filter)))
-    .toEqual([
-      "url(\"#scf-s1\")",
-      "",
-      "url(\"#scf-s1\")",
-      "",
-      "url(\"#scf-s1\")",
-      "",
-    ]);
-
-  await imgs.nth(1).hover();
-  await expect
-    .poll(async () => imgs.evaluateAll((nodes) => nodes.map((node) => (node as HTMLImageElement).style.filter)))
-    .toEqual([
-      "",
-      "url(\"#scf-s1\")",
-      "",
-      "url(\"#scf-s1\")",
-      "",
-      "url(\"#scf-s1\")",
-    ]);
-});
-
 test("hdbits: indivisible comparison-thread OP opens the drop-the-odd-shot picker, then builds a clean comparison (80402)", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/113-iconic-80402");

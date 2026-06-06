@@ -520,10 +520,13 @@ test("switching the active source re-anchors the next chroma sync to the new col
   // Switch the visible source to col 2 (number keys are 1-indexed).
   await page.keyboard.press("3");
 
-  // switchColumn now promotes col 2 only in rows the IO has already loaded,
-  // then re-syncs the active filter so the new current column becomes the
-  // filtered column. Wait for row 0 col 2 to land in the chroma log — that's
-  // the deterministic case — then yield a tick before resetting the log.
+  // switchColumn now only promotes col 2 in rows the IO has already
+  // loaded (see src/viewer/comparison.ts). Each promotion fires
+  // applyFilterToImg WITHOUT a generation guard, so the writes are
+  // async (detectCS awaits a Range fetch). Wait for row 0 col 2 to
+  // land in the chroma log — that's the deterministic case — then
+  // yield a tick so any other loaded row's lingering write flushes
+  // before we reset the log.
   await expect
     .poll(
       async () => {
@@ -536,7 +539,9 @@ test("switching the active source re-anchors the next chroma sync to the new col
   await page.waitForTimeout(150);
 
   // Toggle the filter off then back on so a fresh sync fires with the new
-  // active column as the anchor.
+  // active column as the anchor. (Switching sources alone doesn't re-run
+  // the filter pipeline — what we want to verify is that the next sync
+  // *does* honor the updated anchor.)
   await resetFilterLog(page);
   await page.keyboard.press("KeyF"); // Chroma → Off
   await page.keyboard.press("Shift+KeyF"); // Off → Chroma again
