@@ -11,6 +11,7 @@ export interface ToastLine {
   text: string;
   size?: "small" | "normal" | "large" | "tiny";
   muted?: boolean;
+  color?: string;
 }
 
 export function showToast(msg: string | ToastLine[]): void {
@@ -60,6 +61,7 @@ export function showToast(msg: string | ToastLine[]): void {
         lineHeight: size === "large" ? "1.2" : "1.25",
         opacity: line.muted ? ".72" : "1",
       });
+      if (line.color) div.style.color = line.color;
       return div;
     }));
     Object.assign(el.style, {

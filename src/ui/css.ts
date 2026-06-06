@@ -22,6 +22,50 @@ export function injectTriggerLinkCSS(): void {
   document.head.appendChild(style);
 }
 
+// PTP inline image grid (lives in the host page, beside the native "Show
+// comparison" link), so it styles into document.head rather than the viewer's
+// isolated shadow root.
+export function injectPTPGridCSS(): void {
+  if (document.getElementById("_scf_ptp_grid_css_")) return;
+  const style = document.createElement("style");
+  style.id = "_scf_ptp_grid_css_";
+  style.textContent = `
+    ._scf_ptp_grid_sep {
+      margin-left: 6px;
+      opacity: .4;
+      user-select: none;
+    }
+    ._scf_ptp_grid_toggle {
+      display: inline-block;
+      vertical-align: middle;
+      margin-left: 6px;
+      cursor: pointer;
+      color: inherit;
+      text-decoration: none;
+      font-size: 1.15em;
+      line-height: 1;
+      opacity: .7;
+    }
+    ._scf_ptp_grid_toggle:hover,
+    ._scf_ptp_grid_toggle._scf_open { opacity: 1; }
+    ._scf_ptp_grid {
+      display: none;
+      gap: 6px;
+      margin: 8px 0;
+      max-width: 100%;
+    }
+    ._scf_ptp_grid._scf_open { display: grid; }
+    ._scf_ptp_grid a { display: block; line-height: 0; }
+    ._scf_ptp_grid img {
+      width: 100%;
+      height: auto;
+      display: block;
+      background: rgba(127,127,127,.12);
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 export function injectCSS(): void {
   const root = getShadowRoot();
   if (root.getElementById("_scf_css_")) return;
@@ -189,6 +233,22 @@ export function injectCSS(): void {
       transform: translateX(-50%);
       text-shadow: 0 1px 4px rgba(0,0,0,.7);
       transition: opacity .15s ease;
+    }
+    /* ① Auto-hide chrome: fade these out after a spell of no activity. */
+    ._scf_row_nav,
+    ._scf_close_btn,
+    ._scf_toolbar {
+      transition: opacity .2s ease;
+    }
+    ._scf_ui_autohidden {
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
+    ._scf_ui_dimmed {
+      opacity: 0.5 !important;
+    }
+    ._scf_ui_force_hidden {
+      display: none !important;
     }
     ._scf_nav_map {
       position: fixed;
@@ -516,6 +576,102 @@ export function injectCSS(): void {
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    ._scf_help_button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      min-width: 44px;
+      min-height: 44px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 999px;
+      background: rgba(12,12,12,.82);
+      color: #fff;
+      box-shadow: 0 2px 10px rgba(0,0,0,.4);
+      backdrop-filter: blur(8px);
+      font: 700 19px/1 system-ui, sans-serif;
+      cursor: pointer;
+      padding: 0;
+      opacity: .48;
+      transition: opacity .15s ease, background .15s ease, border-color .15s ease;
+    }
+    ._scf_help_button:hover,
+    ._scf_help_button:focus-visible {
+      opacity: 1;
+      border-color: rgba(255,255,255,.32);
+      background: rgba(24,24,24,.9);
+    }
+    ._scf_help_button:focus-visible {
+      outline: 2px solid rgba(255,255,255,.72);
+      outline-offset: 2px;
+    }
+    ._scf_help_overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483647;
+    }
+    ._scf_help_panel {
+      position: absolute;
+      top: 24px;
+      left: 24px;
+      max-height: calc(100vh - 48px);
+      overflow: auto;
+      min-width: 300px;
+      max-width: min(92vw, 440px);
+      padding: 14px 22px 18px;
+      background: rgba(18,18,20,.96);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 14px;
+      box-shadow: 0 14px 44px rgba(0,0,0,.6);
+      backdrop-filter: blur(10px);
+      color: #e8e8e8;
+      font: 500 14px/1.3 system-ui, sans-serif;
+      text-align: left;
+    }
+    ._scf_help_section {
+      margin: 15px 0 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+      color: #80808a;
+    }
+    ._scf_help_section:first-child {
+      margin-top: 2px;
+    }
+    ._scf_help_row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 4px 0;
+    }
+    ._scf_help_keys {
+      flex: 0 0 118px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+    ._scf_help_chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 28px;
+      padding: 3px 10px;
+      border: 1px solid rgba(255,255,255,.2);
+      border-radius: 7px;
+      background: rgba(255,255,255,.05);
+      font: 600 13px/1 ui-monospace, "SF Mono", Menlo, monospace;
+      color: #fff;
+      white-space: nowrap;
+    }
+    ._scf_help_desc {
+      font-weight: 600;
+      color: #f0f0f0;
+    }
+    ._scf_help_note {
+      font-weight: 500;
+      color: #93939b;
+    }
     ._scf_settings_overlay {
       position: fixed;
       top: 0;
@@ -616,6 +772,89 @@ export function injectCSS(): void {
       border-color: rgba(255,255,255,.4);
       color: #fff;
     }
+    ._scf_settings_text {
+      padding: 5px 10px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 6px;
+      background: rgba(0,0,0,.25);
+      color: #fff;
+      font: 600 13px/1 system-ui, sans-serif;
+      width: 130px;
+      max-width: 45%;
+      text-align: center;
+    }
+    ._scf_settings_text:focus {
+      outline: none;
+      border-color: rgba(255,255,255,.4);
+    }
+    ._scf_shortcuts { display: flex; flex-direction: column; gap: 2px; }
+    ._scf_shortcuts_subhead {
+      margin: 9px 0 2px;
+      font: 700 11px/1 system-ui, sans-serif;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: rgba(255,255,255,.45);
+    }
+    ._scf_shortcut_row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 3px 0;
+    }
+    ._scf_shortcut_fields { display: flex; align-items: center; gap: 6px; }
+    ._scf_shortcut_field { position: relative; display: inline-flex; align-items: center; gap: 2px; }
+    ._scf_shortcut_btn {
+      min-width: 78px;
+      padding: 4px 8px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 6px;
+      background: rgba(0,0,0,.25);
+      color: #fff;
+      font: 600 12px/1.2 system-ui, sans-serif;
+      cursor: pointer;
+      text-align: center;
+    }
+    ._scf_shortcut_btn:hover { border-color: rgba(255,255,255,.34); }
+    ._scf_shortcut_btn._scf_shortcut_empty { color: rgba(255,255,255,.38); }
+    ._scf_shortcut_btn._scf_capturing {
+      border-color: #8ab4f8;
+      color: #8ab4f8;
+      box-shadow: 0 0 0 2px rgba(138,180,248,.25);
+    }
+    ._scf_shortcut_clear {
+      border: none; background: none; cursor: pointer;
+      color: rgba(255,255,255,.5);
+      font: 700 14px/1 system-ui, sans-serif;
+      padding: 0 2px;
+    }
+    ._scf_shortcut_clear:hover { color: #fff; }
+    ._scf_shortcut_chips {
+      position: absolute;
+      top: calc(100% + 4px);
+      right: 0;
+      z-index: 5;
+      display: flex;
+      gap: 3px;
+      padding: 4px;
+      border: 1px solid rgba(255,255,255,.2);
+      border-radius: 6px;
+      background: #202020;
+      box-shadow: 0 4px 14px rgba(0,0,0,.5);
+    }
+    ._scf_shortcut_chip {
+      padding: 3px 6px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 4px;
+      background: transparent;
+      color: rgba(255,255,255,.8);
+      font: 600 11px/1 system-ui, sans-serif;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    ._scf_shortcut_chip:hover { background: rgba(255,255,255,.14); color: #fff; }
+    ._scf_shortcut_reset_row { display: flex; justify-content: flex-end; margin-top: 8px; }
+    ._scf_settings_backup { display: flex; gap: 8px; margin-top: 4px; }
     ._scf_settings_toggle {
       position: relative;
       width: 38px;
@@ -837,6 +1076,67 @@ export function injectCSS(): void {
       border: 1px solid rgba(255,255,255,.12);
       pointer-events: none;
     }
+    ._scf_orphan_select {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483646;
+      background: #0b0b0b;
+      color: #ddd;
+      overflow-y: auto;
+      font: 400 13px/1.4 system-ui, sans-serif;
+    }
+    ._scf_os_header {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: #161616;
+      border-bottom: 1px solid #333;
+    }
+    ._scf_os_hint { flex: 1; }
+    ._scf_os_build, ._scf_os_cancel {
+      padding: 6px 12px;
+      cursor: pointer;
+      border: 1px solid #444;
+      background: #222;
+      color: #ddd;
+      border-radius: 4px;
+      font: inherit;
+    }
+    ._scf_os_build:disabled { opacity: .4; cursor: not-allowed; }
+    ._scf_os_grid { display: grid; gap: 4px; padding: 8px; }
+    ._scf_os_thumb {
+      position: relative;
+      cursor: pointer;
+      aspect-ratio: 16 / 9;
+      background: #1a1a1a;
+    }
+    ._scf_os_thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    ._scf_os_thumb:hover { outline: 2px solid #4a90d9; }
+    ._scf_os_thumb._scf_os_excluded { opacity: .35; outline: 2px solid #c0392b; }
+    ._scf_os_badge {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      display: none;
+      width: 22px;
+      height: 22px;
+      line-height: 22px;
+      text-align: center;
+      background: #c0392b;
+      color: #fff;
+      border-radius: 50%;
+      font-weight: bold;
+    }
+    ._scf_os_thumb._scf_os_excluded ._scf_os_badge { display: block; }
   `;
   root.appendChild(style);
 }

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
 
 // Stub the slow.pics CDN so the suite is hermetic (no external network).
 // Specific fixture files use production-risk dimensions; the fallback keeps
@@ -87,6 +88,74 @@ test("viewer closes on Escape", async ({ page }) => {
   await expect(page.locator("._scf_comp")).not.toBeVisible();
 });
 
+test("viewer: ? opens the shortcuts legend; Esc closes the legend, not the viewer", async ({ page }) => {
+  await openViewer(page);
+
+  // ? (Shift+/) opens the legend overlay.
+  await page.keyboard.press("Shift+Slash");
+  const panel = page.locator("._scf_help_panel");
+  await expect(panel).toBeVisible();
+  await expect(panel.locator("._scf_help_section").first()).toHaveText("Navigation");
+  // The legend is generated from LIVE bindings — the close row reads "Esc",
+  // but mouse gestures are documented separately because they only fire on the
+  // image grid.
+  await expect(
+    panel.locator("._scf_help_row", { hasText: "Reset filters, then close viewer" }).locator("._scf_help_chip"),
+  ).toHaveText("Esc");
+  await expect(
+    panel.locator("._scf_help_row", { hasText: "Open viewer from page image grid" }).locator("._scf_help_chip"),
+  ).toHaveText("Click image");
+  await expect(
+    panel.locator("._scf_help_row", { hasText: "Zoom at cursor" }).locator("._scf_help_chip"),
+  ).toHaveText("Ctrl + Wheel");
+  const keyFont = await panel.locator("._scf_help_chip").first().evaluate((el) =>
+    getComputedStyle(el).fontFamily.toLowerCase(),
+  );
+  expect(keyFont).toContain("mono");
+
+  // Escape dismisses the legend but leaves the viewer open.
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+  await expect(page.locator("._scf_comp")).toBeVisible();
+
+  // ? toggles: open, then ? again closes.
+  await page.keyboard.press("Shift+Slash");
+  await expect(page.locator("._scf_help_panel")).toBeVisible();
+  await page.keyboard.press("Shift+Slash");
+  await expect(page.locator("._scf_help_panel")).toHaveCount(0);
+
+  // The bottom-left ? toolbar button toggles it too.
+  await page.locator("._scf_help_button").click();
+  await expect(page.locator("._scf_help_panel")).toBeVisible();
+});
+
+test("viewer: mouse close binding is shown as image-grid only, separate from Esc", async ({ page }) => {
+  await openViewer(page, {
+    config: {
+      shortcuts: { "viewer.close": { main: { t: "key", code: "Escape" }, extra: { t: "mouse", g: "click" } } },
+    },
+  });
+  await page.keyboard.press("Shift+Slash");
+  const panel = page.locator("._scf_help_panel");
+  const closeRow = panel.locator("._scf_help_row", { hasText: "Reset filters, then close viewer" });
+  await expect(closeRow.locator("._scf_help_chip")).toHaveText("Esc");
+  await expect(closeRow).not.toContainText("Click");
+
+  const mouseCloseRow = panel.locator("._scf_help_row", { hasText: "Close viewer from viewer image grid" });
+  await expect(mouseCloseRow.locator("._scf_help_chip")).toHaveText("Click");
+  await expect(mouseCloseRow).toContainText("Only when assigned");
+});
+
+test("viewer: the shortcuts legend reflects custom key bindings", async ({ page }) => {
+  await openViewer(page, {
+    config: { shortcuts: { "zoom.in": { main: { t: "key", code: "KeyZ" }, extra: null } } },
+  });
+  await page.keyboard.press("Shift+Slash");
+  await expect(
+    page.locator("._scf_help_row", { hasText: "Zoom in" }).locator("._scf_help_chip"),
+  ).toHaveText("Z");
+});
+
 test("column switching with number keys", async ({ page }) => {
   await openViewer(page);
 
@@ -131,7 +200,8 @@ test("row navigation with arrow keys", async ({ page }) => {
 });
 
 test("source menu hides sources and protects the last visible source", async ({ page }) => {
-  await openViewer(page);
+  // Pin chrome on so the toolbar stays clickable regardless of auto-hide timing.
+  await openViewer(page, { config: { uiChromeMode: "always" } });
 
   const sourceMenu = page.locator("._scf_source_menu");
   const sourceButton = sourceMenu.getByRole("button", { name: "Choose visible sources" });
@@ -645,6 +715,7 @@ interface YacompTestHooks {
   resetConfig: () => void;
   getConfig: () => { closeBtnPosition: "auto" | "left" | "right" | "hide" };
   openSettings: () => void;
+  setZoomState: (mode: "fit" | "1:1" | "custom", width: number) => void;
 }
 
 async function setConfig(
@@ -831,4 +902,375 @@ test("settings: mouseSwitch=false suppresses pointer-driven column switching", a
 
   // Cleanup: restore default for any subsequent test that might share this page.
   await setConfig(page, { mouseSwitch: true });
+});
+
+// ── ① Auto-hide UI: the three chrome modes ────────────────────────────────────
+
+const CHROME = {
+  label: "._scf_comp_label",
+  rowNav: "._scf_row_nav",
+  close: "._scf_close_btn",
+  toolbar: "._scf_toolbar",
+  fill: "._scf_fill_canvas_toggle",
+};
+
+function chromeHasClass(page: Page, selector: string, cls: string): Promise<boolean> {
+  return page.locator(selector).first().evaluate((el, c) => el.classList.contains(c), cls);
+}
+
+test("chrome 'always': titles, row nav and buttons all stay fully visible", async ({ page }) => {
+  await openViewer(page, { config: { uiChromeMode: "always", uiHideDelay: 200 } });
+  await page.waitForTimeout(300); // past any settle window
+  for (const sel of [CHROME.label, CHROME.rowNav, CHROME.close, CHROME.toolbar]) {
+    expect(await chromeHasClass(page, sel, "_scf_ui_autohidden")).toBe(false);
+    expect(await chromeHasClass(page, sel, "_scf_ui_dimmed")).toBe(false);
+  }
+});
+
+test("chrome 'default': titles/row nav sit dimmed, buttons auto-hide and reveal on movement", async ({ page }) => {
+  await openViewer(page, { config: { uiChromeMode: "default", uiHideDelay: 200 } });
+  // Resting state: nav dimmed (still visible), buttons auto-hidden.
+  await expect.poll(() => chromeHasClass(page, CHROME.label, "_scf_ui_dimmed")).toBe(true);
+  await expect.poll(() => chromeHasClass(page, CHROME.rowNav, "_scf_ui_dimmed")).toBe(true);
+  await expect.poll(() => chromeHasClass(page, CHROME.close, "_scf_ui_autohidden")).toBe(true);
+  // A mouse move brightens the label to full and brings the buttons back.
+  const box = (await page.locator("._scf_comp").boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await expect.poll(() => chromeHasClass(page, CHROME.label, "_scf_ui_dimmed")).toBe(false);
+  await expect.poll(() => chromeHasClass(page, CHROME.close, "_scf_ui_autohidden")).toBe(false);
+});
+
+test("chrome 'autohide': titles/row nav fully hidden, buttons gated by cursor proximity", async ({ page }) => {
+  await openViewer(page, { config: { uiChromeMode: "autohide", uiHideDelay: 200 } });
+  // Resting state: nav fully hidden, buttons hidden.
+  await expect.poll(() => chromeHasClass(page, CHROME.label, "_scf_ui_autohidden")).toBe(true);
+  await expect.poll(() => chromeHasClass(page, CHROME.rowNav, "_scf_ui_autohidden")).toBe(true);
+  await expect.poll(() => chromeHasClass(page, CHROME.close, "_scf_ui_autohidden")).toBe(true);
+  // A move far from the corners surfaces the label (titles) but NOT the buttons.
+  const comp = (await page.locator("._scf_comp").boundingBox())!;
+  await page.mouse.move(comp.x + comp.width / 2, comp.y + comp.height / 2);
+  await expect.poll(() => chromeHasClass(page, CHROME.label, "_scf_ui_autohidden")).toBe(false);
+  expect(await chromeHasClass(page, CHROME.close, "_scf_ui_autohidden")).toBe(true);
+  // Moving NEAR the close button reveals it (proximity).
+  const cb = (await page.locator(CHROME.close).boundingBox())!;
+  await page.mouse.move(cb.x + cb.width / 2, cb.y + cb.height / 2);
+  await expect.poll(() => chromeHasClass(page, CHROME.close, "_scf_ui_autohidden")).toBe(false);
+});
+
+test("the fit/fill button is hidden entirely at 1:1 and returns when fit", async ({ page }) => {
+  await openViewer(page, { config: { uiChromeMode: "always" } });
+  const forceHidden = () => chromeHasClass(page, CHROME.fill, "_scf_ui_force_hidden");
+  await page.keyboard.press("Digit0"); // fit → the toggle is meaningful, shown
+  await expect.poll(forceHidden).toBe(false);
+  await page.keyboard.press("KeyO"); // 1:1 → hidden entirely
+  await expect.poll(forceHidden).toBe(true);
+  await page.keyboard.press("Digit0"); // fit → back
+  await expect.poll(forceHidden).toBe(false);
+});
+
+test("R persistently force-hides the row nav on top of the chrome mode", async ({ page }) => {
+  await openViewer(page, { config: { uiChromeMode: "always" } });
+  await expect(page.locator(CHROME.rowNav)).toHaveCount(1);
+  const forceHidden = () => chromeHasClass(page, CHROME.rowNav, "_scf_ui_force_hidden");
+  expect(await forceHidden()).toBe(false);
+  await page.keyboard.press("KeyR");
+  await expect.poll(forceHidden).toBe(true);
+  await page.keyboard.press("KeyR");
+  await expect.poll(forceHidden).toBe(false);
+});
+
+test("shortcuts: double-click-to-close closes the viewer and hides the close button", async ({ page }) => {
+  await openViewer(page, {
+    config: {
+      shortcuts: { "viewer.close": { main: { t: "key", code: "Escape" }, extra: { t: "mouse", g: "dblclick" } } },
+    },
+  });
+  // Close is reachable by a canvas double-click → the button is redundant.
+  await expect(page.locator("._scf_close_btn")).toBeHidden();
+  const box = (await page.locator("._scf_comp").boundingBox())!;
+  await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(page.locator("._scf_comp")).not.toBeVisible();
+});
+
+test("shortcuts: single-click-to-close works and removes the close button", async ({ page }) => {
+  await openViewer(page, {
+    config: { shortcuts: { "viewer.close": { main: { t: "mouse", g: "click" }, extra: null } } },
+  });
+  await expect(page.locator("._scf_close_btn")).toBeHidden();
+  const box = (await page.locator("._scf_comp").boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(page.locator("._scf_comp")).not.toBeVisible();
+});
+
+test("shortcuts: by default a canvas click does NOT close and the close button stays", async ({ page }) => {
+  await openViewer(page);
+  await expect(page.locator("._scf_close_btn")).toBeVisible();
+  const box = (await page.locator("._scf_comp").boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(120);
+  await expect(page.locator("._scf_comp")).toBeVisible();
+});
+
+async function openSettingsModal(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    (window as unknown as { __yacomp: YacompTestHooks }).__yacomp.openSettings();
+  });
+  await expect(page.locator("._scf_settings_overlay")).toBeVisible();
+}
+
+test("settings: rebinding 1:1 to a new key works end-to-end", async ({ page }) => {
+  await openViewer(page, { config: { defaultZoomMode: "fit" } });
+  const comp = page.locator("._scf_comp");
+  await expect(comp).not.toHaveClass(/_scf_zoomed/);
+
+  await openSettingsModal(page);
+  const mainBtn = page
+    .locator("._scf_shortcut_row", { hasText: "Actual size" })
+    .locator("._scf_shortcut_btn").first();
+  await expect(mainBtn).toHaveText("O");
+  await mainBtn.click();
+  await expect(mainBtn).toHaveText("Press a key…");
+  await page.keyboard.press("KeyP");
+  await expect(mainBtn).toHaveText("P");
+
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(page.locator("._scf_settings_overlay")).toHaveCount(0);
+  // P now triggers 1:1.
+  await page.keyboard.press("KeyP");
+  await expect(comp).toHaveClass(/_scf_zoomed/);
+});
+
+test("settings: a duplicate binding is rejected (hard-locked)", async ({ page }) => {
+  await openViewer(page);
+  await openSettingsModal(page);
+  const zoomIn = page
+    .locator("._scf_shortcut_row", { hasText: "Zoom in" })
+    .locator("._scf_shortcut_btn").first();
+  await expect(zoomIn).toHaveText("=");
+  await zoomIn.click();
+  await page.keyboard.press("KeyO"); // already bound to Actual size (1:1)
+  await expect(zoomIn).toHaveText("="); // unchanged
+});
+
+test("settings: clearing an extra binding removes it", async ({ page }) => {
+  await openViewer(page);
+  await openSettingsModal(page);
+  const row = page.locator("._scf_shortcut_row", { hasText: "Previous source" });
+  const extra = row.locator("._scf_shortcut_btn").nth(1);
+  await expect(extra).toHaveText("H");
+  await row.locator("._scf_shortcut_clear").click();
+  await expect(extra).toHaveText("—");
+});
+
+test("settings: binding close to a mouse gesture hides the close button live", async ({ page }) => {
+  await openViewer(page);
+  await expect(page.locator("._scf_close_btn")).toBeVisible();
+  await openSettingsModal(page);
+  const closeExtra = page
+    .locator("._scf_shortcut_row", { hasText: "Close viewer" })
+    .locator("._scf_shortcut_btn").nth(1);
+  await closeExtra.click();
+  await page.locator("._scf_shortcut_chip", { hasText: "2×" }).click();
+  await expect(closeExtra).toHaveText("Double-click");
+  await expect(page.locator("._scf_close_btn")).toBeHidden();
+});
+
+test("settings: Reset shortcuts restores defaults", async ({ page }) => {
+  await openViewer(page);
+  await openSettingsModal(page);
+  const mainBtn = page
+    .locator("._scf_shortcut_row", { hasText: "Actual size" })
+    .locator("._scf_shortcut_btn").first();
+  await mainBtn.click();
+  await page.keyboard.press("KeyP");
+  await expect(mainBtn).toHaveText("P");
+  await page.getByRole("button", { name: "Reset shortcuts", exact: true }).click();
+  await expect(mainBtn).toHaveText("O");
+});
+
+test.describe("1:1 on a HiDPI (2x) display", () => {
+  test.use({ deviceScaleFactor: 2 });
+
+  test("logical mode (default) keeps the full source width", async ({ page }) => {
+    await openViewer(page); // default oneToOnePixels is now "logical"
+    const row = page.locator("._scf_comp_row").first();
+    await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("1920px");
+  });
+
+  test("device mode maps source pixels to physical pixels — halves the CSS width", async ({ page }) => {
+    await openViewer(page, { config: { oneToOnePixels: "device" } });
+    await expect(page.locator("._scf_comp")).toHaveClass(/_scf_zoomed/);
+    // Active column is the 1920px-wide source → at 1:1 device on DPR 2, 960 CSS px
+    // (= 1920 physical px), so it isn't drawn 2x oversized.
+    const row = page.locator("._scf_comp_row").first();
+    await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("960px");
+  });
+
+  test("device 1:1 settles even when the image loads slowly AND the column is swept mid-load", async ({ page }) => {
+    // The row opens on the fit-width fallback; sweeping to another column before
+    // the image lands is width-neutral, which used to strand the row at the
+    // logical/"real" width. It must still settle to the device width (960px).
+    await page.route(/i\.slow\.pics/, async (route) => {
+      await new Promise((r) => setTimeout(r, 700));
+      await route.fulfill({ contentType: "image/svg+xml", body: fixtureSvg({ width: 1920, height: 804 }) });
+    });
+    await openViewer(page, { config: { oneToOnePixels: "device" } });
+    const row = page.locator("._scf_comp_row").first();
+    // Sweep to a right-hand column while the image is still loading.
+    const box = await row.boundingBox();
+    await page.mouse.move(box!.x + box!.width * 0.85, box!.y + box!.height / 2);
+    await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("960px");
+  });
+
+  test("device mode 1:1 toast distinguishes native vs on-screen width", async ({ page }) => {
+    await openViewer(page, { config: { oneToOnePixels: "device" } });
+    const row = page.locator("._scf_comp_row").first();
+    await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("960px");
+    await page.keyboard.press("KeyO"); // re-trigger 1:1 so the toast shows (open is silent)
+    const toast = page.locator("#_scf_toast_");
+    await expect(toast).toContainText("Original 1920×804");
+    await expect(toast).toContainText("On screen 960×402@2x");
+  });
+
+  test("logical/verbose toast reports the CURRENT image's W×H, not the first image's", async ({ page }) => {
+    // Row 0 is 1920×804, row 1 is 1480×1080 (a different image). In logical mode
+    // with the verbose readout, moving to row 1 must report ROW 1's resolution.
+    await openViewer(page, {
+      config: { oneToOnePixels: "logical", verboseZoom: true, bgLoadDefault: true },
+    });
+    const row1 = page.locator("._scf_comp_row").nth(1);
+    await expect.poll(() => row1.evaluate((el) => (el as HTMLElement).style.width)).toBe("1480px");
+    await page.keyboard.press("ArrowDown"); // → row 1 is the current row
+    await page.keyboard.press("KeyO"); // re-show the toast for the current image
+    const toast = page.locator("#_scf_toast_");
+    await expect(toast).toContainText("Original 1480×1080");
+    await expect(toast).not.toContainText("1920");
+  });
+
+  test("+ from 1:1 never collapses to 0px (zoomWidth was unset)", async ({ page }) => {
+    await openViewer(page, { config: { oneToOnePixels: "device" } });
+    const row = page.locator("._scf_comp_row").first();
+    await page.keyboard.press("Equal"); // first action is a zoom-in
+    await expect
+      .poll(() => row.evaluate((el) => parseFloat((el as HTMLElement).style.width) || 0))
+      .toBeGreaterThan(100);
+  });
+
+  test("ctrl+wheel from 1:1 uses the live 1:1 width when zoomWidth is stale", async ({ page }) => {
+    await openViewer(page, { config: { oneToOnePixels: "device" } });
+    const comp = page.locator("._scf_comp");
+    const row = page.locator("._scf_comp_row").first();
+    await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("960px");
+
+    await page.evaluate(() => {
+      (window as unknown as { __yacomp: YacompTestHooks })
+        .__yacomp.setZoomState("1:1", 0);
+    });
+    await comp.evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      el.dispatchEvent(new WheelEvent("wheel", {
+        bubbles: true,
+        cancelable: true,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2,
+        ctrlKey: true,
+        deltaY: -100,
+      }));
+    });
+
+    await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("1200px");
+  });
+
+  test("device native/on-screen info also shows when zooming with +/- (custom mode)", async ({ page }) => {
+    await openViewer(page, { config: { oneToOnePixels: "device" } });
+    const row = page.locator("._scf_comp_row").first();
+    await expect.poll(() => row.evaluate((el) => (el as HTMLElement).style.width)).toBe("960px");
+    await page.keyboard.press("Equal"); // + → custom 960 × 1.25 = 1200 CSS px
+    const toast = page.locator("#_scf_toast_");
+    await expect(toast).toContainText("Original 1920×804");
+    await expect(toast).toContainText("On screen 1200×503@2x");
+  });
+});
+
+test("zoom: + scales mixed-resolution rows proportionally, not to one width", async ({ page }) => {
+  // Row 0 is a 1920px-wide source, row 1 a 1480px pillar source. Background-load
+  // so both measure; default DPR is 1 so device == logical width.
+  await openViewer(page, { config: { bgLoadDefault: true } });
+  const row0 = page.locator("._scf_comp_row").nth(0);
+  const row1 = page.locator("._scf_comp_row").nth(1);
+  await expect.poll(() => row0.evaluate((el) => (el as HTMLElement).style.width)).toBe("1920px");
+  await expect.poll(() => row1.evaluate((el) => (el as HTMLElement).style.width)).toBe("1480px");
+
+  await page.keyboard.press("Equal"); // +25% — each row scales from its OWN native
+  await expect.poll(() => row0.evaluate((el) => (el as HTMLElement).style.width)).toBe("2400px");
+  await expect.poll(() => row1.evaluate((el) => (el as HTMLElement).style.width)).toBe("1850px");
+});
+
+test("viewer opens horizontally centered on a 1:1 image wider than the viewport", async ({ page }) => {
+  // Default zoom is 1:1; the fixture's first row is 1920px wide in Playwright's
+  // 1280px viewport, so it must open centered (scrollLeft ≈ half the overflow),
+  // not pinned to the left edge.
+  await openViewer(page);
+  const comp = page.locator("._scf_comp");
+  await expect(comp).toHaveClass(/_scf_zoomed/);
+  await expect
+    .poll(() =>
+      comp.evaluate((el) => {
+        const centered = (el.scrollWidth - el.clientWidth) / 2;
+        return el.scrollWidth > el.clientWidth + 8 && Math.abs(el.scrollLeft - centered) < 8;
+      }),
+    )
+    .toBe(true);
+});
+
+test("settings: Export downloads the config as JSON", async ({ page }) => {
+  await openViewer(page, { config: { toastDuration: 3200 } });
+  await openSettingsModal(page);
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Export", exact: true }).click(),
+  ]);
+  expect(download.suggestedFilename()).toBe("yacomp-config.json");
+  const content = readFileSync(await download.path(), "utf8");
+  expect(JSON.parse(content).toastDuration).toBe(3200);
+});
+
+test("settings: Import restores settings from a file", async ({ page }) => {
+  await openViewer(page);
+  await openSettingsModal(page);
+  const cfg = JSON.stringify({ v: 2, toastDuration: 4800, closeBtnPosition: "left" });
+  await page.locator("._scf_settings_backup input[type=file]").setInputFiles({
+    name: "yacomp-config.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(cfg),
+  });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as { __yacomp: { getConfig: () => { toastDuration: number } } })
+            .__yacomp.getConfig().toastDuration,
+      ),
+    )
+    .toBe(4800);
+});
+
+test("settings: PTP custom-label inputs appear only under the Custom button style", async ({ page }) => {
+  await openViewer(page);
+  await page.evaluate(() => {
+    (window as unknown as { __yacomp: YacompTestHooks }).__yacomp.openSettings();
+  });
+  await expect(page.locator("._scf_settings_overlay")).toBeVisible();
+
+  const customRow = page.locator("._scf_settings_row", { hasText: "Custom (closed)" });
+  const styleRow = page.locator("._scf_settings_row", { hasText: "PTP grid button" });
+
+  // Hidden under the default (grid glyph) style.
+  await expect(customRow).toBeHidden();
+  // Choosing Custom reveals the free-text inputs...
+  await styleRow.getByRole("button", { name: "Custom", exact: true }).click();
+  await expect(customRow).toBeVisible();
+  // ...and switching back to a preset hides them again.
+  await styleRow.getByRole("button", { name: "Text", exact: true }).click();
+  await expect(customRow).toBeHidden();
 });

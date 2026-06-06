@@ -1,8 +1,9 @@
 // Dev/test server for the yacomp fixtures.
 //
-// Serves two fixture suites under one port:
+// Serves three fixture suites under one port:
 //
 //   /              — viewer dev fixture (tests/fixtures/viewer/basic.html)
+//   /ptp           — PTP inline image-grid fixture (tests/fixtures/ptp/basic.html)
 //   /hdbits/case/* — HDBits parser regression cases
 //                    (tests/fixtures/hdbits/cases/*.html)
 //
@@ -11,9 +12,20 @@
 // the HDBits pages load test-entry.ts (which calls setupHDBitsCore so
 // the parser runs without a real hdbits.org host).
 
+import { basename, join } from "node:path";
+
 const PORT = 4173;
+const HOSTNAME = "127.0.0.1";
 const VIEWER_DIR = "tests/fixtures/viewer";
 const HDBITS_DIR = "tests/fixtures/hdbits";
+const PTP_DIR = "tests/fixtures/ptp";
+const SAVED_HDBITS_FORUM_HTML = Bun.env.YACOMP_SAVED_HDBITS_FORUM_HTML || "";
+const SAVED_HDBITS_ASSETS_DIR = SAVED_HDBITS_FORUM_HTML
+  ? SAVED_HDBITS_FORUM_HTML.replace(/\.html?$/i, "") + "_files"
+  : "";
+const SAVED_HDBITS_ASSETS_BASENAME = SAVED_HDBITS_ASSETS_DIR
+  ? basename(SAVED_HDBITS_ASSETS_DIR)
+  : "";
 
 const DEFAULT_TORRENT_TITLE = "Demo Movie 2025 1080p BluRay x264-DemoEncoder";
 const DEFAULT_THREAD_TITLE = "Demo comparison thread";
@@ -51,11 +63,16 @@ const viewerJs = await bundleEntry(`${VIEWER_DIR}/fixture-entry.ts`);
 // ─── hdbits fixtures ────────────────────────────────────────────────────────
 
 const hdbitsJs = await bundleEntry(`${HDBITS_DIR}/test-entry.ts`);
+
+// ─── ptp fixture ────────────────────────────────────────────────────────────
+
+const ptpHtml = await Bun.file(`${PTP_DIR}/basic.html`).text();
+const ptpJs = await bundleEntry(`${PTP_DIR}/ptp-entry.ts`);
 const torrentTemplate = await Bun.file(`${HDBITS_DIR}/templates/torrent.html`).text();
 const forumTemplate = await Bun.file(`${HDBITS_DIR}/templates/forum.html`).text();
 
 interface CaseMetadata {
-  slot: "torrent.description" | "torrent.comment" | "forum.post";
+  slot: "torrent.description" | "torrent.comment" | "forum.post" | "forum.reply";
   expectedGrids: number;
   expectedNames?: (string[] | null)[] | null;
   threadTitle?: string;
@@ -138,6 +155,25 @@ function wrapInPostRow(body: string): string {
   `;
 }
 
+// A reply post (#2) in the same thread — used to verify that the topic H1 title
+// is NOT inherited by replies (only the original poster's comparison uses it).
+function wrapInReplyRow(body: string): string {
+  return `
+    <a name="2"></a>
+    <table border="0" cellspacing="0" cellpadding="0" style="margin-top:8px;margin-bottom:10px;">
+      <tbody><tr>
+        <td class="embedded" width="99%"><a href="#2">#2</a> by ReplyUser at 2025-01-02 09:00:00 [<a href="#">Quote</a>]</td>
+      </tr></tbody>
+    </table>
+    <table class="main" width="100%" border="1" cellspacing="0" cellpadding="5">
+      <tbody><tr valign="top">
+        <td width="150" align="center" style="padding: 0px"><div class="default_avatar"></div></td>
+        <td class="comment">${body}</td>
+      </tr></tbody>
+    </table>
+  `;
+}
+
 function fillTemplate(template: string, vars: Record<string, string>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? "");
 }
@@ -147,6 +183,58 @@ function injectTestEntry(html: string): string {
     "</body>",
     '<script type="module" src="/hdbits-test-entry.js"></script></body>',
   );
+}
+
+function stripSavedPluginState(html: string): string {
+  let out = html
+    .replace(/<style id="_scf_comp_link_css_">[\s\S]*?<\/style>/g, "")
+    .replace(/<a\b[^>]*class="[^"]*\b_scf_comp_link\b[^"]*"[^>]*>[\s\S]*?<\/a>\s*(?:<br>)?/g, "");
+
+  const scfRoot = out.indexOf('<div id="_scf_root_"');
+  if (scfRoot >= 0) {
+    const beforeScfBodyClose = out.lastIndexOf("</body>", scfRoot);
+    const cutAt = beforeScfBodyClose >= 0 ? beforeScfBodyClose : scfRoot;
+    out = out.slice(0, cutAt) + "</body></html>";
+  }
+  return out;
+}
+
+async function serveSavedHdbitsForum(): Promise<Response> {
+  if (!SAVED_HDBITS_FORUM_HTML) {
+    return new Response("Set YACOMP_SAVED_HDBITS_FORUM_HTML to preview a saved HDBits forum page", { status: 404 });
+  }
+  const file = Bun.file(SAVED_HDBITS_FORUM_HTML);
+  if (!(await file.exists())) return new Response(`Saved forum HTML not found: ${SAVED_HDBITS_FORUM_HTML}`, { status: 404 });
+
+  let html = stripSavedPluginState(await file.text());
+  if (SAVED_HDBITS_ASSETS_BASENAME) {
+    html = html.replaceAll(`./${SAVED_HDBITS_ASSETS_BASENAME}/`, "/hdbits/saved-assets/");
+  }
+  return new Response(injectTestEntry(html), {
+    headers: { "content-type": "text/html" },
+  });
+}
+
+function assetContentType(path: string): string {
+  if (/\.css$/i.test(path)) return "text/css";
+  if (/\.js$/i.test(path)) return "application/javascript";
+  if (/\.png$/i.test(path)) return "image/png";
+  if (/\.jpe?g$/i.test(path)) return "image/jpeg";
+  if (/\.gif$/i.test(path)) return "image/gif";
+  if (/\.webp$/i.test(path)) return "image/webp";
+  return "application/octet-stream";
+}
+
+async function serveSavedHdbitsAsset(name: string): Promise<Response> {
+  if (!SAVED_HDBITS_ASSETS_DIR) return new Response("Saved forum assets not configured", { status: 404 });
+  const safeName = decodeURIComponent(name);
+  if (safeName.includes("/") || safeName.includes("\\")) return new Response("Bad asset path", { status: 400 });
+  const path = join(SAVED_HDBITS_ASSETS_DIR, safeName);
+  const file = Bun.file(path);
+  if (!(await file.exists())) return new Response(`Asset not found: ${safeName}`, { status: 404 });
+  return new Response(file, {
+    headers: { "content-type": assetContentType(path) },
+  });
 }
 
 async function serveHdbitsCase(slug: string): Promise<Response> {
@@ -187,6 +275,16 @@ async function serveHdbitsCase(slug: string): Promise<Response> {
         POSTS: wrapInPostRow(body),
       });
       break;
+    case "forum.reply":
+      // The case body is the REPLY (#2); an original post (#1) precedes it so the
+      // container is not the first td.comment.
+      html = fillTemplate(forumTemplate, {
+        THREAD_TITLE: threadTitle,
+        POSTS:
+          wrapInPostRow("<p>Original post — see the comparison below.</p>") +
+          wrapInReplyRow(body),
+      });
+      break;
     default:
       return new Response(`Unknown slot: ${meta.slot}`, { status: 400 });
   }
@@ -199,6 +297,7 @@ async function serveHdbitsCase(slug: string): Promise<Response> {
 // ─── server ─────────────────────────────────────────────────────────────────
 
 const server = Bun.serve({
+  hostname: HOSTNAME,
   port: PORT,
   async fetch(req) {
     const url = new URL(req.url);
@@ -216,15 +315,29 @@ const server = Bun.serve({
         headers: { "content-type": "application/javascript" },
       });
     }
+    if (url.pathname === "/ptp") {
+      return new Response(ptpHtml, { headers: { "content-type": "text/html" } });
+    }
+    if (url.pathname === "/ptp-entry.js") {
+      return new Response(ptpJs, {
+        headers: { "content-type": "application/javascript" },
+      });
+    }
     if (url.pathname.startsWith("/hdbits/case/")) {
       const slug = url.pathname.slice("/hdbits/case/".length);
       return await serveHdbitsCase(slug);
+    }
+    if (url.pathname === "/hdbits/saved/forum") {
+      return await serveSavedHdbitsForum();
+    }
+    if (url.pathname.startsWith("/hdbits/saved-assets/")) {
+      return await serveSavedHdbitsAsset(url.pathname.slice("/hdbits/saved-assets/".length));
     }
 
     return new Response("Not found", { status: 404 });
   },
 });
 
-console.log(`Fixture server running at http://127.0.0.1:${server.port}`);
+console.log(`Fixture server running at http://${HOSTNAME}:${server.port}`);
 
 export {};

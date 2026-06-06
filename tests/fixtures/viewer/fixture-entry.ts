@@ -2,6 +2,7 @@ import { setupKeyboard } from "../../../src/keyboard";
 import { openSlowPicsViewer } from "../../../src/sites/slowpics";
 import { saveConfig, resetConfig, getConfig } from "../../../src/config";
 import { openSettings } from "../../../src/ui/settings";
+import { setZoomMode, setZoomWidth } from "../../../src/filters/zoom";
 
 type SlowPicsCollection = NonNullable<Window["collection"]>;
 
@@ -106,6 +107,10 @@ function boot(): void {
     resetConfig,
     getConfig,
     openSettings,
+    setZoomState: (mode: "fit" | "1:1" | "custom", width: number) => {
+      setZoomMode(mode);
+      setZoomWidth(width);
+    },
   };
 }
 

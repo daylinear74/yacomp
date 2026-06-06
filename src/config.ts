@@ -2,6 +2,12 @@
 // ║  User configuration — persistent settings via GM_getValue / GM_setValue  ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
+import {
+  isValidShortcut, mouseShortcutMatches, shortcutsEqual,
+  type Shortcut, type ShortcutPair,
+} from "./shortcuts/types";
+import { ACTIONS, defaultPair, isActionId, type ActionId } from "./shortcuts/registry";
+
 export const SITE_KEYS = [
   "bhd", "comppics", "frds", "gpw", "hdbits", "ptp", "slowpics", "ssd",
   "blutopia", "aither",
@@ -43,15 +49,44 @@ export interface YacompConfig {
   lazyLoadMargin: number;
   mouseSwitch: boolean;
   zoomPercentBase: "original" | "fit";
+  // What "1:1" maps one source pixel to: a physical device pixel (HiDPI-aware —
+  // a 4K shot fills a 1080p@2x screen) or a CSS pixel (the browser's logical 100%,
+  // which looks 2x magnified on Retina). No effect when devicePixelRatio is 1.
+  oneToOnePixels: "device" | "logical";
   verboseZoom: boolean;
   closeBtnPosition: "auto" | "left" | "right" | "hide";
+  // Viewer chrome visibility policy (① auto-hide UI):
+  //  "always"   — source titles, row nav and buttons all stay fully visible.
+  //  "default"  — titles + row nav sit dimmed (full on action); buttons auto-hide.
+  //  "autohide" — titles + row nav hidden (show on action); buttons show only
+  //               when the cursor is near them.
+  uiChromeMode: "always" | "default" | "autohide";
+  uiHideDelay: number;
+  // PTP inline image grid: load the comparison's shots at PTP's thumbnail
+  // (/t/) or full (/i/) resolution. Non-PTP-hosted URLs are shown as-is.
+  ptpGridImageSize: "thumbnail" | "full";
+  // What clicking a PTP grid tile does: open the yacomp viewer at that image,
+  // or open the full image in a new browser tab.
+  ptpGridClick: "viewer" | "tab";
+  // What clicking an HDBits comparison image does: open the yacomp viewer at
+  // that shot, or leave HDBits' native behavior (open the full image).
+  hdbitsImageClick: "viewer" | "native";
+  // The PTP grid toggle's label style: a preset glyph/word pair, or "custom"
+  // to use the free-text labels below.
+  ptpGridToggleStyle: "grid" | "triangles" | "text" | "custom";
+  // Custom toggle labels, by fold state — used only when the style is "custom".
+  ptpGridToggleCollapsed: string;
+  ptpGridToggleExpanded: string;
   enabledSites: Record<SiteKey, boolean>;
   filterCycle: FilterModeId[];
   gammaCycle: GammaPresetId[];
+  // Customizable shortcuts (③): only user OVERRIDES are stored, keyed by action
+  // id. The effective binding is the override or the registry default.
+  shortcuts: Partial<Record<ActionId, ShortcutPair>>;
 }
 
 const STORAGE_KEY = "yacomp_config";
-const CURRENT_VERSION = 2;
+const CURRENT_VERSION = 4;
 
 const ALL_SITES_ENABLED = Object.fromEntries(
   SITE_KEYS.map((k) => [k, true]),
@@ -69,16 +104,34 @@ export const DEFAULTS: Readonly<YacompConfig> = {
   lazyLoadMargin: 200,
   mouseSwitch: true,
   zoomPercentBase: "original",
+  oneToOnePixels: "logical" as const,
   verboseZoom: false,
   closeBtnPosition: "auto" as const,
+  uiChromeMode: "default" as const,
+  uiHideDelay: 1000,
+  ptpGridImageSize: "thumbnail" as const,
+  ptpGridClick: "viewer" as const,
+  hdbitsImageClick: "viewer" as const,
+  ptpGridToggleStyle: "grid" as const,
+  ptpGridToggleCollapsed: "▦",
+  ptpGridToggleExpanded: "▦",
   enabledSites: ALL_SITES_ENABLED,
   filterCycle: [...FILTER_MODE_IDS],
   gammaCycle: [...GAMMA_PRESET_IDS],
+  shortcuts: {},
 };
 
 function clampNum(val: unknown, min: number, max: number, fallback: number): number {
   if (typeof val !== "number" || !isFinite(val)) return fallback;
   return Math.max(min, Math.min(max, val));
+}
+
+// A short free-text label (e.g. the PTP grid toggle glyph). Trimmed, length-
+// capped, and never empty — a blank label would be an unclickable control.
+function validateLabel(val: unknown, fallback: string): string {
+  if (typeof val !== "string") return fallback;
+  const t = val.trim();
+  return t ? t.slice(0, 32) : fallback;
 }
 
 function validateEnabledSites(raw: unknown): Record<SiteKey, boolean> {
@@ -107,6 +160,21 @@ function validateOrderedIdList<T extends string>(
     }
   }
   return result;
+}
+
+function validateShortcuts(raw: unknown): Partial<Record<ActionId, ShortcutPair>> {
+  const out: Partial<Record<ActionId, ShortcutPair>> = {};
+  if (typeof raw !== "object" || raw === null) return out;
+  for (const [id, val] of Object.entries(raw as Record<string, unknown>)) {
+    if (!isActionId(id)) continue;
+    if (typeof val !== "object" || val === null) continue;
+    const v = val as Record<string, unknown>;
+    // A binding must have a valid `main`; `extra` is optional.
+    if (!isValidShortcut(v.main)) continue;
+    const extra = isValidShortcut(v.extra) ? (v.extra as Shortcut) : null;
+    out[id] = { main: v.main as Shortcut, extra };
+  }
+  return out;
 }
 
 export function validate(raw: Record<string, unknown>): YacompConfig {
@@ -140,6 +208,10 @@ export function validate(raw: Record<string, unknown>): YacompConfig {
       raw.zoomPercentBase === "original" || raw.zoomPercentBase === "fit"
         ? raw.zoomPercentBase
         : DEFAULTS.zoomPercentBase,
+    oneToOnePixels:
+      raw.oneToOnePixels === "device" || raw.oneToOnePixels === "logical"
+        ? raw.oneToOnePixels
+        : DEFAULTS.oneToOnePixels,
     verboseZoom:
       typeof raw.verboseZoom === "boolean"
         ? raw.verboseZoom
@@ -148,9 +220,34 @@ export function validate(raw: Record<string, unknown>): YacompConfig {
       raw.closeBtnPosition === "auto" || raw.closeBtnPosition === "left" || raw.closeBtnPosition === "right" || raw.closeBtnPosition === "hide"
         ? raw.closeBtnPosition
         : DEFAULTS.closeBtnPosition,
+    uiChromeMode:
+      raw.uiChromeMode === "always" || raw.uiChromeMode === "default" || raw.uiChromeMode === "autohide"
+        ? raw.uiChromeMode
+        : DEFAULTS.uiChromeMode,
+    uiHideDelay: clampNum(raw.uiHideDelay, 200, 5000, DEFAULTS.uiHideDelay),
+    ptpGridImageSize:
+      raw.ptpGridImageSize === "thumbnail" || raw.ptpGridImageSize === "full"
+        ? raw.ptpGridImageSize
+        : DEFAULTS.ptpGridImageSize,
+    ptpGridClick:
+      raw.ptpGridClick === "viewer" || raw.ptpGridClick === "tab"
+        ? raw.ptpGridClick
+        : DEFAULTS.ptpGridClick,
+    hdbitsImageClick:
+      raw.hdbitsImageClick === "viewer" || raw.hdbitsImageClick === "native"
+        ? raw.hdbitsImageClick
+        : DEFAULTS.hdbitsImageClick,
+    ptpGridToggleStyle:
+      raw.ptpGridToggleStyle === "grid" || raw.ptpGridToggleStyle === "triangles" ||
+      raw.ptpGridToggleStyle === "text" || raw.ptpGridToggleStyle === "custom"
+        ? raw.ptpGridToggleStyle
+        : DEFAULTS.ptpGridToggleStyle,
+    ptpGridToggleCollapsed: validateLabel(raw.ptpGridToggleCollapsed, DEFAULTS.ptpGridToggleCollapsed),
+    ptpGridToggleExpanded: validateLabel(raw.ptpGridToggleExpanded, DEFAULTS.ptpGridToggleExpanded),
     enabledSites: validateEnabledSites(raw.enabledSites),
     filterCycle: validateOrderedIdList(raw.filterCycle, FILTER_MODE_IDS, DEFAULTS.filterCycle),
     gammaCycle: validateOrderedIdList(raw.gammaCycle, GAMMA_PRESET_IDS, DEFAULTS.gammaCycle),
+    shortcuts: validateShortcuts(raw.shortcuts),
   };
 }
 
@@ -161,6 +258,10 @@ export function migrate(raw: Record<string, unknown>): Record<string, unknown> {
     raw.filterCycle ??= DEFAULTS.filterCycle;
     raw.gammaCycle ??= DEFAULTS.gammaCycle;
   }
+  // v3 (prerelease only) added separate "lumaFull"/"chromaFull" cycle entries.
+  // The luma/chroma filters are now full-range by default, so those ids are
+  // gone; validateOrderedIdList drops them from any stored cycle and the
+  // version bump re-persists the cleaned config.
   return raw;
 }
 
@@ -188,10 +289,62 @@ export function zoomScaleFactor(): number { return config.zoomScaleFactor; }
 export function lazyLoadMargin(): number { return config.lazyLoadMargin; }
 export function mouseSwitch(): boolean { return config.mouseSwitch; }
 export function zoomPercentBase(): "original" | "fit" { return config.zoomPercentBase; }
+export function oneToOnePixels(): "device" | "logical" { return config.oneToOnePixels; }
 export function verboseZoom(): boolean { return config.verboseZoom; }
 export function closeBtnPosition(): "auto" | "left" | "right" | "hide" { return config.closeBtnPosition; }
+export function uiChromeMode(): "always" | "default" | "autohide" { return config.uiChromeMode; }
+export function uiHideDelay(): number { return config.uiHideDelay; }
+export function ptpGridImageSize(): "thumbnail" | "full" { return config.ptpGridImageSize; }
+export function ptpGridClick(): "viewer" | "tab" { return config.ptpGridClick; }
+export function hdbitsImageClick(): "viewer" | "native" { return config.hdbitsImageClick; }
+export function ptpGridToggleStyle(): "grid" | "triangles" | "text" | "custom" { return config.ptpGridToggleStyle; }
+export function ptpGridToggleCollapsed(): string { return config.ptpGridToggleCollapsed; }
+export function ptpGridToggleExpanded(): string { return config.ptpGridToggleExpanded; }
 
 export function siteEnabled(key: SiteKey): boolean { return config.enabledSites[key]; }
+
+/** Effective binding for an action: the user override or the registry default. */
+export function shortcutPairFor(id: ActionId): ShortcutPair {
+  return config.shortcuts[id] ?? defaultPair(id);
+}
+
+/** True when "close viewer" is bound (main or extra) to a canvas click /
+ *  double-click — in which case the close button is redundant and hidden. */
+export function closeUsesCanvasClick(): boolean {
+  const p = shortcutPairFor("viewer.close");
+  return [p.main, p.extra].some(
+    (s) => s != null && (mouseShortcutMatches(s, "click") || mouseShortcutMatches(s, "dblclick")),
+  );
+}
+
+/** Persist a full binding pair for one action (settings editor). */
+export function setShortcutPair(id: ActionId, pair: ShortcutPair): void {
+  saveConfig({ shortcuts: { ...config.shortcuts, [id]: pair } });
+}
+
+/** Restore every shortcut to its registry default. */
+export function resetShortcuts(): void {
+  saveConfig({ shortcuts: {} });
+}
+
+/** The other action already using `sc` (any slot), or null — for hard-locking
+ *  duplicate bindings. The (excludeId, excludeSlot) being edited is ignored. */
+export function findShortcutConflict(
+  sc: Shortcut,
+  excludeId: ActionId,
+  excludeSlot: "main" | "extra",
+): ActionId | null {
+  for (const meta of ACTIONS) {
+    const p = shortcutPairFor(meta.id);
+    if (!(meta.id === excludeId && excludeSlot === "main") && shortcutsEqual(p.main, sc)) {
+      return meta.id;
+    }
+    if (!(meta.id === excludeId && excludeSlot === "extra") && p.extra && shortcutsEqual(p.extra, sc)) {
+      return meta.id;
+    }
+  }
+  return null;
+}
 export function filterCycle(): readonly FilterModeId[] { return config.filterCycle; }
 export function gammaCycle(): readonly GammaPresetId[] { return config.gammaCycle; }
 export function getConfig(): Readonly<YacompConfig> { return config; }
@@ -218,4 +371,24 @@ export function saveConfig(partial: Partial<YacompConfig>): void {
 export function resetConfig(): void {
   config = { ...DEFAULTS };
   persist();
+}
+
+/** Pretty-printed JSON of the current config — for the settings export button. */
+export function exportConfig(): string {
+  return JSON.stringify(config, null, 2);
+}
+
+/** Replace the whole config from imported JSON (validated + migrated). Returns
+ *  false on parse error or non-object payload; the current config is untouched. */
+export function importConfig(json: string): boolean {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(json);
+  } catch {
+    return false;
+  }
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return false;
+  config = validate(migrate(raw as Record<string, unknown>));
+  persist();
+  return true;
 }

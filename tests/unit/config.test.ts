@@ -14,9 +14,11 @@ import {
   GAMMA_PRESET_IDS,
   SITE_KEYS,
   bcStep,
+  exportConfig,
   filterCycle,
   gammaCycle,
   getConfig,
+  importConfig,
   migrate,
   mouseSwitch,
   resetConfig,
@@ -52,6 +54,12 @@ describe("validate — numeric clamping", () => {
     expect(validate({ lazyLoadMargin: -10 }).lazyLoadMargin).toBe(0);
     expect(validate({ lazyLoadMargin: 5000 }).lazyLoadMargin).toBe(2000);
   });
+  test("clamps uiHideDelay to [200, 5000] and falls back when invalid", () => {
+    expect(validate({ uiHideDelay: 1500 }).uiHideDelay).toBe(1500);
+    expect(validate({ uiHideDelay: 50 }).uiHideDelay).toBe(200);
+    expect(validate({ uiHideDelay: 99999 }).uiHideDelay).toBe(5000);
+    expect(validate({ uiHideDelay: NaN }).uiHideDelay).toBe(DEFAULTS.uiHideDelay);
+  });
 });
 
 describe("validate — discriminated unions", () => {
@@ -67,11 +75,52 @@ describe("validate — discriminated unions", () => {
     expect(validate({ closeBtnPosition: "hide" }).closeBtnPosition).toBe("hide");
     expect(validate({ closeBtnPosition: "center" }).closeBtnPosition).toBe("auto");
   });
+  test("uiChromeMode only accepts always/default/autohide", () => {
+    expect(validate({ uiChromeMode: "always" }).uiChromeMode).toBe("always");
+    expect(validate({ uiChromeMode: "autohide" }).uiChromeMode).toBe("autohide");
+    expect(validate({ uiChromeMode: "nope" }).uiChromeMode).toBe(DEFAULTS.uiChromeMode);
+  });
+  test("ptpGridImageSize only accepts thumbnail/full", () => {
+    expect(validate({ ptpGridImageSize: "full" }).ptpGridImageSize).toBe("full");
+    expect(validate({ ptpGridImageSize: "thumbnail" }).ptpGridImageSize).toBe("thumbnail");
+    expect(validate({ ptpGridImageSize: "tiny" }).ptpGridImageSize).toBe(DEFAULTS.ptpGridImageSize);
+  });
+  test("ptpGridClick only accepts viewer/tab", () => {
+    expect(validate({ ptpGridClick: "tab" }).ptpGridClick).toBe("tab");
+    expect(validate({ ptpGridClick: "viewer" }).ptpGridClick).toBe("viewer");
+    expect(validate({ ptpGridClick: "nope" }).ptpGridClick).toBe(DEFAULTS.ptpGridClick);
+  });
+  test("hdbitsImageClick only accepts viewer/native", () => {
+    expect(validate({ hdbitsImageClick: "native" }).hdbitsImageClick).toBe("native");
+    expect(validate({ hdbitsImageClick: "viewer" }).hdbitsImageClick).toBe("viewer");
+    expect(validate({ hdbitsImageClick: "nope" }).hdbitsImageClick).toBe(DEFAULTS.hdbitsImageClick);
+  });
+  test("ptpGridToggleStyle only accepts grid/triangles/text/custom", () => {
+    expect(validate({ ptpGridToggleStyle: "triangles" }).ptpGridToggleStyle).toBe("triangles");
+    expect(validate({ ptpGridToggleStyle: "custom" }).ptpGridToggleStyle).toBe("custom");
+    expect(validate({ ptpGridToggleStyle: "nope" }).ptpGridToggleStyle).toBe(DEFAULTS.ptpGridToggleStyle);
+  });
+  test("ptpGridToggle labels trim, cap length, and fall back when blank or non-string", () => {
+    expect(validate({ ptpGridToggleCollapsed: "▶" }).ptpGridToggleCollapsed).toBe("▶");
+    expect(validate({ ptpGridToggleExpanded: "  ▼  " }).ptpGridToggleExpanded).toBe("▼");
+    expect(validate({ ptpGridToggleCollapsed: "   " }).ptpGridToggleCollapsed).toBe(
+      DEFAULTS.ptpGridToggleCollapsed,
+    );
+    expect(validate({ ptpGridToggleExpanded: 42 as unknown as string }).ptpGridToggleExpanded).toBe(
+      DEFAULTS.ptpGridToggleExpanded,
+    );
+    expect(validate({ ptpGridToggleCollapsed: "x".repeat(50) }).ptpGridToggleCollapsed).toHaveLength(32);
+  });
   test("zoomPercentBase only accepts 'original' or 'fit'", () => {
     expect(validate({ zoomPercentBase: "fit" }).zoomPercentBase).toBe("fit");
     expect(validate({ zoomPercentBase: "natural" }).zoomPercentBase).toBe(
       DEFAULTS.zoomPercentBase,
     );
+  });
+  test("oneToOnePixels only accepts device/logical", () => {
+    expect(validate({ oneToOnePixels: "logical" }).oneToOnePixels).toBe("logical");
+    expect(validate({ oneToOnePixels: "device" }).oneToOnePixels).toBe("device");
+    expect(validate({ oneToOnePixels: "nope" }).oneToOnePixels).toBe(DEFAULTS.oneToOnePixels);
   });
 });
 
@@ -87,6 +136,63 @@ describe("validate — boolean fields", () => {
   test("boolean is preserved", () => {
     expect(validate({ mouseSwitch: false }).mouseSwitch).toBe(false);
     expect(validate({ verboseZoom: true }).verboseZoom).toBe(true);
+  });
+});
+
+describe("validate — shortcuts", () => {
+  test("keeps valid overrides, drops unknown ids and malformed entries", () => {
+    const result = validate({
+      shortcuts: {
+        "zoom.in": { main: { t: "key", code: "KeyZ" }, extra: { t: "mouse", g: "back" } },
+        "nope.action": { main: { t: "key", code: "KeyX" } }, // unknown id
+        "zoom.out": { extra: { t: "key", code: "KeyQ" } }, // missing required main
+        "zoom.fit": { main: { t: "key", code: "" } }, // invalid main
+      } as unknown as Record<string, unknown>,
+    }).shortcuts;
+    expect(result["zoom.in"]).toEqual({
+      main: { t: "key", code: "KeyZ" }, extra: { t: "mouse", g: "back" },
+    });
+    expect(result).not.toHaveProperty("nope.action");
+    expect(result).not.toHaveProperty("zoom.out");
+    expect(result).not.toHaveProperty("zoom.fit");
+  });
+  test("extra falls back to null when absent or invalid", () => {
+    const r = validate({
+      shortcuts: {
+        "zoom.in": { main: { t: "key", code: "KeyZ" }, extra: { t: "mouse", g: "bad" } },
+      } as unknown as Record<string, unknown>,
+    }).shortcuts;
+    expect(r["zoom.in"]).toEqual({ main: { t: "key", code: "KeyZ" }, extra: null });
+  });
+  test("defaults to no overrides", () => {
+    expect(validate({}).shortcuts).toEqual({});
+  });
+});
+
+describe("export / import", () => {
+  test("exportConfig emits pretty JSON of the live config", () => {
+    saveConfig({ toastDuration: 3333 });
+    const json = exportConfig();
+    expect(json).toContain("\n"); // pretty-printed
+    expect(JSON.parse(json).toastDuration).toBe(3333);
+  });
+  test("importConfig replaces config, validating + backfilling missing fields", () => {
+    saveConfig({ toastDuration: 2000 });
+    expect(importConfig(JSON.stringify({ toastDuration: 4500, hdbitsImageClick: "native" }))).toBe(true);
+    expect(getConfig().toastDuration).toBe(4500);
+    expect(getConfig().hdbitsImageClick).toBe("native");
+    expect(getConfig().defaultZoomMode).toBe(DEFAULTS.defaultZoomMode); // missing → default
+  });
+  test("importConfig clamps out-of-range numbers", () => {
+    expect(importConfig(JSON.stringify({ toastDuration: 999999 }))).toBe(true);
+    expect(getConfig().toastDuration).toBe(10000);
+  });
+  test("importConfig rejects bad payloads and leaves config untouched", () => {
+    saveConfig({ toastDuration: 2500 });
+    expect(importConfig("not json")).toBe(false);
+    expect(importConfig("[1,2,3]")).toBe(false);
+    expect(importConfig("42")).toBe(false);
+    expect(getConfig().toastDuration).toBe(2500);
   });
 });
 
@@ -123,6 +229,12 @@ describe("validate — ordered id lists (filterCycle, gammaCycle)", () => {
     }).filterCycle;
     expect(cycle).toEqual(["chroma", "solar1", "luma"]);
   });
+  test("drops the retired full-range variant ids (prerelease v3 cleanup)", () => {
+    const cycle = validate({
+      filterCycle: ["solar1", "luma", "lumaFull", "chroma", "chromaFull"],
+    }).filterCycle;
+    expect(cycle).toEqual(["solar1", "luma", "chroma"]);
+  });
   test("accepts empty list (user disabled every entry)", () => {
     expect(validate({ filterCycle: [] }).filterCycle).toEqual([]);
     expect(validate({ gammaCycle: [] }).gammaCycle).toEqual([]);
@@ -149,8 +261,14 @@ describe("migrate", () => {
     const migrated = migrate({ v: 1, filterCycle: ["chroma"] });
     expect(migrated.filterCycle).toEqual(["chroma"]);
   });
-  test("v=2 is left alone", () => {
-    const raw = { v: 2, bcStep: 0.1 };
+  test("retired full-range ids survive migrate (validate strips them later)", () => {
+    // migrate no longer rewrites the cycle past v2; the dead lumaFull/chromaFull
+    // ids are removed downstream by validate, not here.
+    const migrated = migrate({ v: 3, filterCycle: ["luma", "lumaFull", "chromaFull"] });
+    expect(migrated.filterCycle).toEqual(["luma", "lumaFull", "chromaFull"]);
+  });
+  test("current-version config is left alone", () => {
+    const raw = { v: 4, bcStep: 0.1 };
     const migrated = migrate({ ...raw });
     expect(migrated).toEqual(raw);
   });

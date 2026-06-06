@@ -39,5 +39,12 @@ export interface Comp {
   updateRowNav?: (idx: number) => void;
   updateScrollSpacers?: () => void;
   updateNavMap: () => void;
+  // Auto-hide chrome hooks (① auto-hide UI). Reveal the source label / row nav
+  // on a deliberate action; re-evaluate the fit/fill button's "hide at 1:1" rule;
+  // re-apply the resting state after a chrome-mode / hide-delay settings change.
+  revealColumnNav?: () => void;
+  revealRowNav?: () => void;
+  syncFillCanvasVisibility?: () => void;
+  syncAutoHide?: () => void;
   close: () => void;
 }

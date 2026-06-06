@@ -1,0 +1,11 @@
+<!--
+slot: forum.post
+expected_grids: 1
+expected_names: [["Source", "Encode"]]
+thread_title: "[Comparisons] Zoom mixed dims - Source vs Encode"
+notes: Fixture for the ② 1:1-per-column test. A 2-wide Source/Encode comparison (2 rows). Column A images (cA*) and column B (cB*) are given different widths by the dedicated e2e's size-varying stub, so 1:1 + a column switch can assert the row re-fits to each column's native width. Under the default fixed-size stub it's an ordinary 1-grid case.
+-->
+
+<strong>Source vs Encode</strong><br>
+<a href="https://img.hdbits.org/cA0"><img src="https://t.hdbits.org/cA0.jpg"></a> <a href="https://img.hdbits.org/cB0"><img src="https://t.hdbits.org/cB0.jpg"></a>
+<a href="https://img.hdbits.org/cA1"><img src="https://t.hdbits.org/cA1.jpg"></a> <a href="https://img.hdbits.org/cB1"><img src="https://t.hdbits.org/cB1.jpg"></a>

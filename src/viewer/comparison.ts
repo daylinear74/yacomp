@@ -13,8 +13,9 @@ import {
   mouseSwitch as cfgMouseSwitch,
 } from "../config";
 import {
-  zoomMode, zoomWidth, setZoomMode, setZoomWidth,
+  setZoomMode, setZoomWidth,
   applyZoom, calcZoom, snapZoom, captureZoomAnchor, zoomToast, navMapEnabled,
+  doZoom1to1, refit1to1, centerOnActiveCell, zoomStepBaseWidth,
   fillCanvasEnabled, applyFillCanvas, setFillCanvas, setNavMap,
   activeComps, addComp, removeComp,
   type CapturedZoomAnchor,
@@ -26,8 +27,11 @@ import { createRowNav } from "./row-nav";
 import { createSourceMenu } from "./source-menu";
 import { createFillCanvasBtn } from "./fill-canvas-btn";
 import { createToolbar } from "./toolbar";
+import { toggleHelpOverlay, hideHelpOverlay } from "./help-overlay";
 import { normalizeGridInitialPosition, normalizeGridInitialZoom } from "./initial-state";
 import { createCloseBtn } from "./close-btn";
+import { createAutoHide } from "./auto-hide";
+import { setupCompMouseShortcuts } from "../keyboard";
 import {
   createDefaultVisibleColumns,
   pointerVisibleColumn,
@@ -125,19 +129,23 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     shadowRoot.appendChild(labelEl);
   }
   labelEl.innerHTML = "";
-  labelEl.style.opacity = "0";
+  // Visibility is owned by the auto-hide controller (created below); the label
+  // starts hidden until the first reveal.
+  labelEl.classList.add("_scf_ui_autohidden");
 
   const compDiv = document.createElement("div") as HTMLDivElement;
   compDiv.className = "_scf_comp";
   const wheelZoomGesture: WheelZoomGestureState = { anchor: null, resetTimer: null };
 
   const { drag, onDragMove, onDragEnd } = setupDragHandlers(compDiv);
+  // Canvas mouse-gesture shortcuts (e.g. click / double-click to close).
+  setupCompMouseShortcuts(compDiv, drag);
 
   // Ctrl+Wheel zoom (centered on cursor)
   compDiv.addEventListener("wheel", (e) => {
     if (!e.ctrlKey) return;
     e.preventDefault();
-    const oldW = zoomMode === "fit" ? window.innerWidth : zoomWidth;
+    const oldW = zoomStepBaseWidth();
     const anchor = getWheelZoomGestureAnchor(wheelZoomGesture, comp, e);
     setZoomWidth(snapZoom(oldW, calcZoom(oldW, e.deltaY < 0 ? 1 : -1)));
     setZoomMode("custom");
@@ -211,7 +219,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
         labelEl!.appendChild(document.createTextNode("\u00a0 "));
       }
     }
-    labelEl!.style.opacity = "1";
+    comp.revealColumnNav?.();
     // Update nav map thumbnail for new column (only when zoomed)
     if (compDiv.classList.contains("_scf_zoomed")) {
       const rd = allRowData[comp.currentRow || 0];
@@ -226,6 +234,16 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   }
 
   for (let ri = 0; ri < grid.rows.length; ri++) {
+    // Reserve each row's TRUE aspect ratio from the page thumbnails (already
+    // loaded in the grid). Without this a row falls back to a 16/9 placeholder
+    // until its full image lands, then reflows — which shifts the centered cell
+    // and recomputes the top/bottom spacers, so the viewer "jumps" on open.
+    for (const cell of grid.rows[ri]) {
+      if ((cell.width == null || cell.height == null) && cell.img?.naturalWidth && cell.img.naturalHeight) {
+        cell.width = cell.img.naturalWidth;
+        cell.height = cell.img.naturalHeight;
+      }
+    }
     const rowData = buildRow(
       grid.rows[ri],
       grid.numCols,
@@ -277,10 +295,6 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     setTimeout(triggerBgLoad, 3000);
   }
 
-  compDiv.addEventListener("mouseleave", () => {
-    labelEl!.style.opacity = "0";
-  });
-
   const origContainerDisplay = container.style.display;
   const origBtnDisplay = btn.style.display;
 
@@ -322,6 +336,10 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     if (col < 0 || col >= grid.numCols) return;
     if (!comp.visibleCols.includes(col)) return;
     switchColumn(col);
+    // A DELIBERATE column move (keyboard / column-nav) re-fits 1:1 to this
+    // column's native width; the mouse-sweep (raw switchColumn) does not, so
+    // sweeping to compare stays at one stable scale instead of resizing.
+    refit1to1();
   };
 
   comp.setSourceVisible = (col: number, visible: boolean) => {
@@ -360,7 +378,23 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   // Bottom-left toolbar (hosts source menu + fill canvas toggle)
   const toolbar = createToolbar();
 
-  // Fill canvas toggle button (added first → appears above source menu)
+  // Shortcuts help button (added first → sits at the top) → toggles the legend.
+  const helpBtnEl = document.createElement("div");
+  helpBtnEl.className = "_scf_help_btn";
+  const helpButton = document.createElement("button");
+  helpButton.type = "button";
+  helpButton.className = "_scf_help_button";
+  helpButton.title = "Keyboard shortcuts (?)";
+  helpButton.setAttribute("aria-label", "Keyboard shortcuts");
+  helpButton.textContent = "?";
+  helpButton.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleHelpOverlay();
+  });
+  helpBtnEl.appendChild(helpButton);
+  toolbar.toolbarEl.appendChild(helpBtnEl);
+
+  // Fill canvas toggle button (added next → appears below help)
   const fillCanvasBtn = createFillCanvasBtn(toolbar);
   comp.updateFillCanvasBtn = fillCanvasBtn.updateFillCanvasBtn;
 
@@ -372,6 +406,21 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   const closeBtn = createCloseBtn(() => comp.close());
   comp.updateCloseBtn = closeBtn.updatePosition;
 
+  // Auto-hide chrome controller (① auto-hide UI) — fades the label, row nav,
+  // close button and toolbar after a spell of no activity; reveals on action.
+  const autoHide = createAutoHide({
+    compDiv,
+    labelEl,
+    rowNavEl: rowNav.rowNavEl,
+    closeBtnEl: closeBtn.closeBtnEl,
+    toolbarEl: toolbar.toolbarEl,
+    fillCanvasBtnEl: fillCanvasBtn.fillCanvasBtnEl,
+  });
+  comp.revealColumnNav = autoHide.revealColumnNav;
+  comp.revealRowNav = autoHide.revealRowNav;
+  comp.syncFillCanvasVisibility = autoHide.syncFillCanvasVisibility;
+  comp.syncAutoHide = autoHide.resync;
+
   if (initialPosition.col !== 0) switchColumn(initialPosition.col);
 
   comp.setRow = (rowIdx: number) => {
@@ -379,6 +428,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     comp.currentRow = rowIdx;
     allRowData[rowIdx].rowDiv.scrollIntoView({ behavior: "smooth", block: "center" });
     rowNav.updateRowNav(rowIdx);
+    comp.revealRowNav?.();
     showToast("Row " + (rowIdx + 1) + " / " + comp.numRows);
   };
 
@@ -400,13 +450,28 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
       spacerResizeObserver.observe(allRowData[allRowData.length - 1].rowDiv);
     }
   }
-  window.addEventListener("resize", onResize);
+  // On window resize the devicePixelRatio may have changed (monitor move /
+  // browser zoom), so re-apply 1:1 at the new scale. Kept off the spacer
+  // observer's handler to avoid a resize→refit→resize loop.
+  const onWindowResize = () => {
+    comp.updateScrollSpacers?.();
+    refit1to1();
+  };
+  window.addEventListener("resize", onWindowResize);
+
+  // The page scroll position at open — restored on close so dismissing the
+  // viewer never moves the page (hiding the container would otherwise reflow it).
+  const pageScrollX = window.scrollX;
+  const pageScrollY = window.scrollY;
+  // Re-centers the active cell as it measures; disconnected on settle/close.
+  let openCenterRO: ResizeObserver | null = null;
 
   function closeThis() {
     window.removeEventListener("mousemove", onDragMove);
     window.removeEventListener("mouseup", onDragEnd);
-    window.removeEventListener("resize", onResize);
+    window.removeEventListener("resize", onWindowResize);
     if (spacerResizeObserver) spacerResizeObserver.disconnect();
+    openCenterRO?.disconnect();
 
     rowObserver.disconnect();
     resetWheelZoomGesture(wheelZoomGesture);
@@ -417,11 +482,16 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     fillCanvasBtn.cleanup();
     closeBtn.cleanup();
     toolbar.cleanup();
+    autoHide.cleanup();
+    hideHelpOverlay();
     document.body.style.overflow = "";
     container.style.display = origContainerDisplay;
     btn.style.display = origBtnDisplay;
+    window.scrollTo(pageScrollX, pageScrollY);
 
-    labelEl!.style.opacity = "0";
+    // Label persists in the shadow root (reused by id) — leave it hidden so it
+    // doesn't flash on the next open until the first reveal.
+    labelEl!.classList.add("_scf_ui_autohidden");
     labelEl!.innerHTML = "";
 
     setZoomMode("fit");
@@ -443,23 +513,37 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   if (initialZoom.mode === "custom") {
     applyZoom();
   } else if (cfgZoomMode() === "1:1") {
-    const apply1to1 = () => {
-      if (!row0Sizer.naturalWidth) return;
-      setZoomWidth(row0Sizer.naturalWidth);
-      setZoomMode("1:1");
-      applyZoom();
-    };
-    if (row0Sizer.complete && row0Sizer.naturalWidth) apply1to1();
-    else row0Sizer.addEventListener("load", apply1to1, { once: true });
+    // 1:1 from the ACTIVE column's native width (doZoom1to1 waits for its image
+    // to measure); silent so opening doesn't pop a zoom toast.
+    doZoom1to1({ silent: true });
   }
   rowNav.updateRowNav(initialPosition.row);
-  if (initialPosition.row !== 0) {
-    requestAnimationFrame(() => {
-      const row = allRowData[initialPosition.row];
-      if (!row) return;
-      row.rowDiv.scrollIntoView({ behavior: "auto", block: "center" });
-      comp.updateNavMap();
+
+  // Always open centered on the active cell — every entry path (Show
+  // comparison, an HDBits/PTP image click, V), at any zoom, and for images both
+  // smaller and larger than the viewport.
+  const centerNow = (): void => {
+    comp.updateScrollSpacers?.();
+    centerOnActiveCell(comp);
+    comp.updateNavMap();
+  };
+  requestAnimationFrame(centerNow);
+  // The active image is usually unmeasured at open (lazy / still loading), so
+  // the first center used placeholder geometry — which lands the cell off
+  // (top-left, or "half this row half the next"). Re-center as the active row
+  // resizes (image lands, 1:1 width applies) until it has settled, or until the
+  // user takes over. A ResizeObserver is robust to the exact load timing.
+  const activeRow = allRowData[initialPosition.row]?.rowDiv;
+  if (activeRow && typeof ResizeObserver !== "undefined") {
+    openCenterRO = new ResizeObserver(() => {
+      requestAnimationFrame(centerNow);
+      const img = allRowData[initialPosition.row]?.imgs[initialPosition.col];
+      if (img?.complete && img.naturalWidth) openCenterRO?.disconnect();
     });
+    openCenterRO.observe(activeRow);
+    const stop = (): void => openCenterRO?.disconnect();
+    compDiv.addEventListener("wheel", stop, { once: true, passive: true });
+    compDiv.addEventListener("mousedown", stop, { once: true });
   }
 }
 

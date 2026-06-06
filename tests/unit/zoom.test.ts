@@ -15,7 +15,7 @@ beforeAll(() => {
   };
 });
 
-import { calcZoom, snapZoom, zoomToast } from "../../src/filters/zoom";
+import { calcZoom, formatDevicePixelRatio, snapZoom, zoomToast } from "../../src/filters/zoom";
 import { resetConfig, saveConfig } from "../../src/config";
 
 beforeEach(() => {
@@ -92,5 +92,16 @@ describe("zoomToast — verboseZoom toggle", () => {
       expect(toast.length).toBeGreaterThanOrEqual(2);
       expect((toast[0] as { size?: string }).size).toBe("large");
     }
+  });
+});
+
+describe("formatDevicePixelRatio", () => {
+  test("trims floating point noise from browser zoom DPR values", () => {
+    expect(formatDevicePixelRatio(1.100000023841858)).toBe("1.1");
+  });
+
+  test("keeps useful fractional DPR precision without trailing zeroes", () => {
+    expect(formatDevicePixelRatio(1.25)).toBe("1.25");
+    expect(formatDevicePixelRatio(2)).toBe("2");
   });
 });

@@ -1,0 +1,11 @@
+<!--
+slot: forum.post
+expected_grids: 1
+expected_names: [["Source", "Encode"]]
+thread_title: "[Comparisons] Zoom mixed row dims - Source vs Encode"
+notes: Fixture for the ② 1:1-per-ROW test (the real 057 bug). A 2-wide Source/Encode comparison whose rows are DIFFERENT resolutions - row 0 (r0*) narrow like a bitrate chart, row 1 (r1*) wide like a screenshot - but uniform within each row's columns. The dedicated e2e's size-varying stub gives r0* 200px and r1* 400px, so 1:1 must size each row to its own native width instead of squashing the wide row to the narrow row's width. Under the default fixed-size stub it's an ordinary 1-grid case.
+-->
+
+<strong>Source vs Encode</strong><br>
+<a href="https://img.hdbits.org/r0a"><img src="https://t.hdbits.org/r0a.jpg"></a> <a href="https://img.hdbits.org/r0b"><img src="https://t.hdbits.org/r0b.jpg"></a>
+<a href="https://img.hdbits.org/r1a"><img src="https://t.hdbits.org/r1a.jpg"></a> <a href="https://img.hdbits.org/r1b"><img src="https://t.hdbits.org/r1b.jpg"></a>

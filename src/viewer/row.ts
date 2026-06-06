@@ -3,6 +3,7 @@
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
 import { applyFilterToImg } from "../filters/imaging";
+import { sizeRowOnLoad } from "../filters/zoom";
 import { mouseSwitch } from "../config";
 import type { DragState } from "./drag";
 import type { RowData, Comp } from "./types";
@@ -74,6 +75,11 @@ export function buildRow(
 
   const imgs: HTMLImageElement[] = [];
   for (let ci = 0; ci < numCols; ci++) {
+    // A partial final row (the "orphan" of an indivisible comparison-thread
+    // grid, 80402) has fewer cells than numCols — stop at the gap instead of
+    // dereferencing a missing cell. Missing cells are always trailing (the row
+    // is a contiguous slice), so the imgs[] indices still map to columns.
+    if (!rowCells[ci]) break;
     const cell = document.createElement("div");
     cell.className = "_scf_comp_cell";
     const img = document.createElement("img");
@@ -143,6 +149,10 @@ export function loadRow(rd: RowData, comp: Comp): void {
   }
   const activeCol = comp.currentCol || 0;
   if (imgs[activeCol]) loadCellSrc(imgs[activeCol], activeCol, comp, adjustRowAR);
+  // When zoomed, a row scrolling in must take its OWN native width × the
+  // current scale (it may be a different resolution than rows already on
+  // screen). Sizes once the active cell measures; no-op in fit.
+  sizeRowOnLoad(rd, comp);
 }
 
 // switchColumn hook: promote one column's deferred src in a row that's

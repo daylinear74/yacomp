@@ -1,4 +1,4 @@
-import { closeBtnPosition } from "../config";
+import { closeBtnPosition, closeUsesCanvasClick } from "../config";
 import { getShadowRoot } from "../ui/shadow";
 
 // Exported as a pure function so the platform fallback can be exercised
@@ -17,6 +17,8 @@ const isMac =
   /Mac|iPhone|iPad/.test(navigator.userAgent);
 
 function resolvePosition(): "left" | "right" | "hide" {
+  // Bound to a canvas click/double-click → the button is redundant, hide it.
+  if (closeUsesCanvasClick()) return "hide";
   return resolveCloseBtnPosition(closeBtnPosition(), isMac);
 }
 

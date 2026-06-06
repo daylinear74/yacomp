@@ -8,11 +8,17 @@ import {
   SITE_KEYS, SITE_LABELS, type SiteKey,
   FILTER_MODE_IDS, type FilterModeId,
   GAMMA_PRESET_IDS, type GammaPresetId,
+  shortcutPairFor, setShortcutPair, resetShortcuts, findShortcutConflict,
+  exportConfig, importConfig,
 } from "../config";
 import { injectCSS } from "./css";
 import { getShadowRoot } from "./shadow";
 import { showToast } from "./toast";
-import { activeComps, zoomToast } from "../filters/zoom";
+import { activeComps, zoomToast, refit1to1 } from "../filters/zoom";
+import { refreshPTPGridToggles } from "../sites/ptp";
+import { formatShortcut, keyEventToShortcut, type Shortcut } from "../shortcuts/types";
+import { ACTIONS, actionMeta, type ActionId } from "../shortcuts/registry";
+import { setShortcutCapturing } from "../shortcuts/capture-state";
 
 type Renderer = () => void;
 
@@ -45,7 +51,20 @@ interface SliderDef {
   onSave?: () => void;
 }
 
-type SettingDef = RadioDef | ToggleDef | SliderDef;
+interface TextDef {
+  type: "text";
+  key: keyof YacompConfig;
+  label: string;
+  tooltip?: string;
+  placeholder?: string;
+  maxLength?: number;
+  // When set, the row is shown only while this returns true (re-evaluated
+  // whenever a radio changes, which re-runs every row's sync).
+  visibleWhen?: () => boolean;
+  onSave?: () => void;
+}
+
+type SettingDef = RadioDef | ToggleDef | SliderDef | TextDef;
 
 interface SettingGroup {
   label: string;
@@ -77,6 +96,17 @@ const GROUPS: SettingGroup[] = [
           { label: "Fit", value: "fit" },
         ],
         onSave: () => { if (activeComps.length) showToast(zoomToast()); },
+      },
+      {
+        type: "radio",
+        key: "oneToOnePixels",
+        label: "1:1 pixels",
+        tooltip: "What a source pixel maps to at 1:1 on a HiDPI / Retina screen. Device = one physical screen pixel (a 4K shot fills a 1080p@2x panel, pixel-perfect); Logical = one CSS pixel (the browser's 100%, ~2x magnified on Retina). No effect on standard displays.",
+        options: [
+          { label: "Logical", value: "logical" },
+          { label: "Device", value: "device" },
+        ],
+        onSave: () => { refit1to1(); if (activeComps.length) showToast(zoomToast()); },
       },
       {
         type: "radio",
@@ -129,6 +159,90 @@ const GROUPS: SettingGroup[] = [
           { label: "Hide", value: "hide" },
         ],
         onSave: () => { for (const c of activeComps) c.updateCloseBtn?.(); },
+      },
+      {
+        type: "radio",
+        key: "uiChromeMode",
+        label: "Chrome",
+        tooltip: "Viewer UI visibility. Always = source titles, row nav and buttons stay shown. Default = titles + row nav sit dimmed (full on action), buttons auto-hide. Auto-hide = titles + row nav show only on action, buttons show only when the cursor is near them.",
+        options: [
+          { label: "Always", value: "always" },
+          { label: "Default", value: "default" },
+          { label: "Auto-hide", value: "autohide" },
+        ],
+        onSave: () => { for (const c of activeComps) c.syncAutoHide?.(); },
+      },
+      {
+        type: "slider",
+        key: "uiHideDelay",
+        label: "UI hide delay",
+        tooltip: "How long the viewer chrome stays at full before settling back (dimmed or hidden, per the Chrome mode) after the last activity. Ignored in Always mode.",
+        min: 200,
+        max: 5000,
+        step: 100,
+        format: (v) => (v / 1000).toFixed(1) + "s",
+        onSave: () => { for (const c of activeComps) c.syncAutoHide?.(); },
+      },
+      {
+        type: "radio",
+        key: "ptpGridImageSize",
+        label: "PTP image grid",
+        tooltip: "Resolution for the inline image grid toggled beside PTP's \"Show comparison\" link. Thumbnail loads PTP's /t/ previews (light); Full loads the /i/ originals. Non-PTP-hosted images are shown as-is.",
+        options: [
+          { label: "Thumbnail", value: "thumbnail" },
+          { label: "Full", value: "full" },
+        ],
+      },
+      {
+        type: "radio",
+        key: "ptpGridClick",
+        label: "PTP grid click",
+        tooltip: "What clicking an image in the PTP grid does. Viewer opens the yacomp comparison viewer at that shot; New tab opens the full image in a new browser tab.",
+        options: [
+          { label: "Viewer", value: "viewer" },
+          { label: "New tab", value: "tab" },
+        ],
+      },
+      {
+        type: "radio",
+        key: "hdbitsImageClick",
+        label: "HDBits image click",
+        tooltip: "What clicking a comparison image on HDBits does. Viewer opens the yacomp comparison viewer at that shot; Native keeps HDBits' default (open the full image).",
+        options: [
+          { label: "Viewer", value: "viewer" },
+          { label: "Native", value: "native" },
+        ],
+      },
+      {
+        type: "radio",
+        key: "ptpGridToggleStyle",
+        label: "PTP grid button",
+        tooltip: "The fold toggle beside PTP's \"Show comparison\". ▦ is a single glyph; ▶ ▼ swaps between closed/open arrows; Text reads \"Show grid\"/\"Hide grid\"; Custom lets you type your own.",
+        options: [
+          { label: "▦", value: "grid" },
+          { label: "▶ ▼", value: "triangles" },
+          { label: "Text", value: "text" },
+          { label: "Custom", value: "custom" },
+        ],
+        onSave: () => refreshPTPGridToggles(),
+      },
+      {
+        type: "text",
+        key: "ptpGridToggleCollapsed",
+        label: "Custom (closed)",
+        tooltip: "Used with the Custom style: the toggle's label while the grid is folded shut.",
+        placeholder: "▦",
+        visibleWhen: () => getConfig().ptpGridToggleStyle === "custom",
+        onSave: () => refreshPTPGridToggles(),
+      },
+      {
+        type: "text",
+        key: "ptpGridToggleExpanded",
+        label: "Custom (open)",
+        tooltip: "Used with the Custom style: the toggle's label while the grid is open.",
+        placeholder: "▦",
+        visibleWhen: () => getConfig().ptpGridToggleStyle === "custom",
+        onSave: () => refreshPTPGridToggles(),
       },
     ],
   },
@@ -183,6 +297,12 @@ const SITES_TOOLTIP =
   "Per-site toggle. Disabling stops yacomp from injecting on that site without uninstalling.";
 const FILTER_CYCLE_TOOLTIP =
   "Visual filters reachable via F / Shift+F. Uncheck to skip; drag enabled rows to reorder.";
+const BACKUP_TOOLTIP =
+  "Export all settings to a JSON file, or import one to restore them. Importing replaces every current setting.";
+
+const SHORTCUTS_TOOLTIP =
+  "Click a field, then press a key (modifiers included) or pick a mouse button. Every action needs a main shortcut; the extra is optional (× clears it). Esc cancels capture; a duplicate binding is rejected.";
+
 const GAMMA_CYCLE_TOOLTIP =
   "Gamma-mismatch presets reachable via G / Shift+G. Uncheck to skip; drag enabled rows to reorder.";
 
@@ -246,7 +366,9 @@ function buildRadio(def: RadioDef, renderers: Renderer[]): HTMLElement {
     btn.textContent = opt.label;
     btn.addEventListener("click", () => {
       saveConfig({ [def.key]: opt.value });
-      sync();
+      // Re-sync every row, not just this one, so rows gated on this value
+      // (visibleWhen) show/hide immediately.
+      for (const r of renderers) r();
       def.onSave?.();
     });
     buttons.push(btn);
@@ -324,6 +446,33 @@ function buildSlider(def: SliderDef, renderers: Renderer[]): HTMLElement {
   renderers.push(sync);
   controls.append(range, valueEl);
   row.append(label, controls);
+  return row;
+}
+
+function buildText(def: TextDef, renderers: Renderer[]): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "_scf_settings_row";
+
+  const label = buildSettingLabel(def.label, def.tooltip);
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "_scf_settings_text";
+  input.maxLength = def.maxLength ?? 32;
+  if (def.placeholder) input.placeholder = def.placeholder;
+
+  input.addEventListener("input", () => {
+    saveConfig({ [def.key]: input.value });
+    def.onSave?.();
+  });
+
+  function sync() {
+    if (def.visibleWhen) row.style.display = def.visibleWhen() ? "" : "none";
+    input.value = String(getConfig()[def.key] ?? "");
+  }
+
+  renderers.push(sync);
+  row.append(label, input);
   return row;
 }
 
@@ -505,12 +654,258 @@ function buildOrderedList<T extends string>(
   return container;
 }
 
+// ── Shortcuts editor ─────────────────────────────────────────────────────────
+
+let activeShortcutCapture: (() => void) | null = null;
+
+function startShortcutCapture(
+  wrap: HTMLElement,
+  btn: HTMLButtonElement,
+  id: ActionId,
+  slot: "main" | "extra",
+  refreshAll: () => void,
+): void {
+  activeShortcutCapture?.(); // cancel any in-flight capture
+  setShortcutCapturing(true);
+  btn.classList.add("_scf_capturing");
+  btn.textContent = "Press a key…";
+
+  const chips = document.createElement("div");
+  chips.className = "_scf_shortcut_chips";
+  const gestures: { g: "click" | "dblclick" | "middle" | "back" | "forward"; label: string }[] = [
+    { g: "click", label: "Click" },
+    { g: "dblclick", label: "2×" },
+    { g: "middle", label: "Mid" },
+    { g: "back", label: "Back" },
+    { g: "forward", label: "Fwd" },
+  ];
+  for (const { g, label } of gestures) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "_scf_shortcut_chip";
+    chip.textContent = label;
+    chip.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      commit({ t: "mouse", g });
+    });
+    chips.appendChild(chip);
+  }
+  wrap.appendChild(chips);
+
+  function commit(sc: Shortcut): void {
+    const conflict = findShortcutConflict(sc, id, slot);
+    cleanup();
+    if (conflict) {
+      showToast("Already bound to " + actionMeta(conflict).label);
+      refreshAll();
+      return;
+    }
+    const cur = shortcutPairFor(id);
+    setShortcutPair(
+      id,
+      slot === "main" ? { main: sc, extra: cur.extra } : { main: cur.main, extra: sc },
+    );
+    refreshAll();
+    if (id === "viewer.close") for (const c of activeComps) c.updateCloseBtn?.();
+  }
+
+  function onKey(e: KeyboardEvent): void {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (e.key === "Escape") { cleanup(); refreshAll(); return; }
+    // Wait for the real key — a lone modifier press isn't a binding.
+    if (/^(?:Shift|Control|Alt|Meta)(?:Left|Right)$/.test(e.code)) return;
+    commit(keyEventToShortcut(e));
+  }
+
+  function onOutside(e: Event): void {
+    if (!wrap.contains(e.target as Node)) { cleanup(); refreshAll(); }
+  }
+
+  function cleanup(): void {
+    activeShortcutCapture = null;
+    setShortcutCapturing(false);
+    btn.classList.remove("_scf_capturing");
+    chips.remove();
+    window.removeEventListener("keydown", onKey, true);
+    // Listener lives on the shadow root: a document-level one would see events
+    // retargeted to the host, making every in-panel click look "outside".
+    getShadowRoot().removeEventListener("mousedown", onOutside, true);
+  }
+
+  activeShortcutCapture = () => { cleanup(); refreshAll(); };
+  window.addEventListener("keydown", onKey, true);
+  // Defer so the click that started capture doesn't immediately cancel it.
+  setTimeout(() => getShadowRoot().addEventListener("mousedown", onOutside, true), 0);
+}
+
+function buildCaptureField(
+  id: ActionId,
+  slot: "main" | "extra",
+  refreshAll: () => void,
+  refreshFns: Renderer[],
+): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "_scf_shortcut_field";
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "_scf_shortcut_btn";
+
+  const isExtra = slot === "extra";
+  const clear = document.createElement("button");
+  clear.type = "button";
+  clear.className = "_scf_shortcut_clear";
+  clear.textContent = "×";
+  clear.title = "Clear";
+  clear.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const cur = shortcutPairFor(id);
+    setShortcutPair(id, { main: cur.main, extra: null });
+    refreshAll();
+  });
+
+  function render(): void {
+    const pair = shortcutPairFor(id);
+    const sc = slot === "main" ? pair.main : pair.extra;
+    btn.textContent = formatShortcut(sc);
+    btn.classList.toggle("_scf_shortcut_empty", sc == null);
+    if (isExtra) clear.style.display = sc ? "" : "none";
+  }
+  refreshFns.push(render);
+  render();
+
+  btn.addEventListener("click", () => startShortcutCapture(wrap, btn, id, slot, refreshAll));
+
+  wrap.appendChild(btn);
+  if (isExtra) wrap.appendChild(clear);
+  return wrap;
+}
+
+const SHORTCUT_GROUPS = ["Zoom", "Navigate", "Display", "Adjust", "Viewer"] as const;
+
+function buildShortcutsEditor(renderers: Renderer[]): HTMLElement {
+  const container = document.createElement("div");
+  container.className = "_scf_shortcuts";
+
+  const refreshFns: Renderer[] = [];
+  const refreshAll = (): void => { for (const f of refreshFns) f(); };
+
+  for (const group of SHORTCUT_GROUPS) {
+    const heading = document.createElement("div");
+    heading.className = "_scf_shortcuts_subhead";
+    heading.textContent = group;
+    container.appendChild(heading);
+
+    for (const meta of ACTIONS.filter((a) => a.group === group)) {
+      const row = document.createElement("div");
+      row.className = "_scf_shortcut_row";
+      const label = document.createElement("span");
+      label.className = "_scf_settings_label";
+      label.textContent = meta.label;
+      const fields = document.createElement("div");
+      fields.className = "_scf_shortcut_fields";
+      fields.append(
+        buildCaptureField(meta.id, "main", refreshAll, refreshFns),
+        buildCaptureField(meta.id, "extra", refreshAll, refreshFns),
+      );
+      row.append(label, fields);
+      container.appendChild(row);
+    }
+  }
+
+  const resetRow = document.createElement("div");
+  resetRow.className = "_scf_shortcut_reset_row";
+  const resetBtn = document.createElement("button");
+  resetBtn.type = "button";
+  resetBtn.className = "_scf_settings_reset";
+  resetBtn.textContent = "Reset shortcuts";
+  resetBtn.addEventListener("click", () => {
+    resetShortcuts();
+    refreshAll();
+    for (const c of activeComps) c.updateCloseBtn?.();
+  });
+  resetRow.appendChild(resetBtn);
+  container.appendChild(resetRow);
+
+  renderers.push(refreshAll);
+  return container;
+}
+
+// ── Import / export ──────────────────────────────────────────────────────────
+
+function downloadText(filename: string, text: string): void {
+  const blob = new Blob([text], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Push freshly-imported config into any open viewer + the settings rows. */
+function applyImportedConfig(renderers: Renderer[]): void {
+  for (const r of renderers) r();
+  for (const c of activeComps) {
+    c.updateCloseBtn?.();
+    c.syncAutoHide?.();
+    c.updateFillCanvasBtn?.();
+    c.updateSourceMenu?.();
+  }
+  refreshPTPGridToggles();
+}
+
+function buildBackupSection(renderers: Renderer[]): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "_scf_settings_backup";
+
+  const exportBtn = document.createElement("button");
+  exportBtn.type = "button";
+  exportBtn.className = "_scf_settings_reset";
+  exportBtn.textContent = "Export";
+  exportBtn.addEventListener("click", () => downloadText("yacomp-config.json", exportConfig()));
+
+  const importBtn = document.createElement("button");
+  importBtn.type = "button";
+  importBtn.className = "_scf_settings_reset";
+  importBtn.textContent = "Import";
+
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.accept = "application/json,.json";
+  fileInput.style.display = "none";
+  fileInput.addEventListener("change", () => {
+    const file = fileInput.files?.[0];
+    fileInput.value = "";
+    if (!file) return;
+    void file.text().then((text) => {
+      if (importConfig(text)) {
+        applyImportedConfig(renderers);
+        showToast("Settings imported");
+      } else {
+        showToast("Couldn't import — not a valid config file");
+      }
+    });
+  });
+  importBtn.addEventListener("click", () => fileInput.click());
+
+  row.append(exportBtn, importBtn, fileInput);
+  return row;
+}
+
 function close(): void {
   if (overlay) {
     overlay.remove();
     overlay = null;
     tooltipController = null;
   }
+  // Drop any half-finished capture so its global listeners don't linger.
+  activeShortcutCapture?.();
 }
 
 const TOOLTIP_GAP = 6;
@@ -595,6 +990,7 @@ export function openSettings(): void {
         case "radio": el = buildRadio(item, renderers); break;
         case "toggle": el = buildToggle(item, renderers); break;
         case "slider": el = buildSlider(item, renderers); break;
+        case "text": el = buildText(item, renderers); break;
       }
       body.appendChild(el);
     }
@@ -611,6 +1007,14 @@ export function openSettings(): void {
   // Gamma Check Cycle group
   body.appendChild(buildGroupLabel("Gamma Check Cycle", GAMMA_CYCLE_TOOLTIP));
   body.appendChild(buildOrderedList(GAMMA_PRESET_IDS, GAMMA_PRESET_LABELS, "gammaCycle", renderers));
+
+  // Shortcuts editor
+  body.appendChild(buildGroupLabel("Shortcuts", SHORTCUTS_TOOLTIP));
+  body.appendChild(buildShortcutsEditor(renderers));
+
+  // Backup (import / export)
+  body.appendChild(buildGroupLabel("Backup", BACKUP_TOOLTIP));
+  body.appendChild(buildBackupSection(renderers));
 
   // Footer
   const footer = document.createElement("div");

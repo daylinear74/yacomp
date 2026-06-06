@@ -6,6 +6,37 @@ import { lut } from "./lut";
 import { GAMMA_MISMATCH_CHECK_PRESETS, gammaMismatchCheckExponent } from "./gamma-check";
 import { getShadowRoot } from "../ui/shadow";
 
+// Chroma preview neutral: the limited-range luma midpoint (Y=128) expressed as
+// a full-range display-RGB level, so the colour residual rides over a
+// perceptually neutral grey rather than mathematical 0.5.
+const CHROMA_NEUTRAL_RGB = (128 - 16) / 219;
+
+function matrixRows(values: number[][]): string {
+  return values.map((row) => row.map(String).join(" ")).join(" ");
+}
+
+// Y′ luma as full-range display RGB (no studio-swing compression): the
+// Rec.709/2020 weighted sum written identically to R, G and B.
+function lumaMatrix(kr: number, kg: number, kb: number): string {
+  const row = [kr, kg, kb, 0, 0];
+  return matrixRows([
+    row,
+    row,
+    row,
+    [0, 0, 0, 1, 0],
+  ]);
+}
+
+// Chroma residual (input − luma) over the neutral grey above, full range.
+function chromaMatrix(kr: number, kg: number, kb: number): string {
+  return matrixRows([
+    [1 - kr, -kg, -kb, 0, CHROMA_NEUTRAL_RGB],
+    [-kr, 1 - kg, -kb, 0, CHROMA_NEUTRAL_RGB],
+    [-kr, -kg, 1 - kb, 0, CHROMA_NEUTRAL_RGB],
+    [0, 0, 0, 1, 0],
+  ]);
+}
+
 function gammaMismatchCheckFilterDefs(): string {
   return GAMMA_MISMATCH_CHECK_PRESETS.map((preset) => {
     const exponent = gammaMismatchCheckExponent(preset.id).toFixed(6);
@@ -37,12 +68,8 @@ function gammaMismatchCheckFilterDefs(): string {
   }).join("");
 }
 
-function createFilterDefs(): SVGSVGElement {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.id = "_scf_defs_";
-  svg.style.cssText =
-    "position:fixed;width:0;height:0;overflow:hidden;pointer-events:none;z-index:-9999";
-  svg.innerHTML = `<defs>
+export function svgFilterDefsMarkup(): string {
+  return `<defs>
     <filter id="scf-s1" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
       <feComponentTransfer>
         <feFuncR type="table" tableValues="${lut.s1.r}"/>
@@ -68,22 +95,30 @@ function createFilterDefs(): SVGSVGElement {
     </filter>
     <filter id="scf-luma709" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
       <feColorMatrix type="matrix"
-        values="0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0 0 0 1 0"/>
+        values="${lumaMatrix(0.2126, 0.7152, 0.0722)}"/>
     </filter>
     <filter id="scf-luma2020" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
       <feColorMatrix type="matrix"
-        values="0.2627 0.6780 0.0593 0 0 0.2627 0.6780 0.0593 0 0 0.2627 0.6780 0.0593 0 0 0 0 0 1 0"/>
+        values="${lumaMatrix(0.2627, 0.6780, 0.0593)}"/>
     </filter>
     <filter id="scf-chroma709" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
       <feColorMatrix type="matrix"
-        values="0.7874 -0.7152 -0.0722 0 0.5 -0.2126 0.2848 -0.0722 0 0.5 -0.2126 -0.7152 0.9278 0 0.5 0 0 0 1 0"/>
+        values="${chromaMatrix(0.2126, 0.7152, 0.0722)}"/>
     </filter>
     <filter id="scf-chroma2020" color-interpolation-filters="sRGB" x="0%" y="0%" width="100%" height="100%">
       <feColorMatrix type="matrix"
-        values="0.7373 -0.6780 -0.0593 0 0.5 -0.2627 0.3220 -0.0593 0 0.5 -0.2627 -0.6780 0.9407 0 0.5 0 0 0 1 0"/>
+        values="${chromaMatrix(0.2627, 0.6780, 0.0593)}"/>
     </filter>
     ${gammaMismatchCheckFilterDefs()}
   </defs>`;
+}
+
+function createFilterDefs(): SVGSVGElement {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.id = "_scf_defs_";
+  svg.style.cssText =
+    "position:fixed;width:0;height:0;overflow:hidden;pointer-events:none;z-index:-9999";
+  svg.innerHTML = svgFilterDefsMarkup();
   return svg;
 }
 
