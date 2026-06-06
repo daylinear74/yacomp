@@ -55,3 +55,6 @@ copilot-*
 # === Local fixture scrape dumps (curation source, never committed) ===
 yacomp-fixtures-*/
 yacomp-torrents-fixtures-*/
+
+# === Local benchmark / scratch images & probes (never committed) ===
+sample_images/
