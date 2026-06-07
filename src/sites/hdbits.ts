@@ -3,7 +3,7 @@
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
 import { injectCSS, injectTriggerLinkCSS } from "../ui/css";
-import { hdbitsImageClick } from "../config";
+import { hdbitsImageClick, hdbitsManualAllThreads } from "../config";
 import { getGrids, hdbFull } from "../grid";
 import type { Grid, GridCell } from "../grid";
 import { hasVsOrPipe, splitNames, looksLikeNames } from "../grid/names";
@@ -337,6 +337,28 @@ function isHDBitsForumPage(): boolean {
   return Boolean(document.querySelector('h1 a[href^="/forums/"], h1 a[href*="hdbits.org/forums/"]'));
 }
 
+// Pure predicate over the H1 breadcrumb's forum anchors, kept DOM-free so the
+// comparison-thread rule is unit-testable.
+export function forumAnchorsAreComparison(
+  anchors: { href: string; text: string }[],
+): boolean {
+  return anchors.some(
+    (a) => /[?&]forumid=40\b/.test(a.href) || a.text.trim() === "Comparisons",
+  );
+}
+
+// A comparison thread breadcrumbs to the "Comparisons" forum (forumid=40), e.g.
+//   <h1>…<a href="/forums/viewforum?forumid=40">Comparisons</a> &gt; [Comparisons] …</h1>
+export function isHDBitsComparisonThread(): boolean {
+  const h1 = document.querySelector("h1");
+  if (!h1) return false;
+  const anchors = Array.from(
+    h1.querySelectorAll<HTMLAnchorElement>('a[href*="viewforum"]'),
+    (a) => ({ href: a.getAttribute("href") || "", text: a.textContent || "" }),
+  );
+  return forumAnchorsAreComparison(anchors);
+}
+
 function injectForumManualCSS(): void {
   if (document.getElementById(FORUM_MANUAL_CSS_ID)) return;
   const style = document.createElement("style");
@@ -576,6 +598,8 @@ function clearForumTitleHighlight(): void {
 
 function addForumManualComparisonControl(): void {
   if (!isHDBitsForumPage() || document.getElementById(FORUM_MANUAL_PANEL_ID)) return;
+  // Default to comparison-forum threads only; the "all threads" setting opts in everywhere.
+  if (!isHDBitsComparisonThread() && !hdbitsManualAllThreads()) return;
   const title = document.querySelector("h1");
   if (!title) return;
 

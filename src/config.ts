@@ -71,6 +71,9 @@ export interface YacompConfig {
   // What clicking an HDBits comparison image does: open the yacomp viewer at
   // that shot, or leave HDBits' native behavior (open the full image).
   hdbitsImageClick: "viewer" | "native";
+  // Whether the HDBits forum custom-comparison builder appears in every thread,
+  // or (default) only in Comparisons-forum threads.
+  hdbitsManualAllThreads: boolean;
   // The PTP grid toggle's label style: a preset glyph/word pair, or "custom"
   // to use the free-text labels below.
   ptpGridToggleStyle: "grid" | "triangles" | "text" | "custom";
@@ -112,6 +115,7 @@ export const DEFAULTS: Readonly<YacompConfig> = {
   ptpGridImageSize: "thumbnail" as const,
   ptpGridClick: "viewer" as const,
   hdbitsImageClick: "viewer" as const,
+  hdbitsManualAllThreads: false,
   ptpGridToggleStyle: "grid" as const,
   ptpGridToggleCollapsed: "▦",
   ptpGridToggleExpanded: "▦",
@@ -237,6 +241,10 @@ export function validate(raw: Record<string, unknown>): YacompConfig {
       raw.hdbitsImageClick === "viewer" || raw.hdbitsImageClick === "native"
         ? raw.hdbitsImageClick
         : DEFAULTS.hdbitsImageClick,
+    hdbitsManualAllThreads:
+      typeof raw.hdbitsManualAllThreads === "boolean"
+        ? raw.hdbitsManualAllThreads
+        : DEFAULTS.hdbitsManualAllThreads,
     ptpGridToggleStyle:
       raw.ptpGridToggleStyle === "grid" || raw.ptpGridToggleStyle === "triangles" ||
       raw.ptpGridToggleStyle === "text" || raw.ptpGridToggleStyle === "custom"
@@ -297,6 +305,7 @@ export function uiHideDelay(): number { return config.uiHideDelay; }
 export function ptpGridImageSize(): "thumbnail" | "full" { return config.ptpGridImageSize; }
 export function ptpGridClick(): "viewer" | "tab" { return config.ptpGridClick; }
 export function hdbitsImageClick(): "viewer" | "native" { return config.hdbitsImageClick; }
+export function hdbitsManualAllThreads(): boolean { return config.hdbitsManualAllThreads; }
 export function ptpGridToggleStyle(): "grid" | "triangles" | "text" | "custom" { return config.ptpGridToggleStyle; }
 export function ptpGridToggleCollapsed(): string { return config.ptpGridToggleCollapsed; }
 export function ptpGridToggleExpanded(): string { return config.ptpGridToggleExpanded; }

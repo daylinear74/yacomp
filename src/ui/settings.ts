@@ -214,6 +214,12 @@ const GROUPS: SettingGroup[] = [
         ],
       },
       {
+        type: "toggle",
+        key: "hdbitsManualAllThreads",
+        label: "Custom comparison everywhere",
+        tooltip: "Show the HDBits forum custom-comparison builder in every thread. Off (default): only in Comparisons-forum threads.",
+      },
+      {
         type: "radio",
         key: "ptpGridToggleStyle",
         label: "PTP grid button",
