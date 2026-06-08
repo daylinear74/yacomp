@@ -1100,6 +1100,10 @@ function isTorrentDescriptionContainer(container: Element): boolean {
   return !!details?.contains(container);
 }
 
+function isTheFarmTorrentDescription(container: Element): boolean {
+  return isTorrentDescriptionContainer(container) && hasTorrentReleaseGroup(/-TheFarm\b/i);
+}
+
 /** Comparison-thread OP fallback: a comparison is a CONTIGUOUS image block, so
  *  when the whole-container reshape fails (stray example screenshots scattered
  *  through a "Hidden text" spoiler, then the real grid — 80070), retry on the
@@ -1769,6 +1773,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   if (!collected) return null;
   if (shouldSuppressShowhideGrid(container)) return null;
   let { groups, groupLabels, groupLabelEls, groupLeadingBreaks } = collected;
+  if (isTheFarmTorrentDescription(container)) return torrentViewerGalleryFallback(container, groups, groupLabelEls);
   const trailingGalleries: Grid[] = [];
 
   const earlyTotal = groups.flat().length;

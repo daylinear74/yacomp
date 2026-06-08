@@ -326,6 +326,17 @@ test("hdbits: large-gap trailing screenshots split for any uploader", async ({ p
   await expect(page.locator("._scf_comp_row")).toHaveCount(2);
 });
 
+test("hdbits: TheFarm torrent screenshots stay a click-only viewer", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/175-torrent-desc-thefarm-gallery-not-comparison");
+  await waitForHdbitsReady(page);
+
+  await expect(page.locator("._scf_comp_link")).toHaveCount(0);
+  await page.locator('img[src*="g175a"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(4);
+});
+
 test("hdbits: Show comparison link sits immediately before the image run", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/158-torrent-desc-comparison-note-before-images");
