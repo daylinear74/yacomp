@@ -62,6 +62,31 @@ function readCases(): { file: string; meta: CaseMetadata }[] {
   });
 }
 
+function caseBody(file: string): string {
+  return readFileSync(join(CASES_DIR, file), "utf-8").replace(/^<!--[\s\S]*?-->/, "").trim();
+}
+
+function renderTorrentWithComment(description: string, comment: string): string {
+  const template = readFileSync("tests/fixtures/hdbits/templates/torrent.html", "utf-8");
+  const commentRow = `
+    <tr><td>
+      <p class="sub"><a href="#" name="comm1">#1</a> by <i>Anonymous</i></p>
+      <table class="main" width="100%" border="1" cellspacing="0" cellpadding="5">
+        <tbody><tr valign="top">
+          <td align="center" width="150"><div class="default_avatar"></div></td>
+          <td class="text">${comment}</td>
+        </tr></tbody>
+      </table>
+    </td></tr>
+  `;
+
+  return template
+    .replace(/\{\{TORRENT_TITLE\}\}/g, "Mixed Torrent 2026 720p BluRay x264-Demo")
+    .replace(/\{\{DESCRIPTION\}\}/g, description)
+    .replace(/\{\{COMMENTS\}\}/g, commentRow)
+    .replace("</body>", '<script type="module" src="/hdbits-test-entry.js"></script></body>');
+}
+
 const STUB_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="90">' +
   '<rect width="160" height="90" fill="#3a3a3a"/></svg>';
@@ -145,6 +170,7 @@ test("hdbits: host trigger link inherits page color and opens the viewer", async
 
   const link = page.locator("._scf_comp_link").first();
   await expect(link).toHaveCount(1);
+  await expect(link).toHaveText("Show comparison");
   expect(await link.evaluate((element) => element.getRootNode() === document)).toBe(true);
   expect(
     await page.evaluate(() => {
@@ -197,7 +223,7 @@ test("hdbits: indivisible comparison-thread OP opens the drop-the-odd-shot picke
   await expect(page.locator("._scf_comp_row")).toHaveCount(18); // 36 shots / 2 cols
 });
 
-test("hdbits: ambiguous torrent gallery falls back to a 1-wide 'Show viewer', not bogus columns (Holubice 838405)", async ({ page }) => {
+test("hdbits: ambiguous torrent gallery opens as a 1-wide viewer from image click only (Holubice 838405)", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/114-iconic-holubice-gallery");
   await page.waitForFunction(
@@ -206,16 +232,97 @@ test("hdbits: ambiguous torrent gallery falls back to a 1-wide 'Show viewer', no
     { timeout: 5000 },
   );
   // The 10 sample shots used to be invented into a 5-column comparison. Now:
-  // one "Show viewer" link (not "Show comparison"), opening a 1-wide gallery.
-  const link = page.locator("._scf_comp_link");
-  await expect(link).toHaveCount(1);
-  await expect(link).toHaveText("Show viewer");
-  await link.first().click();
+  // no button, and clicking any shot opens a 1-wide gallery viewer.
+  await expect(page.locator("._scf_comp_link")).toHaveCount(0);
+  await page.locator('img[src*="g01"]').click();
   await expect(page.locator("._scf_comp")).toBeVisible();
   await expect(page.locator("._scf_comp_row")).toHaveCount(10); // 1 column → 10 rows
 });
 
-test("hdbits: sibling heading sections place triggers under matching titles", async ({ page }) => {
+test("hdbits: plain torrent Screens blocks open as a 1-wide viewer from image click only", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/152-torrent-desc-release-screens-not-comparison");
+  await waitForHdbitsReady(page);
+
+  await expect(page.locator("._scf_comp_link")).toHaveCount(0);
+  await page.locator('img[src*="g152a"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(4);
+});
+
+test("hdbits: BDInfo quote between prose and screenshots breaks false comparison names (Haram 2014)", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/157-torrent-desc-haram-bdinfo-before-screens-gallery");
+  await waitForHdbitsReady(page);
+
+  await expect(page.locator("._scf_comp_link")).toHaveCount(0);
+  await page.locator('img[src*="haram01"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(6);
+});
+
+test("hdbits: Dariush trailing screenshots open as a click-only viewer", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/162-torrent-desc-dariush-trailing-screenshots");
+  await waitForHdbitsReady(page);
+
+  await expect(page.locator("._scf_comp_link")).toHaveCount(1);
+  await page.locator('img[src*="g162x"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(2);
+});
+
+test("hdbits: Show comparison link sits immediately before the image run", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/158-torrent-desc-comparison-note-before-images");
+  await waitForHdbitsReady(page);
+
+  const link = page.locator("._scf_comp_link");
+  await expect(link).toHaveCount(1);
+  await expect(link).toHaveText("Show comparison");
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const trigger = document.querySelector("._scf_comp_link");
+        const firstImage = document.querySelector('img[src*="note01"]');
+        if (!trigger || !firstImage) return null;
+        const range = document.createRange();
+        range.setStartAfter(trigger);
+        range.setEndBefore(firstImage.closest("a") ?? firstImage);
+        return range.toString().trim();
+      }),
+    )
+    .toBe("");
+});
+
+test("hdbits: torrent description viewer is isolated from comment images", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.route("**/hdbits/case/_mixed-desc-comment-images", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: renderTorrentWithComment(
+        caseBody("152-torrent-desc-release-screens-not-comparison.html"),
+        `
+          Somebody posted unrelated frames in a comment:<br>
+          <a href="https://img.hdbits.org/cmt-plain-a"><img src="https://t.hdbits.org/cmt-plain-a.jpg"></a>
+          <a href="https://img.hdbits.org/cmt-plain-b"><img src="https://t.hdbits.org/cmt-plain-b.jpg"></a><br>
+        `,
+      ),
+    }),
+  );
+  await page.goto("/hdbits/case/_mixed-desc-comment-images");
+  await waitForHdbitsReady(page);
+
+  await expect(page.locator("._scf_comp_link")).toHaveCount(0);
+  const descriptionCell = page.locator("#details td", { has: page.locator('img[src*="g152a"]') });
+  await expect(descriptionCell.locator("._scf_comp_link")).toHaveCount(0);
+
+  await descriptionCell.locator('img[src*="g152a"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(4);
+});
+
+test("hdbits: sibling heading sections place triggers before matching image runs", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/115-torrent-desc-sibling-heading-sections");
   await page.waitForFunction(
@@ -227,27 +334,38 @@ test("hdbits: sibling heading sections place triggers under matching titles", as
   await expect(page.locator("._scf_comp_link")).toHaveCount(2);
   const placement = await page.evaluate(() =>
     [...document.querySelectorAll<HTMLAnchorElement>("._scf_comp_link")].map((link) => {
-      const parent = link.parentElement;
-      const title = parent
-        ?.querySelector("strong")
-        ?.textContent
-        ?.replace(/\s+/g, " ")
-        .trim() ?? null;
+      let next: Node | null = link.nextSibling;
+      while (next && (next.nodeName === "BR" || (next.nodeType === 3 && !(next.textContent || "").trim()))) {
+        next = next.nextSibling;
+      }
+      const img = next instanceof HTMLAnchorElement
+        ? next.querySelector("img")
+        : next instanceof HTMLImageElement
+          ? next
+          : null;
+      const range = document.createRange();
+      if (img) {
+        range.setStartAfter(link);
+        range.setEndBefore(img.closest("a") ?? img);
+      }
       return {
-        title,
-        linksInTitleBlock: parent?.querySelectorAll("._scf_comp_link").length ?? 0,
+        firstImage: img?.getAttribute("src") ?? null,
+        textBeforeFirstImage: img ? range.toString().trim() : null,
+        linksInImageBlock: link.parentElement?.querySelectorAll("._scf_comp_link").length ?? 0,
       };
     }),
   );
 
   expect(placement).toEqual([
     {
-      title: "Source vs Filtered(Deband and Deblock) vs Encode",
-      linksInTitleBlock: 1,
+      firstImage: "https://t.hdbits.org/sibling-a-1.jpg",
+      textBeforeFirstImage: "",
+      linksInImageBlock: 1,
     },
     {
-      title: "Source vs Encode vs CtrlHD(USA) vs SKALiWAGZ(USA)",
-      linksInTitleBlock: 1,
+      firstImage: "https://t.hdbits.org/sibling-b-1.jpg",
+      textBeforeFirstImage: "",
+      linksInImageBlock: 1,
     },
   ]);
 });

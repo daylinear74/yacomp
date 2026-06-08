@@ -3,14 +3,17 @@ import { join, resolve, basename } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export type ReviewStatus = "pending" | "correct" | "wrong" | "deferred";
-export type ReviewKind = "gain" | "name" | "loss";
+export type ReviewKind = "gain" | "name" | "loss" | "locate" | "misplaced";
 export type ReviewScope = "all" | "torrents" | "non-torrents";
 export type GridNames = (string[] | null)[] | null;
+export type GridLocations = (string | null)[] | null;
 
 export interface SweepRow {
   id: string;
   grids: number;
   names?: GridNames;
+  links?: GridLocations;
+  legacyLinks?: GridLocations;
 }
 
 export interface GainReviewEntry {
@@ -24,6 +27,8 @@ export interface GainReviewEntry {
   delta: number;
   baselineNames: GridNames;
   newNames: GridNames;
+  baselineLinks: GridLocations;
+  newLinks: GridLocations;
 }
 
 export interface GainMark {
@@ -103,6 +108,20 @@ const REVIEW_FILES: Record<ReviewKind, {
     marks: "loss-review-marks.json",
     summary: "loss-review-summary.json",
   },
+  locate: {
+    title: "HDBits LOCATE Review",
+    html: "locate-review.html",
+    json: "locate-review.json",
+    marks: "locate-review-marks.json",
+    summary: "locate-review-summary.json",
+  },
+  misplaced: {
+    title: "HDBits MISPLACED Review",
+    html: "misplaced-review.html",
+    json: "misplaced-review.json",
+    marks: "misplaced-review-marks.json",
+    summary: "misplaced-review-summary.json",
+  },
 };
 
 function readJsonFile<T>(path: string, fallback: T): T {
@@ -148,6 +167,24 @@ function namesChanged(previous: GridNames, next: GridNames): boolean {
   return JSON.stringify(previous ?? null) !== JSON.stringify(next ?? null);
 }
 
+function rowLinksForBaseline(previous: SweepRow, next: SweepRow): GridLocations {
+  return previous.links ?? next.legacyLinks ?? null;
+}
+
+function linksChanged(previous: SweepRow, next: SweepRow): boolean {
+  const baselineLinks = rowLinksForBaseline(previous, next);
+  const newLinks = next.links ?? null;
+  if (!baselineLinks || !newLinks) return false;
+  return JSON.stringify(baselineLinks) !== JSON.stringify(newLinks);
+}
+
+function hasCurrentNonAdjacentLink(row: SweepRow): boolean {
+  return (row.links ?? []).some((link) =>
+    !!link &&
+    !link.startsWith("before-image:") &&
+    !link.startsWith("missing:"));
+}
+
 function buildReviewEntries(
   options: BuildEntriesOptions,
   include: (previous: SweepRow, next: SweepRow) => boolean,
@@ -173,6 +210,8 @@ function buildReviewEntries(
       delta: next.grids - previous.grids,
       baselineNames: previous.names ?? null,
       newNames: next.names ?? null,
+      baselineLinks: rowLinksForBaseline(previous, next),
+      newLinks: next.links ?? null,
     });
   }
 
@@ -196,6 +235,18 @@ export function buildNameReviewEntries(options: BuildEntriesOptions): GainReview
 
 export function buildLossReviewEntries(options: BuildEntriesOptions): GainReviewEntry[] {
   return buildReviewEntries(options, (previous, next) => next.grids < previous.grids);
+}
+
+export function buildLocateReviewEntries(options: BuildEntriesOptions): GainReviewEntry[] {
+  return buildReviewEntries(options, (previous, next) =>
+    next.grids === previous.grids &&
+    !namesChanged(previous.names ?? null, next.names ?? null) &&
+    linksChanged(previous, next),
+  );
+}
+
+export function buildMisplacedReviewEntries(options: BuildEntriesOptions): GainReviewEntry[] {
+  return buildReviewEntries(options, (_previous, next) => next.grids > 0 && hasCurrentNonAdjacentLink(next));
 }
 
 export function isTorrentFixtureId(id: string): boolean {
@@ -411,7 +462,7 @@ function renderGainReviewHtml(payload: ReviewPayload): string {
     }
 
     function renderChangeFilter() {
-      const changes = [...new Set(ENTRIES.map((entry) => entry.baselineGrids + "->" + entry.newGrids))]
+      const changes = [...new Set(ENTRIES.map(changeKey))]
         .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
       for (const value of changes) {
         const option = document.createElement("option");
@@ -429,8 +480,15 @@ function renderGainReviewHtml(payload: ReviewPayload): string {
         row.className = "row";
         row.dataset.id = entry.id;
         row.dataset.status = mark.status;
-        row.dataset.change = entry.baselineGrids + "->" + entry.newGrids;
-        row.dataset.text = (entry.id + " " + (entry.originalUrl || "") + " " + JSON.stringify(entry.newNames) + " " + mark.note).toLowerCase();
+        row.dataset.change = changeKey(entry);
+        row.dataset.text = (
+          entry.id + " " +
+          (entry.originalUrl || "") + " " +
+          JSON.stringify(entry.newNames) + " " +
+          JSON.stringify(entry.newLinks) + " " +
+          JSON.stringify(entry.baselineLinks) + " " +
+          mark.note
+        ).toLowerCase();
         const localLink = location.protocol.startsWith("http")
           ? "/case?id=" + encodeURIComponent(entry.id)
           : entry.fileUri;
@@ -440,8 +498,8 @@ function renderGainReviewHtml(payload: ReviewPayload): string {
         row.innerHTML = \`
           <div class="meta">
             <span class="idx">#\${index + 1}</span>
-            <span class="badge">\${entry.baselineGrids} &rarr; \${entry.newGrids}</span>
-            <span class="delta \${entry.delta < 0 ? "negative" : ""}">\${formatDelta(entry.delta)}</span>
+            <span class="badge">\${escapeHtml(changeKey(entry))}</span>
+            <span class="delta \${entry.delta < 0 ? "negative" : ""}">\${REVIEW_KIND === "locate" ? "moved" : REVIEW_KIND === "misplaced" ? "misplaced" : formatDelta(entry.delta)}</span>
             \${entry.exists ? "" : '<span class="missing">missing</span>'}
           </div>
           <h2>\${escapeHtml(entry.shortName)}</h2>
@@ -465,7 +523,16 @@ function renderGainReviewHtml(payload: ReviewPayload): string {
           <details>
             <summary>Baseline names</summary>
             <pre>\${escapeHtml(JSON.stringify(entry.baselineNames, null, 2))}</pre>
-          </details>\`;
+          </details>
+          \${entry.newLinks || entry.baselineLinks ? \`
+            <details open>
+              <summary>New locations</summary>
+              <pre>\${escapeHtml(JSON.stringify(entry.newLinks, null, 2))}</pre>
+            </details>
+            <details>
+              <summary>Baseline locations</summary>
+              <pre>\${escapeHtml(JSON.stringify(entry.baselineLinks, null, 2))}</pre>
+            </details>\` : ""}\`;
         list.append(row);
       });
     }
@@ -620,6 +687,12 @@ function renderGainReviewHtml(payload: ReviewPayload): string {
       return delta > 0 ? "+" + delta : String(delta);
     }
 
+    function changeKey(entry) {
+      if (REVIEW_KIND === "locate") return "locate";
+      if (REVIEW_KIND === "misplaced") return "misplaced";
+      return entry.baselineGrids + "->" + entry.newGrids;
+    }
+
     function escapeHtml(value) {
       return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
     }
@@ -654,7 +727,11 @@ function buildPayload(kind: ReviewKind, options: WriteOptions = {}): ReviewPaylo
     ? buildGainReviewEntries({ repoRoot, baselineRows, newRows })
     : kind === "loss"
       ? buildLossReviewEntries({ repoRoot, baselineRows, newRows })
-      : buildNameReviewEntries({ repoRoot, baselineRows, newRows });
+      : kind === "locate"
+        ? buildLocateReviewEntries({ repoRoot, baselineRows, newRows })
+        : kind === "misplaced"
+          ? buildMisplacedReviewEntries({ repoRoot, baselineRows, newRows })
+          : buildNameReviewEntries({ repoRoot, baselineRows, newRows });
   const files = REVIEW_FILES[kind];
   const previousMarks = readMarksFile(join(scratchDir, files.marks));
   const marks = mergeGainMarks(entries, previousMarks, now);
@@ -692,6 +769,14 @@ export function writeLossReviewFiles(options: WriteOptions = {}): ReviewPayload 
   return writeReviewFiles("loss", options);
 }
 
+export function writeLocateReviewFiles(options: WriteOptions = {}): ReviewPayload {
+  return writeReviewFiles("locate", options);
+}
+
+export function writeMisplacedReviewFiles(options: WriteOptions = {}): ReviewPayload {
+  return writeReviewFiles("misplaced", options);
+}
+
 function readPayloadFromDisk(kind: ReviewKind, scratchDir: string, scope: ReviewScope = "all"): ReviewPayload {
   const files = REVIEW_FILES[kind];
   const entries = readJsonFile<GainReviewEntry[]>(join(scratchDir, files.json), []);
@@ -719,6 +804,8 @@ async function serveGainReview(
   writeGainReviewFiles({ ...options, repoRoot, scratchDir });
   writeNameReviewFiles({ ...options, repoRoot, scratchDir });
   writeLossReviewFiles({ ...options, repoRoot, scratchDir });
+  writeLocateReviewFiles({ ...options, repoRoot, scratchDir });
+  writeMisplacedReviewFiles({ ...options, repoRoot, scratchDir });
 
   const server = Bun.serve({
     hostname,
@@ -737,6 +824,16 @@ async function serveGainReview(
       }
       if (url.pathname === "/loss" || url.pathname === `/${REVIEW_FILES.loss.html}`) {
         return new Response(renderGainReviewHtml(readPayloadFromDisk("loss", scratchDir, reviewScopeFromUrl(url))), {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+      }
+      if (url.pathname === "/locate" || url.pathname === `/${REVIEW_FILES.locate.html}`) {
+        return new Response(renderGainReviewHtml(readPayloadFromDisk("locate", scratchDir, reviewScopeFromUrl(url))), {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+      }
+      if (url.pathname === "/misplaced" || url.pathname === `/${REVIEW_FILES.misplaced.html}`) {
+        return new Response(renderGainReviewHtml(readPayloadFromDisk("misplaced", scratchDir, reviewScopeFromUrl(url))), {
           headers: { "content-type": "text/html; charset=utf-8" },
         });
       }
@@ -788,7 +885,9 @@ async function serveGainReview(
         const gainPayload = readPayloadFromDisk("gain", scratchDir);
         const namePayload = readPayloadFromDisk("name", scratchDir);
         const lossPayload = readPayloadFromDisk("loss", scratchDir);
-        if (![...gainPayload.entries, ...namePayload.entries, ...lossPayload.entries].some((entry) => entry.id === id)) {
+        const locatePayload = readPayloadFromDisk("locate", scratchDir);
+        const misplacedPayload = readPayloadFromDisk("misplaced", scratchDir);
+        if (![...gainPayload.entries, ...namePayload.entries, ...lossPayload.entries, ...locatePayload.entries, ...misplacedPayload.entries].some((entry) => entry.id === id)) {
           return new Response("Unknown review id", { status: 404 });
         }
         const absPath = resolve(repoRoot, id);
@@ -807,6 +906,11 @@ async function serveGainReview(
   console.log(`HDBits gain review: ${origin}/gain`);
   console.log(`HDBits name review: ${origin}/name`);
   console.log(`HDBits loss review: ${origin}/loss`);
+  console.log(`HDBits locate review: ${origin}/locate`);
+  console.log(`HDBits misplaced review: ${origin}/misplaced`);
+  (globalThis as typeof globalThis & { __yacompReviewServer?: typeof server }).__yacompReviewServer = server;
+  setInterval(() => { void server.port; }, 60_000);
+  await new Promise<never>(() => {});
 }
 
 function reviewKindFromUrl(url: URL): ReviewKind {
@@ -814,7 +918,7 @@ function reviewKindFromUrl(url: URL): ReviewKind {
 }
 
 function reviewKindFromValue(value: string | null): ReviewKind {
-  return value === "name" || value === "loss" ? value : "gain";
+  return value === "name" || value === "loss" || value === "locate" || value === "misplaced" ? value : "gain";
 }
 
 function reviewScopeFromUrl(url: URL): ReviewScope {
@@ -846,7 +950,7 @@ if (import.meta.main) {
     });
   } else {
     const kinds: ReviewKind[] = Bun.argv.includes("--all")
-      ? ["gain", "name", "loss"]
+      ? ["gain", "name", "loss", "locate", "misplaced"]
       : [reviewKindFromValue(argValue("--kind=", "gain"))];
     for (const kind of kinds) {
       const payload = writeReviewFiles(kind, { repoRoot, scratchDir, baselineFile, newFile });

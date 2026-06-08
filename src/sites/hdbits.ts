@@ -35,6 +35,45 @@ function makeShowComparisonLink(label = "Show comparison"): HTMLAnchorElement {
   return link;
 }
 
+function firstGridNode(grid: Grid): Node | null {
+  const first = grid.rows[0]?.[0];
+  return first?.a ?? first?.img ?? null;
+}
+
+function previousMeaningfulSibling(node: Node): Node | null {
+  for (let previous = node.previousSibling; previous; previous = previous.previousSibling) {
+    if (previous.nodeType === Node.TEXT_NODE && !(previous.textContent || "").trim()) continue;
+    if (previous.nodeName === "BR") continue;
+    return previous;
+  }
+  return null;
+}
+
+function isExistingComparisonLink(node: Node | null): node is HTMLAnchorElement {
+  return node instanceof HTMLAnchorElement && node.classList.contains("_scf_comp_link");
+}
+
+function insertLinkBeforeGridImages(grid: Grid, link: HTMLAnchorElement): boolean {
+  const first = firstGridNode(grid);
+  const parent = first?.parentNode;
+  if (!first || !parent) return false;
+
+  const previousMeaningful = previousMeaningfulSibling(first);
+  if (isExistingComparisonLink(previousMeaningful) && previousMeaningful.parentNode === parent) {
+    previousMeaningful.replaceWith(link);
+    if (link.nextSibling === first) parent.insertBefore(document.createElement("br"), first);
+    return true;
+  }
+
+  const previous = first.previousSibling;
+  if (previous && previous.nodeName !== "BR") {
+    parent.insertBefore(document.createElement("br"), first);
+  }
+  parent.insertBefore(link, first);
+  parent.insertBefore(document.createElement("br"), first);
+  return true;
+}
+
 // One image-click handler per on-page image, across both the getGrids and
 // slow.pics-rescue paths.
 const wiredImages = new WeakSet<HTMLImageElement>();
@@ -148,10 +187,8 @@ export function setupHDBitsCore(): void {
   for (const { grid, container } of getGrids(slowpicsImgs)) {
     if (isSuppressedHDBitsGrid(grid)) continue;
     for (const cell of grid.rows.flat()) if (cell.img) claimed.add(cell.img);
-    // A 1-wide gallery (ambiguous torrent sample shots) reads "Show viewer", not
-    // "Show comparison" — it's a scroll-through viewer, not an A/B comparison.
-    const link = makeShowComparisonLink(grid.gallery ? "Show viewer" : "Show comparison");
-    link.addEventListener("click", async (e) => {
+    const link = makeShowComparisonLink();
+    const open = async (e: Event): Promise<void> => {
       e.preventDefault();
       await maybeEnrichNames(grid);
       // An indivisible set (a comparison-thread OP that dropped a shot, 80402)
@@ -159,10 +196,15 @@ export function setupHDBitsCore(): void {
       // the odd shot(s) to drop first, then build the comparison from the rest.
       if (grid.partial) openOrphanSelect(grid, container as HTMLElement, link);
       else buildComparison(grid, container as HTMLElement, link);
-    });
+    };
+    if (!grid.gallery) link.addEventListener("click", (e) => { void open(e); });
 
-    // Click any of this comparison's images to jump straight into the viewer.
+    // Click any recognized HDBits grid image to jump straight into the viewer.
+    // Gallery grids intentionally have no visible trigger button.
     attachGridImageClicks(grid, container as HTMLElement, link);
+    if (grid.gallery) continue;
+
+    if (insertLinkBeforeGridImages(grid, link)) continue;
 
     // Keep links for a BBCode hide block inside its hidden content. Inserting
     // after the external label breaks HDBits' adjacent-sibling toggle lookup.

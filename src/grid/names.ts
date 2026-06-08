@@ -72,6 +72,12 @@ const REGION_LEADING_TOKEN_RE = /^[A-Z]{2,4}\b/;
 const REGIONISH_RE = /^(?:[A-Z]{2,4}|[A-Z]{2,4}\s*\([^)]+\)|[A-Z]{2,4}\s+[A-Z]{2,4}|[A-Z]{2,4}\s+[A-Z]{2,4}\s*\([^)]+\))$/;
 const SOURCE_PAIR_RE = /^source\s+([A-Za-z0-9][A-Za-z0-9@._-]{1,30})$/i;
 
+export function isHDBitsRequestsMetadataElement(el: Element): boolean {
+  if (el.closest?.("table.table_requests")) return true;
+  const label = el.closest?.("div.label");
+  return /^requests$/i.test(label?.textContent?.trim() || "");
+}
+
 export interface NameLabelInfo {
   names: string[];
   anchorEl: Element;
@@ -676,6 +682,7 @@ export function hasExplicitComparison(text: string): boolean {
 export function nameLabelInfoFromBoldTags(tags: Element[]): NameLabelInfo | null {
   for (let i = tags.length - 1; i >= 0; i--) {
     if (tags[i].closest("a")) continue;
+    if (isHDBitsRequestsMetadataElement(tags[i])) continue;
     // Route through the single column-title predicate — this adds the
     // looksLikeProse guard the old inline check lacked (0117/1009 false positives).
     const names = asColumnTitles(tags[i].textContent!);
@@ -726,7 +733,8 @@ export function namesFromLeadingText(container: Element): string[] | null {
 
 /** Strategy 2b: color-coded span labels */
 export function namesFromColorSpans(container: Element): string[] | null {
-  const colorSpans = [...container.querySelectorAll('span[style*="color"]')];
+  const colorSpans = [...container.querySelectorAll('span[style*="color"]')]
+    .filter((span) => !isHDBitsRequestsMetadataElement(span));
   if (colorSpans.length >= 2) {
     const csNames = colorSpans
       .map((s) => s.textContent!.trim())
@@ -749,12 +757,13 @@ function leadingStructuredLabelNodes(container: Element): Element[] {
     if (el.querySelector("a img, img")) break;
 
     if (el.matches(STRUCTURED_LABEL_SELECTOR)) {
-      if (!isNonSourceLabel(el.textContent!.trim())) labels.push(el);
+      if (!isHDBitsRequestsMetadataElement(el) && !isNonSourceLabel(el.textContent!.trim())) labels.push(el);
       continue;
     }
 
     const nested = [...el.querySelectorAll(STRUCTURED_LABEL_SELECTOR)]
       .filter((candidate) => !candidate.parentElement?.closest(STRUCTURED_LABEL_SELECTOR))
+      .filter((candidate) => !isHDBitsRequestsMetadataElement(candidate))
       .filter((candidate) => !isNonSourceLabel(candidate.textContent!.trim()));
     labels.push(...nested);
   }
@@ -784,6 +793,7 @@ export function namesFromLeadingBoldTags(container: Element): string[] | null {
   for (const node of container.childNodes) {
     if (node.nodeName === "A" && (node as Element).querySelector("img")) break;
     if (node.nodeName === "STRONG" || node.nodeName === "B") {
+      if (isHDBitsRequestsMetadataElement(node as Element)) continue;
       const raw = node.textContent!.trim();
       const t = bolds.length ? raw.replace(/^\s*v(?:s\.?|\.)\s+/i, "") : raw;
       if (t && !isNonSourceLabel(t)) bolds.push(t);
@@ -796,7 +806,8 @@ export function namesFromLeadingBoldTags(container: Element): string[] | null {
 export function namesFromAncestors(container: Element): string[] | null {
   let el: Element | null = container;
   for (let up = 0; up < 8 && el; up++, el = el.parentElement) {
-    const tags = [...el.querySelectorAll("strong, b")];
+    const tags = [...el.querySelectorAll("strong, b")]
+      .filter((tag) => !isHDBitsRequestsMetadataElement(tag));
     if (tags.length) {
       const found = namesFromBoldTags(tags);
       if (found) return found;

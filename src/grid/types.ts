@@ -31,7 +31,7 @@ export interface Grid {
   // A single-column "viewer" rather than a comparison: a torrent-page image
   // block whose only candidate title was an unreliable quote/URL blob, so we
   // show the shots as a 1-wide gallery (numCols 1) instead of inventing columns
-  // (Holubice 838405). The trigger link reads "Show viewer", not "Show
-  // comparison".
+  // (Holubice 838405). There is no trigger link; clicking a recognized image
+  // opens the viewer directly.
   gallery?: boolean;
 }

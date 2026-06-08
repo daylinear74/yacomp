@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildGainReviewEntries,
+  buildLocateReviewEntries,
   buildLossReviewEntries,
+  buildMisplacedReviewEntries,
   buildNameReviewEntries,
   filterReviewEntriesByScope,
   originalUrlFromCaseHtml,
@@ -80,6 +82,100 @@ describe("HDBits gain review generation", () => {
     expect(entries[0].baselineGrids).toBe(2);
     expect(entries[0].newGrids).toBe(1);
     expect(entries[0].delta).toBe(-1);
+  });
+
+  test("lists location changes only when grid counts and names are unchanged", () => {
+    const entries = buildLocateReviewEntries({
+      repoRoot,
+      baselineRows: [
+        { id: "corpus/moved.html", grids: 1, names: [["Source", "Encode"]] },
+        { id: "corpus/name.html", grids: 1, names: [["Old"]] },
+        { id: "corpus/gain.html", grids: 0, names: null },
+        { id: "corpus/same.html", grids: 1, names: [["Same"]], links: ["after-anchor:Same"] },
+      ],
+      newRows: [
+        {
+          id: "corpus/moved.html",
+          grids: 1,
+          names: [["Source", "Encode"]],
+          links: ["before-image:g01"],
+          legacyLinks: ["after-anchor:Source vs Encode"],
+        },
+        {
+          id: "corpus/name.html",
+          grids: 1,
+          names: [["New"]],
+          links: ["before-image:g02"],
+          legacyLinks: ["after-anchor:Old"],
+        },
+        {
+          id: "corpus/gain.html",
+          grids: 1,
+          names: [["Gain"]],
+          links: ["before-image:g03"],
+          legacyLinks: ["container-start:div:"],
+        },
+        {
+          id: "corpus/same.html",
+          grids: 1,
+          names: [["Same"]],
+          links: ["after-anchor:Same"],
+          legacyLinks: ["after-anchor:Same"],
+        },
+      ],
+    });
+
+    expect(entries.map((entry) => entry.id)).toEqual(["corpus/moved.html"]);
+    expect(entries[0].baselineLinks).toEqual(["after-anchor:Source vs Encode"]);
+    expect(entries[0].newLinks).toEqual(["before-image:g01"]);
+  });
+
+  test("lists current non-adjacent comparison links for focused location review", () => {
+    const entries = buildMisplacedReviewEntries({
+      repoRoot,
+      baselineRows: [
+        { id: "corpus/top.html", grids: 1, names: [["Source", "Encode"]] },
+        { id: "corpus/image.html", grids: 1, names: [["Source", "Encode"]] },
+        { id: "corpus/none.html", grids: 0, names: null },
+        { id: "corpus/flaky.html", grids: -1, names: null },
+        { id: "corpus/missing.html", grids: 1, names: [["Source", "Encode"]] },
+      ],
+      newRows: [
+        {
+          id: "corpus/top.html",
+          grids: 1,
+          names: [["Source", "Encode"]],
+          links: ["container-start:div:"],
+        },
+        {
+          id: "corpus/image.html",
+          grids: 1,
+          names: [["Source", "Encode"]],
+          links: ["before-image:g01"],
+        },
+        {
+          id: "corpus/none.html",
+          grids: 0,
+          names: null,
+          links: null,
+        },
+        {
+          id: "corpus/flaky.html",
+          grids: 1,
+          names: [["Source", "Encode"]],
+          links: ["after-anchor:Source vs Encode"],
+        },
+        {
+          id: "corpus/missing.html",
+          grids: 1,
+          names: [["Source", "Encode"]],
+          links: ["missing:show-comparison"],
+        },
+      ],
+    });
+
+    expect(entries.map((entry) => entry.id)).toEqual(["corpus/top.html"]);
+    expect(entries[0].newLinks).toEqual(["container-start:div:"]);
   });
 
   test("filters review entries to torrent pages only", () => {

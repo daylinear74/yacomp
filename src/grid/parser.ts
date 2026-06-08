@@ -8,7 +8,7 @@ import {
   findComparisonNames, namesFromLeadingStructuredLabels, namesFromColorSpans, namesFromHeadings, isOriginalPost,
   namesFromSiblingInfo, looksLikeProse, asColumnTitles,
   foldTrailingSize, isNonSourceLabel, isUrlLabel, isFooterLabel, tidyName, isMultiSourceLabel,
-  stripAsymmetricTitle,
+  stripAsymmetricTitle, isHDBitsRequestsMetadataElement,
 } from "./names";
 
 // Re-exported from names.ts (moved there so name strategies can guard with it).
@@ -21,6 +21,35 @@ export function hdbFull(src: string): string {
     /\/\/t(\.hdbits\.org\/[^.?]+)\.jpg(\?.*)?$/i,
     "//i$1.png",
   );
+}
+
+function isHDBitsThumbUrl(src: string): boolean {
+  return /\/\/t\.hdbits\.org\//i.test(src);
+}
+
+function isHDBitsImagePageUrl(href: string): boolean {
+  return /\/\/img\.hdbits\.org\//i.test(href);
+}
+
+function hdbitsImageAnchor(img: HTMLImageElement): HTMLAnchorElement | null {
+  const anchor = img.closest("a[href]") as HTMLAnchorElement | null;
+  return anchor && isHDBitsImagePageUrl(anchor.href) ? anchor : null;
+}
+
+function isHDBitsScreenshotImage(img: HTMLImageElement): boolean {
+  if (isHDBitsRequestsMetadataElement(img)) return false;
+  return isHDBitsThumbUrl(img.currentSrc || img.src) || !!hdbitsImageAnchor(img);
+}
+
+function hasHDBitsScreenshotImage(container: Element): boolean {
+  return [...container.querySelectorAll<HTMLImageElement>("img")].some(isHDBitsScreenshotImage);
+}
+
+function hdbitsFullForImage(img: HTMLImageElement, anchor: HTMLAnchorElement | null): string {
+  const src = img.currentSrc || img.src;
+  if (isHDBitsThumbUrl(src)) return hdbFull(src);
+  if (anchor && isHDBitsImagePageUrl(anchor.href)) return hdbFull(anchor.href);
+  return src;
 }
 
 interface GroupsResult {
@@ -91,6 +120,51 @@ function hasUnclaimedScreenshotImage(container: Element, excludeImgs: Set<HTMLIm
   return screenshotImagesIn(container).some((img) => !excludeImgs.has(img));
 }
 
+function isPreImageTitleBarrier(node: ChildNode): boolean {
+  if (node.nodeType !== 1) return false;
+  const el = node as Element;
+  if (hasHDBitsScreenshotImage(el)) return false;
+  if (/^(?:TABLE|BLOCKQUOTE|PRE|UL|OL|HR)$/.test(el.nodeName)) return true;
+  if (el.matches("p.sub") && /\bquote\b/i.test(el.textContent || "")) return true;
+  return false;
+}
+
+function enforcesTorrentTitleDistance(container: Element): boolean {
+  return isTorrentPage() && isTorrentDescriptionContainer(container);
+}
+
+function hasBlockedComparisonSignalBeforeImages(container: Element): boolean {
+  if (!enforcesTorrentTitleDistance(container)) return false;
+  for (const node of container.childNodes) {
+    if (node.nodeType === 8) continue;
+    if (node.nodeName === "IMG") {
+      const img = node as HTMLImageElement;
+      if (isHDBitsScreenshotImage(img)) break;
+      continue;
+    }
+    if (node.nodeName === "A" && hasHDBitsScreenshotImage(node as Element)) break;
+    if (node.nodeType === 1 && hasHDBitsScreenshotImage(node as Element)) break;
+    if (!isPreImageTitleBarrier(node)) continue;
+    const text = node.textContent || "";
+    if (/\bvs?\.?\b|\||slow\.pics/i.test(text)) return true;
+  }
+  return false;
+}
+
+function clearPendingLabel(): {
+  pendingLabel: null;
+  pendingLabelEl: null;
+  pendingLabelInline: false;
+  pendingWideInlineGap: false;
+} {
+  return {
+    pendingLabel: null,
+    pendingLabelEl: null,
+    pendingLabelInline: false,
+    pendingWideInlineGap: false,
+  };
+}
+
 function showhideLabelElement(container: Element): Element | null {
   for (const child of container.children) {
     if (child.matches("label.label_showhide")) return child;
@@ -130,27 +204,70 @@ function collectGroups(container: Element, excludeImgs: Set<HTMLImageElement>): 
   let lineBroken = true;
   let pendingLabelInline = false;
   let pendingWideInlineGap = false;
+  const splitTextNodeBreaks = enforcesTorrentTitleDistance(container) && !!container.closest("pre");
+
+  const finishLineBreak = (): void => {
+    if (group.length) {
+      groups.push(group);
+      groupLabels.push(pendingLabel);
+      groupLabelEls.push(pendingLabelEl);
+      group = [];
+      pendingLabel = null;
+      pendingLabelEl = null;
+      pendingLabelInline = false;
+    }
+    lineBroken = true;
+    pendingWideInlineGap = false;
+  };
+
+  const absorbLabelText = (node: ChildNode, rawText: string, textNodeHasBreak = false): void => {
+    const t = node.nodeType === 3
+      ? rawText.trim()
+      : labelTextFromNode(node);
+    const label = t && !isNonSourceLabel(t) ? t.replace(/:$/, "").trim() : null;
+    if (label) {
+      // Accumulate one inline label line that is split across sibling nodes,
+      // including nested bold snippets inside a parenthetical release note.
+      const accumulate =
+        !!pendingLabel && !lineBroken && pendingLabelInline && isInlineLabelNode(node);
+      if (accumulate) {
+        const gap = pendingWideInlineGap ? "   " : " ";
+        pendingLabel = `${pendingLabel}${gap}${label}`.replace(/\s+([),.:;!?])/g, "$1");
+      } else {
+        pendingLabel = label;
+        pendingLabelEl = node;
+        pendingLabelInline = isInlineLabelNode(node);
+      }
+      pendingWideInlineGap = false;
+      lineBroken = false;
+    } else if (
+      pendingLabel &&
+      !lineBroken &&
+      pendingLabelInline &&
+      node.nodeType === 3 &&
+      !textNodeHasBreak &&
+      /^[\s\u00a0]+$/.test(rawText) &&
+      /(?:\u00a0| {3,}|\t)/.test(rawText)
+    ) {
+      pendingWideInlineGap = true;
+    }
+  };
 
   const visit = (node: ChildNode): void => {
     if (node.nodeName === "BR") {
-      if (group.length) {
-        groups.push(group);
-        groupLabels.push(pendingLabel);
-        groupLabelEls.push(pendingLabelEl);
-        group = [];
-        pendingLabel = null;
-        pendingLabelEl = null;
-        pendingLabelInline = false;
-        pendingWideInlineGap = false;
+      finishLineBreak();
+    } else if (splitTextNodeBreaks && node.nodeType === 3 && /[\r\n]/.test(node.textContent || "")) {
+      const parts = (node.textContent || "").split(/\r?\n/);
+      for (let i = 0; i < parts.length; i++) {
+        if (i > 0) finishLineBreak();
+        if (!group.length && parts[i]) absorbLabelText(node, parts[i], true);
       }
-      lineBroken = true;
     } else if (node.nodeName === "A") {
       const anchor = node as HTMLAnchorElement;
       const img = anchor.querySelector("img") as HTMLImageElement | null;
       if (img && !excludeImgs.has(img) && !isNonScreenshotImg(img)) {
-        const isHdb = /\/\/t\.hdbits\.org\//i.test(img.src);
-        const full = isHdb
-          ? hdbFull(img.src)
+        const full = isHDBitsScreenshotImage(img)
+          ? hdbitsFullForImage(img, anchor)
           : /\.(jpe?g|png|webp|gif|avif|bmp)(\?|$)/i.test(anchor.href)
             ? anchor.href
             : img.src;
@@ -177,42 +294,19 @@ function collectGroups(container: Element, excludeImgs: Set<HTMLImageElement>): 
           lineBroken = false;
         }
       }
+    } else if (
+      !group.length &&
+      pendingLabel &&
+      enforcesTorrentTitleDistance(container) &&
+      isPreImageTitleBarrier(node)
+    ) {
+      ({ pendingLabel, pendingLabelEl, pendingLabelInline, pendingWideInlineGap } = clearPendingLabel());
+      lineBroken = true;
     } else if (!group.length && node.nodeName !== "TABLE") {
       // Technical-information tables such as BDInfo contain slash-delimited
       // codec metadata; their last line is not a label for later screenshots.
       const rawText = node.nodeType === 3 ? node.textContent || "" : "";
-      const textNodeHasBreak = node.nodeType === 3 && /[\r\n]/.test(node.textContent || "");
-      const t = labelTextFromNode(node);
-      if (t) {
-        // Accumulate one inline label line that is split across sibling nodes,
-        // including nested bold snippets inside a parenthetical release note.
-        const accumulate =
-          !!pendingLabel && !lineBroken && pendingLabelInline && isInlineLabelNode(node);
-        if (accumulate) {
-          const gap = pendingWideInlineGap ? "   " : " ";
-          pendingLabel = `${pendingLabel}${gap}${t}`.replace(/\s+([),.:;!?])/g, "$1");
-        } else {
-          pendingLabel = t;
-          pendingLabelEl = node;
-          pendingLabelInline = isInlineLabelNode(node);
-        }
-        pendingWideInlineGap = false;
-        lineBroken = false;
-      } else if (
-        pendingLabel &&
-        !lineBroken &&
-        pendingLabelInline &&
-        node.nodeType === 3 &&
-        !textNodeHasBreak &&
-        /^[\s\u00a0]+$/.test(rawText) &&
-        /(?:\u00a0| {3,}|\t)/.test(rawText)
-      ) {
-        pendingWideInlineGap = true;
-      }
-      if (textNodeHasBreak) {
-        lineBroken = true;
-        pendingWideInlineGap = false;
-      }
+      absorbLabelText(node, rawText);
     }
   };
 
@@ -302,6 +396,73 @@ function buildMultiCompGrids(
   }
 
   return null;
+}
+
+function buildLeadingComparisonBeforeFooterGrid(
+  container: Element,
+  groups: GridCell[][],
+  groupLabels: (string | null)[],
+  groupLabelEls: (ChildNode | null)[],
+  leadCmp?: { names: string[]; anchorEl: ChildNode | null; reliable: boolean } | null,
+): Grid[] | null {
+  if (!enforcesTorrentTitleDistance(container)) return null;
+  let startIndex = groupLabels.findIndex((label) => !!label && !!asColumnTitles(label));
+  let names = startIndex >= 0 ? asColumnTitles(groupLabels[startIndex] || "") : null;
+  let anchorEl = startIndex >= 0 ? groupLabelEls[startIndex] : null;
+
+  if (names && !hasExplicitComparison(groupLabels[startIndex] || "")) return null;
+  if (!names && leadCmp?.reliable) {
+    startIndex = 0;
+    names = leadCmp.names;
+    anchorEl = leadCmp.anchorEl;
+  }
+  if (!names) {
+    const bold = leadingBoldLabelInfo(container);
+    if (bold) {
+      startIndex = 0;
+      names = bold.names;
+      anchorEl = bold.anchorEl;
+    }
+  }
+  if (!names) return null;
+  const footerIndex = groupLabels.findIndex((label, index) =>
+    index > startIndex && !!label && isFooterLabel(label));
+  let endIndex = footerIndex;
+  if (endIndex <= startIndex) {
+    endIndex = startIndex;
+    while (endIndex < groups.length && groups[endIndex].length === names.length) endIndex++;
+    if (endIndex - startIndex < 2 || endIndex >= groups.length) return null;
+    if (!hasFooterLabelBetweenGroups(groups, endIndex)) return null;
+  }
+
+  const sectionGroups = groups.slice(startIndex, endIndex);
+  const imgs = sectionGroups.flat();
+  if (imgs.length < names.length || imgs.length % names.length !== 0) return null;
+  const shaped = reshapeGrid(sectionGroups, imgs, names);
+  if (!shaped) return null;
+  return [{
+    rows: shaped.gridRows,
+    numCols: shaped.numCols,
+    names: finalizeNames(names),
+    anchorEl,
+  }];
+}
+
+function hasFooterLabelBetweenGroups(groups: GridCell[][], endIndex: number): boolean {
+  const prev = groups[endIndex - 1]?.at(-1);
+  const next = groups[endIndex]?.[0];
+  const from = prev?.a ?? prev?.img;
+  const to = next?.a ?? next?.img;
+  if (!from || !to) return false;
+  try {
+    const range = document.createRange();
+    range.setStartAfter(from);
+    range.setEndBefore(to);
+    const text = range.toString().replace(/\s+/g, " ").trim();
+    return !!text && isFooterLabel(text);
+  } catch {
+    return false;
+  }
 }
 
 function singleGroupLabelInfo(groupLabels: (string | null)[], groupLabelEls: (ChildNode | null)[]): { names: string[]; anchorEl: ChildNode | null } | null {
@@ -418,8 +579,8 @@ function leadingDetailsLinkLabelInfo(
     }
     if (node.nodeType === 1) {
       const el = node as Element;
-      if (el.matches("a") && el.querySelector('img[src*="//t.hdbits.org/"]')) break;
-      if (el.querySelector('a img[src*="//t.hdbits.org/"], img[src*="//t.hdbits.org/"]')) break;
+      if (el.matches("a") && hasHDBitsScreenshotImage(el)) break;
+      if (hasHDBitsScreenshotImage(el)) break;
       addDetailsAnchors(el);
       current().text += el.textContent || "";
       if (/^(?:DIV|P|PRE|TABLE|BLOCKQUOTE|UL|OL)$/.test(el.nodeName)) pushLine();
@@ -473,19 +634,20 @@ const VS_CONTINUATION_RE = /^\s*(?:vs?\.|\|)\s/i;
  *  encode</strong>"), and vs-lists split across <br> lines (2022: "DE … vs.
  *  KR …<br>vs. US …"). */
 function leadingComparisonNames(container: Element): { names: string[]; anchorEl: ChildNode | null; reliable: boolean } | null {
-  type Line = { text: string; el: ChildNode | null; external: boolean };
-  const mk = (): Line => ({ text: "", el: null, external: false });
+  type Line = { text: string; el: ChildNode | null; external: boolean; barrier: boolean };
+  const mk = (): Line => ({ text: "", el: null, external: false, barrier: false });
   const raw: Line[] = [mk()];
+  const enforceDistance = enforcesTorrentTitleDistance(container);
   for (const node of container.childNodes) {
     if (node.nodeType === 8) continue;
     if (node.nodeName === "BR") { raw.push(mk()); continue; }
     if (node.nodeName === "IMG") {
       const img = node as HTMLImageElement;
-      if (/\/\/t\.hdbits\.org\//i.test(img.src)) break;
+      if (isHDBitsScreenshotImage(img)) break;
       continue;
     }
-    if (node.nodeName === "A" && (node as Element).querySelector('img[src*="//t.hdbits.org/"]')) break;
-    if (node.nodeType === 1 && (node as Element).querySelector('img[src*="//t.hdbits.org/"]')) break;
+    if (node.nodeName === "A" && hasHDBitsScreenshotImage(node as Element)) break;
+    if (node.nodeType === 1 && hasHDBitsScreenshotImage(node as Element)) break;
     const cur = raw[raw.length - 1];
     if (node.nodeName === "A") {
       const at = (node.textContent || "").trim();
@@ -512,6 +674,7 @@ function leadingComparisonNames(container: Element): { names: string[]; anchorEl
       }
       continue;
     }
+    if (enforceDistance && isPreImageTitleBarrier(node)) raw[raw.length - 1].barrier = true;
     cur.text += node.textContent || "";
     // Anchor the "Show comparison" link to the LAST element of the heading line
     // (e.g. the trailing "US" source), so it is inserted AFTER the whole title
@@ -530,6 +693,7 @@ function leadingComparisonNames(container: Element): { names: string[]; anchorEl
     if (lines.length && text && (VS_CONTINUATION_RE.test(ln.text) || /\bv(?:s\.?|\.)\s*$/i.test(prevText))) {
       lines[lines.length - 1].text += ` ${ln.text.trim()}`;
       lines[lines.length - 1].external ||= ln.external;
+      lines[lines.length - 1].barrier ||= ln.barrier;
       // Anchor on the LAST element of the merged heading (the trailing source),
       // so the "Show comparison" link follows the whole title (74778).
       if (ln.el) lines[lines.length - 1].el = ln.el;
@@ -542,9 +706,12 @@ function leadingComparisonNames(container: Element): { names: string[]; anchorEl
   // and the screenshots — those screenshots belong to that external comparison
   // (007), not to this heading.
   let sawExternalAfter = false;
+  let sawBarrierAfter = false;
+  let interludeLinesAfter = 0;
   for (let i = lines.length - 1; i >= 0; i--) {
     if (lines[i].external) { sawExternalAfter = true; continue; }
-    if (sawExternalAfter) continue;
+    if (lines[i].barrier) { sawBarrierAfter = true; continue; }
+    if (sawExternalAfter || sawBarrierAfter) continue;
     // Drop a showhide affordance marker ("Source vs Encode [show]" → "… Encode").
     const t = lines[i].text.replace(/\s*\[(?:show|hide)\]\s*/gi, " ").trim();
     if (!t) continue;
@@ -573,7 +740,12 @@ function leadingComparisonNames(container: Element): { names: string[]; anchorEl
       }
       continue;
     }
-    if (!VS_BAR_RE.test(t) || isStructuralReleaseTitleLabel(t)) continue;
+    if (!VS_BAR_RE.test(t) || isStructuralReleaseTitleLabel(t)) {
+      interludeLinesAfter++;
+      if (enforceDistance && interludeLinesAfter > 2) sawBarrierAfter = true;
+      continue;
+    }
+    if (enforceDistance && interludeLinesAfter > 2) continue;
     const names = asColumnTitles(t);
     if (!names) {
       const rejectedNames = splitNames(t);
@@ -695,11 +867,17 @@ function isComparisonThread(): boolean {
   return !!document.querySelector('h1 a[href*="forumid=40"]');
 }
 
-/** True on a torrent-detail page (vs a forum thread). Used to scope the
- *  "show an ambiguous image block as a 1-wide gallery" fallback to torrent
- *  descriptions/comments, where a flat sample gallery is common. */
+/** True on a torrent-detail page (vs a forum thread). */
 function isTorrentPage(): boolean {
   return !!document.querySelector("div.torrent-title, table#details");
+}
+
+/** The no-title 1-wide gallery fallback is only for the torrent description
+ *  body. Torrent comments can still produce real comparisons, but plain comment
+ *  screenshots must not get folded into the description viewer path. */
+function isTorrentDescriptionContainer(container: Element): boolean {
+  const details = document.querySelector("table#details");
+  return !!details?.contains(container);
 }
 
 /** Comparison-thread OP fallback: a comparison is a CONTIGUOUS image block, so
@@ -844,6 +1022,85 @@ function macpCommaCaptionNames(container: Element, groups: GridCell[][], total: 
   return match ? [match[1], match[2]] : null;
 }
 
+function torrentTitleText(): string {
+  const title = document.querySelector("div.torrent-title h1")?.textContent || document.title || "";
+  return title.replace(/\s+/g, " ").trim();
+}
+
+function hasTorrentReleaseGroup(group: RegExp): boolean {
+  if (!isTorrentPage()) return false;
+  return group.test(torrentTitleText());
+}
+
+function asd87ArrowNamesFromLabel(label: string): string[] | null {
+  if (!hasTorrentReleaseGroup(/-ASD87\b/i)) return null;
+  const normalized = label.replace(/\s+/g, " ").trim();
+  const match = normalized.match(/\bSource\b\s*[》>]{3,}\s*\bEncode\b(?:\s*-{3,}\s*(.+))?$/i);
+  if (!match) return null;
+  const third = match[1]?.replace(/^-+/, "").trim();
+  if (third) return ["Source", "Encode", tidyName(third)];
+  return ["Source", "Encode"];
+}
+
+function asd87ArrowLabelInfo(
+  groupLabels: (string | null)[],
+  groupLabelEls: (ChildNode | null)[],
+  total: number,
+): { names: string[]; anchorEl: ChildNode | null } | null {
+  for (let i = 0; i < Math.min(groupLabels.length, 2); i++) {
+    const label = groupLabels[i];
+    if (!label) continue;
+    const names = asd87ArrowNamesFromLabel(label);
+    if (names) return { names, anchorEl: groupLabelEls[i] };
+  }
+  return null;
+}
+
+function buildAsd87ArrowComparisonGrid(collected: GroupsResult): Grid[] | null {
+  if (!hasTorrentReleaseGroup(/-ASD87\b/i)) return null;
+  for (let i = 0; i < collected.groupLabels.length; i++) {
+    const label = collected.groupLabels[i];
+    const firstLen = collected.groups[i]?.length ?? 0;
+    if (!label || firstLen < 2) continue;
+
+    let end = i + 1;
+    while (end < collected.groups.length && collected.groups[end].length === firstLen) end++;
+    const sectionGroups = collected.groups.slice(i, end);
+    const sectionImages = sectionGroups.flat();
+    const names = asd87ArrowNamesFromLabel(label);
+    if (!names) continue;
+
+    const shaped = reshapeGrid(sectionGroups, sectionImages, names);
+    if (!shaped) continue;
+    return [{
+      rows: shaped.gridRows,
+      numCols: shaped.numCols,
+      names: finalizeNames(names),
+      anchorEl: collected.groupLabelEls[i],
+    }];
+  }
+  return null;
+}
+
+function hasUntitledGenericFallbackUploader(): boolean {
+  return hasTorrentReleaseGroup(/-(?:ENDSkY|Rose3Thorn)\b/i);
+}
+
+function isEndskyTechnicalSizeNames(names: string[]): boolean {
+  if (!hasUntitledGenericFallbackUploader()) return false;
+  const joined = names.join(" ");
+  return /\b(?:encode|remux)\s+size\s*:/i.test(joined) && /\b(?:GiB|MiB|Mb\/s|Kb\/s)\b/i.test(joined);
+}
+
+function endskyGenericNamesForUntitledGrid(groups: GridCell[][], total: number): string[] | null {
+  if (!hasUntitledGenericFallbackUploader() || total < 4) return null;
+  const stableCols = stableGridColumnCount(groups);
+  if (stableCols && stableCols >= 2 && total % stableCols === 0) return genericSourceNames(stableCols);
+  if (total % 3 === 0) return genericSourceNames(3);
+  if (total % 2 === 0) return genericSourceNames(2);
+  return null;
+}
+
 function leadingStructuredLabelInfo(container: Element, groups: GridCell[][]): { names: string[]; anchorEl: Element } | null {
   const numCols = stableGridColumnCount(groups);
   if (!numCols) return null;
@@ -916,6 +1173,7 @@ function hasTorrentLogPollutedNames(names: string[]): boolean {
 function torrentAmbiguousGalleryFallback(
   container: Element,
   groups: GridCell[][],
+  groupLabelEls: (ChildNode | null)[],
   total: number,
   ambiguousTitle: boolean,
   excludeImgs: Set<HTMLImageElement>,
@@ -924,7 +1182,48 @@ function torrentAmbiguousGalleryFallback(
   const hasClaimedImageInContainer = screenshotImagesIn(container).some((img) => excludeImgs.has(img));
   const adjacentSlowPics = hasAdjacentSlowPicsLinkBeforeImage(container, groups[0]?.[0]?.img);
   if (hasClaimedImageInContainer || adjacentSlowPics) return null;
-  return [{ rows: groups.flat().map((c) => [c]), numCols: 1, names: null, anchorEl: null, gallery: true }];
+  return torrentViewerGalleryFallback(container, groups, groupLabelEls);
+}
+
+function galleryAnchorBeforeImages(groups: GridCell[][], groupLabelEls: (ChildNode | null)[]): Node | null {
+  for (let i = 0; i < groupLabelEls.length; i++) {
+    if (groups[i]?.length && groupLabelEls[i]) return groupLabelEls[i];
+  }
+
+  const firstNode = groups[0]?.[0]?.a ?? groups[0]?.[0]?.img ?? null;
+  if (!firstNode) return null;
+
+  let previous = firstNode.previousSibling;
+  while (previous && previous.nodeType === 3 && !(previous.textContent || "").trim()) {
+    const beforeWhitespace = previous.previousSibling;
+    if (!beforeWhitespace) return previous;
+    previous = beforeWhitespace;
+  }
+  return previous;
+}
+
+function torrentViewerGalleryFallback(
+  container: Element,
+  groups: GridCell[][],
+  groupLabelEls: (ChildNode | null)[],
+): Grid[] | null {
+  if (!isTorrentPage() || !isTorrentDescriptionContainer(container)) return null;
+  const total = groups.flat().length;
+  if (total < 2) return null;
+  const firstImg = groups[0]?.[0]?.img;
+  if (
+    hasAdjacentSlowPicsLinkBeforeImage(container, firstImg) ||
+    hasAdjacentFooterSlowPicsLinkBeforeImage(container, firstImg)
+  ) {
+    return null;
+  }
+  return [{
+    rows: groups.flat().map((c) => [c]),
+    numCols: 1,
+    names: null,
+    anchorEl: galleryAnchorBeforeImages(groups, groupLabelEls),
+    gallery: true,
+  }];
 }
 
 function isNightOfTheCometCurationShape(): boolean {
@@ -1084,13 +1383,44 @@ function hasInlineImageFormattingWrapper(container: Element): boolean {
 }
 
 function trimTrailingGroupsUntilDivisible(collected: GroupsResult, numCols: number): GroupsResult {
+  return trimTrailingGroupsUntilDivisibleWithRemainder(collected, numCols).collected;
+}
+
+function trimTrailingGroupsUntilDivisibleWithRemainder(
+  collected: GroupsResult,
+  numCols: number,
+): { collected: GroupsResult; remainder: GroupsResult | null } {
   let { groups, groupLabels, groupLabelEls } = collected;
+  const remainderGroups: GridCell[][] = [];
+  const remainderLabels: (string | null)[] = [];
+  const remainderLabelEls: (ChildNode | null)[] = [];
   while (groups.length > 1 && groups.flat().length % numCols !== 0) {
+    remainderGroups.unshift(groups[groups.length - 1]);
+    remainderLabels.unshift(groupLabels[groupLabels.length - 1]);
+    remainderLabelEls.unshift(groupLabelEls[groupLabelEls.length - 1]);
     groups = groups.slice(0, -1);
     groupLabels = groupLabels.slice(0, -1);
     groupLabelEls = groupLabelEls.slice(0, -1);
   }
-  return { groups, groupLabels, groupLabelEls };
+  return {
+    collected: { groups, groupLabels, groupLabelEls },
+    remainder: remainderGroups.length
+      ? { groups: remainderGroups, groupLabels: remainderLabels, groupLabelEls: remainderLabelEls }
+      : null,
+  };
+}
+
+function galleryGridFromGroups(collected: GroupsResult | null): Grid | null {
+  if (!collected) return null;
+  const cells = collected.groups.flat();
+  if (cells.length < 2) return null;
+  return {
+    rows: cells.map((cell) => [cell]),
+    numCols: 1,
+    names: null,
+    anchorEl: galleryAnchorBeforeImages(collected.groups, collected.groupLabelEls),
+    gallery: true,
+  };
 }
 
 function hasRejectedLeadingColumnTitle(container: Element): boolean {
@@ -1171,6 +1501,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   if (!collected) return null;
   if (shouldSuppressShowhideGrid(container)) return null;
   let { groups, groupLabels, groupLabelEls } = collected;
+  const trailingGalleries: Grid[] = [];
 
   const earlyTotal = groups.flat().length;
   const earlyLeadCmp = leadingComparisonNames(container);
@@ -1218,13 +1549,19 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   const multiComp = buildMultiCompGrids(groups, groupLabels, groupLabelEls, !hasWholeContainerLeadCmp);
   if (multiComp && (!hasWholeContainerLeadCmp || multiComp.length > 1)) return multiComp;
 
+  const leadingBeforeFooter = buildLeadingComparisonBeforeFooterGrid(container, groups, groupLabels, groupLabelEls, earlyLeadCmp);
+  if (leadingBeforeFooter) return leadingBeforeFooter;
+
+  const asd87ArrowGrid = buildAsd87ArrowComparisonGrid(collected);
+  if (asd87ArrowGrid) return asd87ArrowGrid;
+
   collected = trimTrailingFooterSection(trimTrailingLabeledSectionAfterSingleGridLabel(collected));
   ({ groups, groupLabels, groupLabelEls } = collected);
   if (hasAdjacentFooterSlowPicsLinkBeforeImage(container, groups[0]?.[0]?.img)) {
     return null;
   }
   if (isTorrentScreensGalleryOnly(container, groups, groupLabels)) {
-    return null;
+    return torrentViewerGalleryFallback(container, groups, groupLabelEls);
   }
 
   // Prefer per-group text labels over page-level headings.
@@ -1246,12 +1583,27 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   let ambiguousTitle = false;
   let detailsLinkComparisonOnly = false;
   const leadCmp = earlyLeadCmp;
-  if (leadCmp && leadCmp.reliable && total % leadCmp.names.length === 0) {
+  const uploaderArrow = asd87ArrowLabelInfo(groupLabels, groupLabelEls, total);
+  if (uploaderArrow) {
+    names = uploaderArrow.names;
+    anchorEl = uploaderArrow.anchorEl;
+    forceGenericNames = isGenericSourceNames(names);
+  }
+  if (!names && leadCmp && leadCmp.reliable && total % leadCmp.names.length === 0 && !isEndskyTechnicalSizeNames(leadCmp.names)) {
     names = leadCmp.names;
     anchorEl = leadCmp.anchorEl;
-  } else if (leadCmp && !leadCmp.reliable) {
+  } else if (!names && leadCmp && isEndskyTechnicalSizeNames(leadCmp.names)) {
+    const generic = endskyGenericNamesForUntitledGrid(groups, total);
+    if (generic) {
+      names = generic;
+      anchorEl = null;
+      forceGenericNames = true;
+    }
+  } else if (!names && leadCmp && !leadCmp.reliable) {
     ambiguousTitle = true;
-  } else if (leadCmp && isTorrentPage() && hasSlowPicsLink(container)) {
+  } else if (!names && leadCmp && isTorrentPage() && hasSlowPicsLink(container)) {
+    ambiguousTitle = true;
+  } else if (!names && !leadCmp && hasBlockedComparisonSignalBeforeImages(container)) {
     ambiguousTitle = true;
   }
   if (!names && groupLabels.length >= 2 && groupLabels.every((l) => l)) {
@@ -1351,6 +1703,14 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     names = macpCommaCaptionNames(container, groups, total);
   }
   if (!names) {
+    const endskyGeneric = endskyGenericNamesForUntitledGrid(groups, total);
+    if (endskyGeneric) {
+      names = endskyGeneric;
+      anchorEl = null;
+      forceGenericNames = true;
+    }
+  }
+  if (!names) {
     const previous = previousSiblingColumnTitleInfo(container);
     if (previous && total % previous.names.length === 0) {
       names = previous.names;
@@ -1386,9 +1746,9 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
           groups.length === 1 &&
           total >= 2
         ) {
-          return [{ rows: groups[0].map((c) => [c]), numCols: 1, names: null, anchorEl: null, gallery: true }];
+          return torrentViewerGalleryFallback(container, groups, groupLabelEls);
         }
-        return cmpThreadLargestBlock(container, groups);
+        return torrentViewerGalleryFallback(container, groups, groupLabelEls) ?? cmpThreadLargestBlock(container, groups);
       }
     }
   }
@@ -1418,9 +1778,9 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
         groups.length === 1 &&
         total >= 2
       ) {
-        return [{ rows: groups[0].map((c) => [c]), numCols: 1, names: null, anchorEl: null, gallery: true }];
+        return torrentViewerGalleryFallback(container, groups, groupLabelEls);
       }
-      return null;
+      return torrentViewerGalleryFallback(container, groups, groupLabelEls);
     }
   }
   if (names && hasTorrentLogPollutedNames(names)) {
@@ -1439,6 +1799,14 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
       anchorEl = null;
     }
   }
+  if (names && total % names.length !== 0 && hasTorrentReleaseGroup(/-Dariush\b/i)) {
+    const trimmed = trimTrailingGroupsUntilDivisibleWithRemainder({ groups, groupLabels, groupLabelEls }, names.length);
+    collected = trimmed.collected;
+    const gallery = galleryGridFromGroups(trimmed.remainder);
+    if (gallery) trailingGalleries.push(gallery);
+    ({ groups, groupLabels, groupLabelEls } = collected);
+    total = groups.flat().length;
+  }
   if (names && total % names.length !== 0 && hasInlineImageFormattingWrapper(container)) {
     collected = trimTrailingGroupsUntilDivisible({ groups, groupLabels, groupLabelEls }, names.length);
     ({ groups, groupLabels, groupLabelEls } = collected);
@@ -1452,7 +1820,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     groups.length === 1 &&
     total >= 2
   ) {
-    return [{ rows: groups[0].map((c) => [c]), numCols: 1, names: null, anchorEl: null, gallery: true }];
+    return torrentViewerGalleryFallback(container, groups, groupLabelEls);
   }
   if (
     !names &&
@@ -1462,13 +1830,20 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     groups.length === 1 &&
     total >= 2
   ) {
-    return [{ rows: groups[0].map((c) => [c]), numCols: 1, names: null, anchorEl: null, gallery: true }];
+    return torrentViewerGalleryFallback(container, groups, groupLabelEls);
   }
   if (!names && isTorrentPage() && hasAdjacentSlowPicsLinkBeforeImage(container, groups[0]?.[0]?.img)) {
     return null;
   }
 
-  const ambiguousGallery = torrentAmbiguousGalleryFallback(container, groups, total, ambiguousTitle, excludeImgs);
+  const ambiguousGallery = torrentAmbiguousGalleryFallback(
+    container,
+    groups,
+    groupLabelEls,
+    total,
+    ambiguousTitle,
+    excludeImgs,
+  );
   if ((!names || isGenericSourceNames(names)) && ambiguousGallery) return ambiguousGallery;
 
   const shaped = reshapeGrid(groups, groups.flat(), names);
@@ -1482,9 +1857,9 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     const adjacentSlowPics = hasAdjacentSlowPicsLinkBeforeImage(container, groups[0]?.[0]?.img);
     if (ambiguousGallery) return ambiguousGallery;
     if (isTorrentPage() && hasSlowPicsLink(container) && !adjacentSlowPics && groups.length === 1 && total >= 2) {
-      return [{ rows: groups[0].map((c) => [c]), numCols: 1, names: null, anchorEl: null, gallery: true }];
+      return torrentViewerGalleryFallback(container, groups, groupLabelEls);
     }
-    return cmpThreadLargestBlock(container, groups);
+    return torrentViewerGalleryFallback(container, groups, groupLabelEls) ?? cmpThreadLargestBlock(container, groups);
   }
 
   // Fallback: match strong count to numCols
@@ -1520,12 +1895,12 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
       !forceGenericNames &&
       !allowGenericNamesForUntitledTorrentGrid(container, groups, groupLabels, detailsLinkComparisonOnly, ambiguousTitle)
     ) {
-      return null;
+      return torrentViewerGalleryFallback(container, groups, groupLabelEls);
     }
     finalNames = Array.from({ length: shaped.numCols }, (_, i) => `Source ${i + 1}`);
   }
 
-  return [{ rows: shaped.gridRows, numCols: shaped.numCols, names: finalNames, anchorEl }];
+  return [{ rows: shaped.gridRows, numCols: shaped.numCols, names: finalNames, anchorEl }, ...trailingGalleries];
 }
 
 let _grids: { grid: Grid; container: Element }[] | null = null;
@@ -1625,10 +2000,9 @@ function buildSplitGalleryGrid(run: Element[], excludeImgs: Set<HTMLImageElement
     const row: GridCell[] = [];
     for (const img of div.querySelectorAll<HTMLImageElement>("img")) {
       if (excludeImgs.has(img) || isNonScreenshotImg(img)) continue;
-      const anchor = img.closest("a");
-      const isHdb = /\/\/t\.hdbits\.org\//i.test(img.src);
-      const full = isHdb
-        ? hdbFull(img.src)
+      const anchor = hdbitsImageAnchor(img) ?? img.closest<HTMLAnchorElement>("a[href]");
+      const full = isHDBitsScreenshotImage(img)
+        ? hdbitsFullForImage(img, anchor)
         : anchor && /\.(jpe?g|png|webp|gif|avif|bmp)(\?|$)/i.test(anchor.href)
           ? anchor.href
           : img.src;
@@ -1686,11 +2060,10 @@ export function getGrids(preClaimed?: Set<HTMLImageElement>): { grid: Grid; cont
   // caller handles elsewhere (e.g. slow.pics-linked comparisons), so getGrids
   // skips them entirely.
   const claimed = new Set<HTMLImageElement>(preClaimed);
-  for (const img of document.querySelectorAll(
-    'img[src*="//t.hdbits.org/"]',
-  )) {
-    if (claimed.has(img as HTMLImageElement)) continue;
-    const a = img.closest("a");
+  for (const img of document.querySelectorAll<HTMLImageElement>("img")) {
+    if (!isHDBitsScreenshotImage(img)) continue;
+    if (claimed.has(img)) continue;
+    const a = hdbitsImageAnchor(img) ?? img.closest<HTMLAnchorElement>("a[href]");
     if (!a) continue;
     const c = a.parentElement;
     if (!c) continue;

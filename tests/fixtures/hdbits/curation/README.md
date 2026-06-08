@@ -108,12 +108,14 @@ It writes only gitignored review artifacts under `.scratch/`:
 - `gain-review.*` — rows where the current parser detects more grids.
 - `name-review.*` — rows where grid counts are unchanged but source names differ.
 - `loss-review.*` — rows where the current parser detects fewer grids.
+- `locate-review.*` — rows where grid counts and names are unchanged but the
+  `Show comparison` trigger moved.
 
 Each `*.marks.json` stores local review state (`correct`, `wrong`, `deferred`,
 `pending`) and each `*.summary.json` stores the current counts. These files are
 for local curation and should not be committed.
 
-Generate all three review pages from the repo root:
+Generate all four review pages from the repo root:
 
 ```
 bun tests/fixtures/hdbits/curation/gain-review.ts --all
@@ -147,6 +149,7 @@ Open:
 - `http://127.0.0.1:4187/gain`
 - `http://127.0.0.1:4187/name`
 - `http://127.0.0.1:4187/loss`
+- `http://127.0.0.1:4187/locate`
 
 Append `?scope=torrents` to show only torrent-page entries, for example
 `http://127.0.0.1:4187/name?scope=torrents`. When saving from a scoped page,

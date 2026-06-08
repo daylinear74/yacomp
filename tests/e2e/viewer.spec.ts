@@ -866,6 +866,28 @@ test("settings: hovering a help icon reveals its tooltip", async ({ page }) => {
   await expect(tooltip).toContainText("CSS pixels");
 });
 
+test("settings: HDBits image click writes config", async ({ page }) => {
+  await openViewer(page);
+  await openSettingsModal(page);
+
+  const row = page.locator("._scf_settings_row").filter({
+    has: page.locator("._scf_settings_label", { hasText: "HDBits image click" }),
+  });
+  await expect(row.getByRole("button", { name: "Viewer", exact: true })).toHaveClass(/_scf_selected/);
+
+  await row.getByRole("button", { name: "Native", exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as { __yacomp: { getConfig: () => { hdbitsImageClick: string } } })
+            .__yacomp.getConfig().hdbitsImageClick,
+      ),
+    )
+    .toBe("native");
+  await expect(row.getByRole("button", { name: "Native", exact: true })).toHaveClass(/_scf_selected/);
+});
+
 test("settings: mouseSwitch=false suppresses pointer-driven column switching", async ({
   page,
 }) => {
@@ -1238,7 +1260,12 @@ test("settings: Export downloads the config as JSON", async ({ page }) => {
 test("settings: Import restores settings from a file", async ({ page }) => {
   await openViewer(page);
   await openSettingsModal(page);
-  const cfg = JSON.stringify({ v: 2, toastDuration: 4800, closeBtnPosition: "left" });
+  const cfg = JSON.stringify({
+    v: 2,
+    toastDuration: 4800,
+    closeBtnPosition: "left",
+    hdbitsImageClick: "native",
+  });
   await page.locator("._scf_settings_backup input[type=file]").setInputFiles({
     name: "yacomp-config.json",
     mimeType: "application/json",
@@ -1253,6 +1280,9 @@ test("settings: Import restores settings from a file", async ({ page }) => {
       ),
     )
     .toBe(4800);
+
+  const row = page.locator("._scf_settings_row", { hasText: "HDBits image click" });
+  await expect(row.getByRole("button", { name: "Native", exact: true })).toHaveClass(/_scf_selected/);
 });
 
 test("settings: PTP custom-label inputs appear only under the Custom button style", async ({ page }) => {

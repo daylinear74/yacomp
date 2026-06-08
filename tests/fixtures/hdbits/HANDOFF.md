@@ -62,12 +62,14 @@ Build/verify: `bun run build` → `dist/yacomp.user.js`; `bun run verify`;
 
 ## The corpus sweep
 
-Validates every parser change against the 3,685 real bodies. It tests
-`getGrids()` ONLY — not the slow.pics rescue or the viewer. Each candidate
-carries its real H1 (`threadTitle`) / `torrentTitle`, and `fast-oracle` renders
-a forum case whose id is `post-N` (N>0) as a **reply** (an OP placeholder above
-it) so `isOriginalPost` is false and the H1-only-for-OP rule is graded honestly
-across the corpus's 732 replies. Run:
+Validates every parser change against the 3,685 real bodies. Grid counts and
+names come from `getGrids()`; the fast oracle also runs HDBits setup to record
+visible `Show comparison` trigger locations for `LOCATE` review. It does not
+exercise the viewer. Each candidate carries its real H1 (`threadTitle`) /
+`torrentTitle`, and `fast-oracle` renders a forum case whose id is `post-N`
+(N>0) as a **reply** (an OP placeholder above it) so `isOriginalPost` is false
+and the H1-only-for-OP rule is graded honestly across the corpus's 732 replies.
+Run:
 
 ```sh
 rm -f tests/fixtures/hdbits/curation/.scratch/new-out.json
@@ -99,6 +101,9 @@ inspect:
 
 - `.scratch/gain-review.html` / `.scratch/gain-review.json` for `GAIN` rows.
 - `.scratch/name-review.html` / `.scratch/name-review.json` for `NAME` rows.
+- `.scratch/loss-review.html` / `.scratch/loss-review.json` for `LOSS` rows.
+- `.scratch/locate-review.html` / `.scratch/locate-review.json` for `LOCATE`
+  rows.
 - `.scratch/*-review-marks.json` and `.scratch/*-review-summary.json` for the
   manual decisions.
 
@@ -108,7 +113,8 @@ Start the local review server if you need persistent marking:
 bun tests/fixtures/hdbits/curation/gain-review.ts --serve --port=4187
 ```
 
-Then open `http://localhost:4187/gain` and `http://localhost:4187/name`.
+Then open `http://localhost:4187/gain`, `http://localhost:4187/name`,
+`http://localhost:4187/loss`, and `http://localhost:4187/locate`.
 Opening the HTML files directly is useful for browsing, but only the local
 server writes review marks back to `.scratch/`.
 
@@ -119,6 +125,8 @@ Review semantics:
 - `NAME` means `new.grids == baseline.grids` and the parsed name arrays differ.
   `NAME` excludes gain/loss/flaky rows, so it is not double-counting the extra
   names created by `GAIN` rows.
+- `LOCATE` means grid counts and names are unchanged, but the visible
+  `Show comparison` trigger location changed.
 - Rows default to `correct`. Only mark a row `wrong` when the new grid or name
   is actually bad. The summary JSON files are the handoff artifact for the next
   agent.
