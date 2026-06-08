@@ -286,10 +286,27 @@ function hasUnclaimedScreenshotImage(container: Element, excludeImgs: Set<HTMLIm
   return screenshotImagesIn(container).some((img) => !excludeImgs.has(img));
 }
 
+function isShowhideTitleBarrier(el: Element): boolean {
+  const label = el.matches("label.label_showhide")
+    ? el
+    : el.querySelector("label.label_showhide");
+  const hidden = el.matches("div.div_showhide")
+    ? el
+    : el.querySelector("div.div_showhide");
+  if (!label || !hidden || hasHDBitsScreenshotImage(hidden)) return false;
+
+  const labelText = (label.textContent || "").replace(/\s*\[(?:show|hide)\]\s*/gi, " ").trim();
+  const hiddenText = hidden.textContent || "";
+  if (hidden.querySelector("pre, table, blockquote")) return true;
+  if (/\b(?:logs?|eac3to|mediainfo|bdinfo|script)\b/i.test(labelText)) return true;
+  return hiddenText.replace(/\s+/g, " ").trim().length > 500;
+}
+
 function isPreImageTitleBarrier(node: Node): boolean {
   if (node.nodeType !== 1) return false;
   const el = node as Element;
   if (hasHDBitsScreenshotImage(el)) return false;
+  if (isShowhideTitleBarrier(el)) return true;
   if (/^(?:TABLE|BLOCKQUOTE|PRE|UL|OL|HR)$/.test(el.nodeName)) return true;
   if (el.matches("p.sub") && /\b(?:quote|wrote)\b/i.test(el.textContent || "")) return true;
   if ([...el.querySelectorAll("p.sub")].some((sub) => /\b(?:quote|wrote)\b/i.test(sub.textContent || ""))) {
@@ -334,6 +351,22 @@ function hasBlockedComparisonSignalBeforeImages(container: Element): boolean {
     if (!isPreImageTitleBarrier(node)) continue;
     const text = node.textContent || "";
     if (/\bvs?\.?\b|\||slow\.pics/i.test(text)) return true;
+  }
+  return false;
+}
+
+function hasPreImageTitleBarrierBeforeFirstScreenshot(container: Element): boolean {
+  if (!enforcesTorrentTitleDistance(container)) return false;
+  for (const node of container.childNodes) {
+    if (node.nodeType === 8) continue;
+    if (node.nodeName === "IMG") {
+      const img = node as HTMLImageElement;
+      if (isHDBitsScreenshotImage(img)) break;
+      continue;
+    }
+    if (node.nodeName === "A" && hasHDBitsScreenshotImage(node as Element)) break;
+    if (node.nodeType === 1 && hasHDBitsScreenshotImage(node as Element)) break;
+    if (isPreImageTitleBarrier(node)) return true;
   }
   return false;
 }
@@ -728,6 +761,7 @@ function leadingBoldLabelInfo(container: Element): { names: string[]; anchorEl: 
   const bolds: Element[] = [];
   for (const node of container.childNodes) {
     if (node.nodeName === "A" && (node as Element).querySelector("img")) break;
+    if (isPreImageTitleBarrier(node)) return null;
     if (node.nodeName === "STRONG" || node.nodeName === "B") {
       const t = node.textContent!.trim();
       if (t && !isNonSourceLabel(t)) bolds.push(node as Element);
@@ -752,6 +786,7 @@ function leadingVsLabelInfo(container: Element): { names: string[]; anchorEl: El
     if (node.nodeType !== 1) continue;
     const el = node as Element;
     if (el.querySelector("img")) break;
+    if (isPreImageTitleBarrier(el)) return null;
     // Only a bold-ish inline heading qualifies — never a TABLE/P/DIV block
     // (e.g. a comma-laden BDInfo table would otherwise split into junk).
     if (!VS_LABEL_WRAPPER.has(el.nodeName)) continue;
@@ -1360,6 +1395,7 @@ function endskyGenericNamesForUntitledGrid(groups: GridCell[][], total: number):
 function leadingStructuredLabelInfo(container: Element, groups: GridCell[][]): { names: string[]; anchorEl: Element } | null {
   const numCols = stableGridColumnCount(groups);
   if (!numCols) return null;
+  if (hasPreImageTitleBarrierBeforeFirstScreenshot(container)) return null;
   return namesFromLeadingStructuredLabels(container, numCols);
 }
 
@@ -2042,7 +2078,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
       anchorEl = sibling.anchorEl;
     }
   }
-  if (!names) {
+  if (!names && !hasPreImageTitleBarrierBeforeFirstScreenshot(container)) {
     names = findComparisonNames(container);
   }
   if (!names && !detailsLinkComparisonOnly && !ambiguousTitle && hasRejectedLeadingColumnTitle(container)) {

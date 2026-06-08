@@ -272,6 +272,17 @@ test("hdbits: stale comparison link after a BDInfo quote is removed and images o
   await expect(page.locator("._scf_comp_row")).toHaveCount(4);
 });
 
+test("hdbits: showhide log between source list and screenshots breaks false comparison names", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/177-torrent-desc-showhide-log-before-screens-gallery");
+  await waitForHdbitsReady(page);
+
+  await expect(page.locator("._scf_comp_link")).toHaveCount(0);
+  await page.locator('img[src*="g177a"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(6);
+});
+
 test("hdbits: non-comparison external torrent screenshots open as a click-only viewer", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.route(/thumbs\d*\.imgbox\.com/, (route) =>
