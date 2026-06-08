@@ -304,6 +304,28 @@ test("hdbits: Dariush trailing screenshots open as a click-only viewer", async (
   await expect(page.locator("._scf_comp_row")).toHaveCount(2);
 });
 
+test("hdbits: Dariush remainder without a large gap stays a plain viewer", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/173-torrent-desc-dariush-no-large-gap-remainder");
+  await waitForHdbitsReady(page);
+
+  await expect(page.locator("._scf_comp_link")).toHaveCount(0);
+  await page.locator('img[src*="g173x"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(8);
+});
+
+test("hdbits: large-gap trailing screenshots split for any uploader", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/174-torrent-desc-generic-large-gap-remainder");
+  await waitForHdbitsReady(page);
+
+  await expect(page.locator("._scf_comp_link")).toHaveCount(1);
+  await page.locator('img[src*="g174x"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(2);
+});
+
 test("hdbits: Show comparison link sits immediately before the image run", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/158-torrent-desc-comparison-note-before-images");

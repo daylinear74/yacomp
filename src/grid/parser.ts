@@ -14,6 +14,107 @@ import {
 // Re-exported from names.ts (moved there so name strategies can guard with it).
 export { looksLikeProse };
 
+const MD5_S = [
+  7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+  5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+  4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+  6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21,
+] as const;
+
+const MD5_K = Array.from({ length: 64 }, (_, i) =>
+  Math.floor(Math.abs(Math.sin(i + 1)) * 2 ** 32) >>> 0);
+
+function utf8Bytes(input: string): number[] {
+  const bytes: number[] = [];
+  for (const ch of input) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (code <= 0x7f) {
+      bytes.push(code);
+    } else if (code <= 0x7ff) {
+      bytes.push(0xc0 | (code >> 6), 0x80 | (code & 0x3f));
+    } else if (code <= 0xffff) {
+      bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f));
+    } else {
+      bytes.push(
+        0xf0 | (code >> 18),
+        0x80 | ((code >> 12) & 0x3f),
+        0x80 | ((code >> 6) & 0x3f),
+        0x80 | (code & 0x3f),
+      );
+    }
+  }
+  return bytes;
+}
+
+function rotateLeft32(value: number, shift: number): number {
+  return ((value << shift) | (value >>> (32 - shift))) >>> 0;
+}
+
+function md5WordHex(word: number): string {
+  let out = "";
+  for (let shift = 0; shift < 32; shift += 8) {
+    out += ((word >>> shift) & 0xff).toString(16).padStart(2, "0");
+  }
+  return out;
+}
+
+function md5Hex(input: string): string {
+  const bytes = utf8Bytes(input);
+  const bitLen = bytes.length * 8;
+  bytes.push(0x80);
+  while (bytes.length % 64 !== 56) bytes.push(0);
+  for (let i = 0; i < 8; i++) bytes.push(Math.floor(bitLen / 2 ** (8 * i)) & 0xff);
+
+  let a0 = 0x67452301;
+  let b0 = 0xefcdab89;
+  let c0 = 0x98badcfe;
+  let d0 = 0x10325476;
+
+  for (let offset = 0; offset < bytes.length; offset += 64) {
+    const m: number[] = [];
+    for (let i = 0; i < 16; i++) {
+      const j = offset + i * 4;
+      m[i] = (bytes[j] | (bytes[j + 1] << 8) | (bytes[j + 2] << 16) | (bytes[j + 3] << 24)) >>> 0;
+    }
+
+    let a = a0;
+    let b = b0;
+    let c = c0;
+    let d = d0;
+    for (let i = 0; i < 64; i++) {
+      let f: number;
+      let g: number;
+      if (i < 16) {
+        f = (b & c) | (~b & d);
+        g = i;
+      } else if (i < 32) {
+        f = (d & b) | (~d & c);
+        g = (5 * i + 1) % 16;
+      } else if (i < 48) {
+        f = b ^ c ^ d;
+        g = (3 * i + 5) % 16;
+      } else {
+        f = c ^ (b | ~d);
+        g = (7 * i) % 16;
+      }
+      const nextD = c;
+      const nextC = b;
+      const nextB = (b + rotateLeft32((a + f + MD5_K[i] + m[g]) >>> 0, MD5_S[i])) >>> 0;
+      a = d;
+      b = nextB;
+      c = nextC;
+      d = nextD;
+    }
+
+    a0 = (a0 + a) >>> 0;
+    b0 = (b0 + b) >>> 0;
+    c0 = (c0 + c) >>> 0;
+    d0 = (d0 + d) >>> 0;
+  }
+
+  return md5WordHex(a0) + md5WordHex(b0) + md5WordHex(c0) + md5WordHex(d0);
+}
+
 export function hdbFull(src: string): string {
   const imagePage = src.match(/^(https?:)?\/\/img\.hdbits\.org\/([^/?#]+)(?:[?#].*)?$/i);
   if (imagePage) return `${imagePage[1] ?? ""}//i.hdbits.org/${imagePage[2]}.png`;
@@ -39,6 +140,17 @@ export function externalImageFullUrl(src: string, href?: string | null): string 
       const [, shard] = pixhostHost;
       const [, folder, file] = pixhostPath;
       return `${url.protocol}//img${shard}.pixhost.to/images/${folder}/${file}`;
+    }
+    const imagebamHost = url.hostname.match(/^thumbs(\d*)\.imagebam\.com$/i);
+    if (imagebamHost) {
+      const imagebamPath = url.pathname.match(/^\/[0-9a-f]{2}\/[0-9a-f]{2}\/[0-9a-f]{2}\/([^/]+)_t\.(jpe?g|png|gif)$/i);
+      if (imagebamPath) {
+        const [, id, ext] = imagebamPath;
+        const file = `${id}_o.${ext}`;
+        const hash = md5Hex(file);
+        return `${url.protocol}//images${imagebamHost[1]}.imagebam.com/${hash.slice(0, 2)}/${hash.slice(2, 4)}/${hash.slice(4, 6)}/${file}`;
+      }
+      return `${url.protocol}//images${imagebamHost[1]}.imagebam.com${url.pathname}`;
     }
   } catch {
     // Fall through to direct-image anchor handling below.
@@ -109,6 +221,7 @@ interface GroupsResult {
   groups: GridCell[][];
   groupLabels: (string | null)[];
   groupLabelEls: (ChildNode | null)[];
+  groupLeadingBreaks: number[];
 }
 
 function collectTextLines(node: ChildNode, lines: string[]): void {
@@ -285,6 +398,7 @@ function collectGroups(container: Element, excludeImgs: Set<HTMLImageElement>): 
   const groups: GridCell[][] = [];
   const groupLabels: (string | null)[] = [];
   const groupLabelEls: (ChildNode | null)[] = [];
+  const groupLeadingBreaks: number[] = [];
   let group: GridCell[] = [];
   let pendingLabel: string | null = null;
   let pendingLabelEl: ChildNode | null = null;
@@ -295,6 +409,8 @@ function collectGroups(container: Element, excludeImgs: Set<HTMLImageElement>): 
   let lineBroken = true;
   let pendingLabelInline = false;
   let pendingWideInlineGap = false;
+  let breaksSinceLastGroup = 0;
+  let currentGroupLeadingBreaks = 0;
   const splitTextNodeBreaks = enforcesTorrentTitleDistance(container) && !!container.closest("pre");
 
   const finishLineBreak = (): void => {
@@ -302,10 +418,15 @@ function collectGroups(container: Element, excludeImgs: Set<HTMLImageElement>): 
       groups.push(group);
       groupLabels.push(pendingLabel);
       groupLabelEls.push(pendingLabelEl);
+      groupLeadingBreaks.push(currentGroupLeadingBreaks);
       group = [];
       pendingLabel = null;
       pendingLabelEl = null;
       pendingLabelInline = false;
+      currentGroupLeadingBreaks = 0;
+      breaksSinceLastGroup = 1;
+    } else {
+      breaksSinceLastGroup++;
     }
     lineBroken = true;
     pendingWideInlineGap = false;
@@ -315,6 +436,7 @@ function collectGroups(container: Element, excludeImgs: Set<HTMLImageElement>): 
     const t = node.nodeType === 3
       ? rawText.trim()
       : labelTextFromNode(node);
+    if (t) breaksSinceLastGroup = 0;
     const label = t && !isNonSourceLabel(t) ? t.replace(/:$/, "").trim() : null;
     if (label) {
       // Accumulate one inline label line that is split across sibling nodes,
@@ -357,6 +479,10 @@ function collectGroups(container: Element, excludeImgs: Set<HTMLImageElement>): 
       const anchor = node as HTMLAnchorElement;
       const img = anchor.querySelector("img") as HTMLImageElement | null;
       if (img && !excludeImgs.has(img) && !isNonScreenshotImg(img)) {
+        if (!group.length) {
+          currentGroupLeadingBreaks = breaksSinceLastGroup;
+          breaksSinceLastGroup = 0;
+        }
         const full = isHDBitsScreenshotImage(img)
           ? hdbitsFullForImage(img, anchor)
           : /\.(jpe?g|png|webp|gif|avif|bmp)(\?|$)/i.test(anchor.href)
@@ -408,11 +534,12 @@ function collectGroups(container: Element, excludeImgs: Set<HTMLImageElement>): 
     groups.push(group);
     groupLabels.push(pendingLabel);
     groupLabelEls.push(pendingLabelEl);
+    groupLeadingBreaks.push(currentGroupLeadingBreaks);
   }
   if (!groups.length) return null;
   const allImages = groups.flat();
   if (allImages.length < 2) return null;
-  return { groups, groupLabels, groupLabelEls };
+  return { groups, groupLabels, groupLabelEls, groupLeadingBreaks };
 }
 
 /** When groups carry their own "X vs Y" / "X | Y" labels, each becomes its own
@@ -1468,6 +1595,7 @@ function trimTrailingLabeledSectionAfterSingleGridLabel(collected: GroupsResult)
     groups: collected.groups.slice(0, sectionIndex),
     groupLabels: collected.groupLabels.slice(0, sectionIndex),
     groupLabelEls: collected.groupLabelEls.slice(0, sectionIndex),
+    groupLeadingBreaks: collected.groupLeadingBreaks.slice(0, sectionIndex),
   };
 }
 
@@ -1479,6 +1607,7 @@ function trimTrailingFooterSection(collected: GroupsResult): GroupsResult {
     groups: collected.groups.slice(0, sectionIndex),
     groupLabels: collected.groupLabels.slice(0, sectionIndex),
     groupLabelEls: collected.groupLabelEls.slice(0, sectionIndex),
+    groupLeadingBreaks: collected.groupLeadingBreaks.slice(0, sectionIndex),
   };
 }
 
@@ -1490,6 +1619,7 @@ function trimToLeadingColumnRun(collected: GroupsResult, numCols: number): Group
     groups: collected.groups.slice(0, end),
     groupLabels: collected.groupLabels.slice(0, end),
     groupLabelEls: collected.groupLabelEls.slice(0, end),
+    groupLeadingBreaks: collected.groupLeadingBreaks.slice(0, end),
   };
 }
 
@@ -1516,21 +1646,30 @@ function trimTrailingGroupsUntilDivisibleWithRemainder(
   numCols: number,
 ): { collected: GroupsResult; remainder: GroupsResult | null } {
   let { groups, groupLabels, groupLabelEls } = collected;
+  let { groupLeadingBreaks } = collected;
   const remainderGroups: GridCell[][] = [];
   const remainderLabels: (string | null)[] = [];
   const remainderLabelEls: (ChildNode | null)[] = [];
+  const remainderLeadingBreaks: number[] = [];
   while (groups.length > 1 && groups.flat().length % numCols !== 0) {
     remainderGroups.unshift(groups[groups.length - 1]);
     remainderLabels.unshift(groupLabels[groupLabels.length - 1]);
     remainderLabelEls.unshift(groupLabelEls[groupLabelEls.length - 1]);
+    remainderLeadingBreaks.unshift(groupLeadingBreaks[groupLeadingBreaks.length - 1] ?? 0);
     groups = groups.slice(0, -1);
     groupLabels = groupLabels.slice(0, -1);
     groupLabelEls = groupLabelEls.slice(0, -1);
+    groupLeadingBreaks = groupLeadingBreaks.slice(0, -1);
   }
   return {
-    collected: { groups, groupLabels, groupLabelEls },
+    collected: { groups, groupLabels, groupLabelEls, groupLeadingBreaks },
     remainder: remainderGroups.length
-      ? { groups: remainderGroups, groupLabels: remainderLabels, groupLabelEls: remainderLabelEls }
+      ? {
+        groups: remainderGroups,
+        groupLabels: remainderLabels,
+        groupLabelEls: remainderLabelEls,
+        groupLeadingBreaks: remainderLeadingBreaks,
+      }
       : null,
   };
 }
@@ -1546,6 +1685,10 @@ function galleryGridFromGroups(collected: GroupsResult | null): Grid | null {
     anchorEl: galleryAnchorBeforeImages(collected.groups, collected.groupLabelEls),
     gallery: true,
   };
+}
+
+function hasLargeGapBeforeRemainder(remainder: GroupsResult | null): boolean {
+  return (remainder?.groupLeadingBreaks[0] ?? 0) >= 3;
 }
 
 function hasRejectedLeadingColumnTitle(container: Element): boolean {
@@ -1625,7 +1768,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   let collected = collectGroups(container, excludeImgs);
   if (!collected) return null;
   if (shouldSuppressShowhideGrid(container)) return null;
-  let { groups, groupLabels, groupLabelEls } = collected;
+  let { groups, groupLabels, groupLabelEls, groupLeadingBreaks } = collected;
   const trailingGalleries: Grid[] = [];
 
   const earlyTotal = groups.flat().length;
@@ -1682,7 +1825,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   if (asd87ArrowGrid) return asd87ArrowGrid;
 
   collected = trimTrailingFooterSection(trimTrailingLabeledSectionAfterSingleGridLabel(collected));
-  ({ groups, groupLabels, groupLabelEls } = collected);
+  ({ groups, groupLabels, groupLabelEls, groupLeadingBreaks } = collected);
   if (hasAdjacentFooterSlowPicsLinkBeforeImage(container, groups[0]?.[0]?.img)) {
     return null;
   }
@@ -1762,8 +1905,8 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     if (details?.names) {
       names = details.names;
       anchorEl = details.anchorEl;
-      collected = trimToLeadingColumnRun({ groups, groupLabels, groupLabelEls }, names.length);
-      ({ groups, groupLabels, groupLabelEls } = collected);
+      collected = trimToLeadingColumnRun({ groups, groupLabels, groupLabelEls, groupLeadingBreaks }, names.length);
+      ({ groups, groupLabels, groupLabelEls, groupLeadingBreaks } = collected);
       total = groups.flat().length;
     } else if (details) {
       detailsLinkComparisonOnly = true;
@@ -1780,6 +1923,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
           groups = groups.slice(0, footerIndex);
           groupLabels = groupLabels.slice(0, footerIndex);
           groupLabelEls = groupLabelEls.slice(0, footerIndex);
+          groupLeadingBreaks = groupLeadingBreaks.slice(0, footerIndex);
           total = groups.flat().length;
         }
       }
@@ -1930,17 +2074,22 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
       anchorEl = null;
     }
   }
-  if (names && total % names.length !== 0 && hasTorrentReleaseGroup(/-Dariush\b/i)) {
-    const trimmed = trimTrailingGroupsUntilDivisibleWithRemainder({ groups, groupLabels, groupLabelEls }, names.length);
-    collected = trimmed.collected;
-    const gallery = galleryGridFromGroups(trimmed.remainder);
-    if (gallery) trailingGalleries.push(gallery);
-    ({ groups, groupLabels, groupLabelEls } = collected);
-    total = groups.flat().length;
+  if (names && total % names.length !== 0) {
+    const trimmed = trimTrailingGroupsUntilDivisibleWithRemainder(
+      { groups, groupLabels, groupLabelEls, groupLeadingBreaks },
+      names.length,
+    );
+    if (hasLargeGapBeforeRemainder(trimmed.remainder)) {
+      collected = trimmed.collected;
+      const gallery = galleryGridFromGroups(trimmed.remainder);
+      if (gallery) trailingGalleries.push(gallery);
+      ({ groups, groupLabels, groupLabelEls, groupLeadingBreaks } = collected);
+      total = groups.flat().length;
+    }
   }
   if (names && total % names.length !== 0 && hasInlineImageFormattingWrapper(container)) {
-    collected = trimTrailingGroupsUntilDivisible({ groups, groupLabels, groupLabelEls }, names.length);
-    ({ groups, groupLabels, groupLabelEls } = collected);
+    collected = trimTrailingGroupsUntilDivisible({ groups, groupLabels, groupLabelEls, groupLeadingBreaks }, names.length);
+    ({ groups, groupLabels, groupLabelEls, groupLeadingBreaks } = collected);
     total = groups.flat().length;
   }
   if (

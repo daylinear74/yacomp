@@ -70,4 +70,16 @@ describe("externalImageFullUrl", () => {
       "https://img2.pixhost.to/images/8319/733177733_screenshot-6917.png",
     );
   });
+
+  test("upgrades imagebam thumbnails to direct full image URLs", () => {
+    expect(externalImageFullUrl("https://thumbs.imagebam.com/ab/cd/ef/example.jpg")).toBe(
+      "https://images.imagebam.com/ab/cd/ef/example.jpg",
+    );
+    expect(externalImageFullUrl("https://thumbs4.imagebam.com/12/34/56/MEQWERTY_t.png")).toBe(
+      "https://images4.imagebam.com/ac/81/44/MEQWERTY_o.png",
+    );
+    expect(externalImageFullUrl("https://thumbs4.imagebam.com/74/cf/d4/ME1DOJXD_t.png")).toBe(
+      "https://images4.imagebam.com/2b/b4/74/ME1DOJXD_o.png",
+    );
+  });
 });
