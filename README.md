@@ -28,8 +28,11 @@ or [Violentmonkey](https://violentmonkey.github.io/), then **[click here to
 install the latest release](https://github.com/daylinear74/yacomp/releases/latest/download/yacomp.user.js)**.
 
 - On HDB torrent pages, detected comparison grids get a **Show comparison** link.
-  Other screenshot groups are handled as plain viewer galleries: click an image
-  to open it in yacomp, without adding a separate **Show viewer** button.
+  Other screenshot groups get a compact **Show Viewer** control placed directly
+  above the image run, and image clicks open the same gallery viewer by default.
+  If a block is ambiguous, **Show Viewer** can reveal a column-count field:
+  blank or `1` opens it as screenshots, while `2+` builds a manual comparison
+  when the image count divides cleanly.
 - On HDB forum pages it also adds a **Custom comparison** builder below the page
   title, for markup too irregular to auto-detect safely (see *Features*).
 - On native-viewer sites, use the site's comparison UI as usual; yacomp takes
@@ -42,9 +45,9 @@ install the latest release](https://github.com/daylinear74/yacomp/releases/lates
 - **Consistent comparison viewer** — open any supported comparison in the same
   fullscreen UI, regardless of the site's native presentation.
 - **HDB screenshot gallery viewer** — torrent screenshots that are not safe
-  comparisons still open in the same viewer from an image click, so image-host
-  thumbnails, saved pages, and sample galleries do not fall back to tiny native
-  previews.
+  comparisons get a local **Show Viewer** control and also open in the same
+  viewer from an image click, so image-host thumbnails, saved pages, and sample
+  galleries do not fall back to tiny native previews.
 - **Fast source & row navigation** — hover to switch sources by horizontal
   position, plus arrow / vim / number keys for sources and rows.
 - **Zoom & pan** — fit, 1:1, incremental zoom, `Ctrl` + wheel cursor-centered
@@ -155,8 +158,8 @@ there without an uninstall.
 
 - **HDB image click** (`Viewer` / `Native`) — controls what happens when clicking
   HDB comparison or gallery thumbnails. `Viewer` opens yacomp at that image;
-  `Native` leaves the original HDB/image-host link behavior alone. Default
-  `Viewer`.
+  `Native` leaves the original HDB/image-host link behavior alone. This does not
+  remove the **Show comparison** / **Show Viewer** controls. Default `Viewer`.
 
 ### Filter cycle
 
