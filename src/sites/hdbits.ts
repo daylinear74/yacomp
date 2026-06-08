@@ -35,9 +35,32 @@ function makeShowComparisonLink(label = "Show comparison"): HTMLAnchorElement {
   return link;
 }
 
+function isBlankTextNode(node: Node | null): boolean {
+  return node?.nodeType === Node.TEXT_NODE && !(node.textContent || "").trim();
+}
+
+function isBreakNode(node: Node | null): boolean {
+  return node?.nodeName === "BR";
+}
+
+function isLegacyManualColumnControl(node: Node | null): node is HTMLElement {
+  if (!(node instanceof HTMLElement) || node.classList.contains("_scf_column_control")) return false;
+  const text = (node.textContent || "").replace(/\s+/g, " ").trim();
+  return (
+    /^columns:/i.test(text) &&
+    !!node.querySelector("._scf_comp_link") &&
+    !!node.querySelector('input[type="number"], input[placeholder="cols"]')
+  );
+}
+
 function removeExistingComparisonLinks(): void {
-  for (const link of document.querySelectorAll("._scf_comp_link")) {
-    link.remove();
+  for (const control of document.querySelectorAll("._scf_column_control")) {
+    control.remove();
+  }
+  for (const link of [...document.querySelectorAll<HTMLAnchorElement>("._scf_comp_link")]) {
+    const wrapper = link.parentElement;
+    if (isLegacyManualColumnControl(wrapper)) wrapper.remove();
+    else link.remove();
   }
 }
 
@@ -46,10 +69,15 @@ function firstGridNode(grid: Grid): Node | null {
   return first?.a ?? first?.img ?? null;
 }
 
+function isTorrentDescriptionContainer(container: Element): boolean {
+  const details = document.querySelector("table#details");
+  return !!details?.contains(container);
+}
+
 function previousMeaningfulSibling(node: Node): Node | null {
   for (let previous = node.previousSibling; previous; previous = previous.previousSibling) {
-    if (previous.nodeType === Node.TEXT_NODE && !(previous.textContent || "").trim()) continue;
-    if (previous.nodeName === "BR") continue;
+    if (isBlankTextNode(previous)) continue;
+    if (isBreakNode(previous)) continue;
     return previous;
   }
   return null;
@@ -78,6 +106,182 @@ function insertLinkBeforeGridImages(grid: Grid, link: HTMLAnchorElement): boolea
   parent.insertBefore(link, first);
   parent.insertBefore(document.createElement("br"), first);
   return true;
+}
+
+function insertNodeBeforeImageRun(images: HTMLImageElement[], node: Node, container: HTMLElement): void {
+  const first = images[0];
+  const firstNode = first ? (first.closest("a[href]") ?? first) : null;
+  const parent = firstNode?.parentNode;
+  if (!firstNode || !parent) {
+    container.insertBefore(node, container.firstChild);
+    return;
+  }
+
+  let current: Node | null = firstNode.previousSibling;
+  while (current && (isBreakNode(current) || isBlankTextNode(current))) {
+    const previous = current.previousSibling;
+    current.parentNode?.removeChild(current);
+    current = previous;
+  }
+
+  const previousMeaningful = previousMeaningfulSibling(firstNode);
+  if (
+    previousMeaningful instanceof HTMLElement &&
+    previousMeaningful.classList.contains("_scf_column_control") &&
+    previousMeaningful.parentNode === parent
+  ) {
+    previousMeaningful.replaceWith(node);
+    let nextNode: Node | null = node.nextSibling;
+    while (nextNode && (isBreakNode(nextNode) || isBlankTextNode(nextNode))) {
+      const next = nextNode.nextSibling;
+      nextNode.parentNode?.removeChild(nextNode);
+      nextNode = next;
+    }
+    parent.insertBefore(document.createElement("br"), firstNode);
+    return;
+  }
+
+  const previous = firstNode.previousSibling;
+  if (previous && !isBreakNode(previous)) {
+    parent.insertBefore(document.createElement("br"), firstNode);
+  }
+  parent.insertBefore(node, firstNode);
+  parent.insertBefore(document.createElement("br"), firstNode);
+}
+
+function gridFromCells(cells: GridCell[], cols: number, anchor: Node | null | undefined): Grid | null {
+  if (cols < 1 || cells.length < 2 || cells.length % cols !== 0) return null;
+  const rows: GridCell[][] = [];
+  for (let i = 0; i < cells.length; i += cols) {
+    rows.push(cells.slice(i, i + cols));
+  }
+  return {
+    rows,
+    numCols: cols,
+    names: cols === 1 ? null : genericSourceNames(cols),
+    anchorEl: anchor ?? null,
+    gallery: cols === 1,
+  };
+}
+
+function openImageViewer(cells: GridCell[], anchor: Node | null | undefined, initialRow = 0): void {
+  const grid = gridFromCells(cells, 1, anchor);
+  if (!grid) return;
+  openWithDummyWrapper({ ...grid, initialRow, initialCol: 0 });
+}
+
+function isScreenshotLikeImage(img: HTMLImageElement): boolean {
+  const src = img.currentSrc || img.src;
+  const href = img.closest<HTMLAnchorElement>("a[href]")?.href || "";
+  return /\/\/t\.hdbits\.org\//i.test(src) ||
+    /\/\/img\.hdbits\.org\//i.test(href) ||
+    /\b(?:imgbox\.com|pixhost\.to|imagebam\.com)\b/i.test(href);
+}
+
+function elementHasScreenshotImage(el: Element): boolean {
+  return [...el.querySelectorAll<HTMLImageElement>("img")].some(isScreenshotLikeImage);
+}
+
+function elementHasComparisonControl(el: Element): boolean {
+  return [...el.querySelectorAll<HTMLAnchorElement>("._scf_comp_link")]
+    .some((link) => link.textContent === "Show comparison");
+}
+
+function addManualColumnControlFromCells(
+  cells: GridCell[],
+  anchor: Node,
+  container: HTMLElement,
+  images: HTMLImageElement[],
+): HTMLAnchorElement {
+  const wrap = document.createElement("span");
+  wrap.className = "_scf_column_control";
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "1";
+  input.placeholder = "cols";
+  input.style.width = "4em";
+  const link = makeShowComparisonLink("Show Viewer");
+  let expanded = false;
+  const submit = () => {
+    const raw = input.value.trim();
+    const cols = raw ? Number.parseInt(raw, 10) : 1;
+    if (!(cols >= 1) || cells.length % cols !== 0) {
+      link.textContent = `Show Viewer (columns must divide ${cells.length})`;
+      return;
+    }
+    const grid = gridFromCells(cells, cols, anchor);
+    if (!grid) return;
+    input.blur();
+    if (cols === 1) {
+      openWithDummyWrapper(grid);
+      return;
+    }
+    buildComparison(grid, container, link);
+  };
+  input.addEventListener("input", () => {
+    link.textContent = "Show Viewer";
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    submit();
+  });
+  link.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (!expanded) {
+      expanded = true;
+      wrap.append(" columns: ", input, " (blank or 1 = viewer)");
+      input.focus();
+      return;
+    }
+    submit();
+  });
+  wrap.append(link);
+  insertNodeBeforeImageRun(images, wrap, container);
+  return link;
+}
+
+function immediateImagesAfter(node: Node): HTMLImageElement[] {
+  const images: HTMLImageElement[] = [];
+  for (let cur = node.nextSibling; cur; cur = cur.nextSibling) {
+    if (cur.nodeName === "BR") continue;
+    if (cur.nodeType === Node.TEXT_NODE && !(cur.textContent || "").trim()) continue;
+    const found = cur instanceof HTMLImageElement
+      ? [cur]
+      : cur instanceof Element
+        ? [...cur.querySelectorAll<HTMLImageElement>("img")]
+        : [];
+    if (!found.length) break;
+    images.push(...found);
+  }
+  return images;
+}
+
+function downgradeTrailingTorrentComparisonLinks(): void {
+  for (const link of document.querySelectorAll<HTMLAnchorElement>("._scf_comp_link")) {
+    if (link.textContent !== "Show comparison" || !isTorrentDescriptionContainer(link)) continue;
+    const previous = previousMeaningfulSibling(link);
+    if (
+      !(previous instanceof Element) ||
+      !elementHasScreenshotImage(previous) ||
+      elementHasComparisonControl(previous)
+    ) {
+      continue;
+    }
+    const images = immediateImagesAfter(link);
+    if (images.length < 2) continue;
+    const parent = link.parentElement;
+    if (!parent) continue;
+    link.remove();
+    const cells = images.map(forumManualCell);
+    addManualColumnControlFromCells(cells, images[0], parent, images);
+    images.forEach((img, idx) => {
+      onImageClickOpen(img, (img.closest("a") as HTMLAnchorElement | null) ?? undefined, (e) => {
+        e.preventDefault();
+        openImageViewer(cells, images[0], idx);
+      });
+    });
+  }
 }
 
 // One image-click handler per on-page image, across both the getGrids and
@@ -153,8 +357,8 @@ function slowPicsNamesAreUsable(names: string[] | null | undefined): names is st
   });
 }
 
-function slowPicsNamesOrGeneric(info: { names: string[]; numCols: number }): string[] {
-  return slowPicsNamesAreUsable(info.names) ? info.names.slice(0, info.numCols) : genericSourceNames(info.numCols);
+function slowPicsUsableNames(info: { names: string[]; numCols: number }): string[] | null {
+  return slowPicsNamesAreUsable(info.names) ? info.names.slice(0, info.numCols) : null;
 }
 
 function imageRangeNode(img: HTMLImageElement): Node {
@@ -204,8 +408,16 @@ function fallbackSlowPicsInfo(
     const names = headingNamesBeforeLink(spLink, numCols, container);
     if (names) return { names, numCols, imageUrls: [] };
   }
-  const numCols = counts[0];
-  return numCols ? { names: genericSourceNames(numCols), numCols, imageUrls: [] } : null;
+  return null;
+}
+
+function hasLocalSlowPicsColumnNames(
+  images: HTMLImageElement[],
+  spLink: HTMLAnchorElement,
+  container: HTMLElement,
+): boolean {
+  const counts = fallbackColumnCounts(images.length, visualColumnCount(images));
+  return counts.some((numCols) => !!headingNamesBeforeLink(spLink, numCols, container));
 }
 
 function resolveSlowPicsInfo(
@@ -217,15 +429,13 @@ function resolveSlowPicsInfo(
   const base = info ?? fallbackSlowPicsInfo(images, spLink, container);
   if (!base) return null;
   const localNames = headingNamesBeforeLink(spLink, base.numCols, container);
-  return { ...base, names: localNames ?? slowPicsNamesOrGeneric(base) };
+  const names = localNames ?? slowPicsUsableNames(base);
+  return names ? { ...base, names } : null;
 }
 
 function isSuppressedHDBitsGrid(grid: Grid): boolean {
-  const pageText = `${document.title} ${document.body.textContent || ""}`;
-  const anchorText = grid.anchorEl?.textContent?.replace(/\s*\[(?:show|hide)\]\s*/gi, " ").replace(/\s+/g, " ").trim() || "";
-  return /Night of the Comet/i.test(pageText) &&
-    /Prior Release Comparisons/i.test(pageText) &&
-    /Source vs Filtered vs Encode/i.test(anchorText);
+  void grid;
+  return false;
 }
 
 /** On click, upgrade a grid's generic/absent names with slow.pics column
@@ -235,7 +445,8 @@ async function maybeEnrichNames(grid: Grid): Promise<void> {
   const key = slowPicsKeyBefore(grid.rows[0]?.[0]?.img);
   if (!key) return;
   const info = await fetchSlowPicsGridInfo(key);
-  if (info && info.numCols === grid.numCols) grid.names = slowPicsNamesOrGeneric(info);
+  const names = info && info.numCols === grid.numCols ? slowPicsUsableNames(info) : null;
+  if (names) grid.names = names;
 }
 
 // The setup body without the host guard, so test fixtures can drive the
@@ -273,7 +484,11 @@ export function setupHDBitsCore(): void {
   for (const { grid, container } of getGrids(slowpicsImgs)) {
     if (isSuppressedHDBitsGrid(grid)) continue;
     for (const cell of grid.rows.flat()) if (cell.img) claimed.add(cell.img);
-    const link = makeShowComparisonLink();
+    const cells = grid.rows.flat();
+    const images = cells.map((cell) => cell.img).filter((img): img is HTMLImageElement => !!img);
+    const link = grid.gallery
+      ? addManualColumnControlFromCells(cells, grid.anchorEl ?? firstGridNode(grid) ?? container, container as HTMLElement, images)
+      : makeShowComparisonLink();
     const open = async (e: Event): Promise<void> => {
       e.preventDefault();
       await maybeEnrichNames(grid);
@@ -286,7 +501,6 @@ export function setupHDBitsCore(): void {
     if (!grid.gallery) link.addEventListener("click", (e) => { void open(e); });
 
     // Click any recognized HDBits grid image to jump straight into the viewer.
-    // Gallery grids intentionally have no visible trigger button.
     attachGridImageClicks(grid, container as HTMLElement, link);
     if (grid.gallery) continue;
 
@@ -311,6 +525,7 @@ export function setupHDBitsCore(): void {
       container.insertBefore(link, container.firstChild);
     }
   }
+  downgradeTrailingTorrentComparisonLinks();
 
   // Rescue from slow.pics only the comparisons whose screenshots getGrids did
   // not already shape from a local label.
@@ -359,12 +574,22 @@ function prevNode(n: Node): Node | null {
 function headingNamesBeforeLink(link: Node, numCols: number, root: Element): string[] | null {
   const lines: string[] = [];
   let line = "";
-  const flush = () => { const t = line.replace(/\s+/g, " ").trim(); if (t) lines.push(t); line = ""; };
+  let sawLine = false;
+  const flush = (): boolean => {
+    const t = line.replace(/\s+/g, " ").trim();
+    line = "";
+    if (!t) return false;
+    lines.push(t);
+    sawLine = true;
+    return true;
+  };
   let n: Node | null = prevNode(link);
   for (let i = 0; n && n !== root && root.contains(n) && i < 600; i++, n = prevNode(n)) {
     if (n.nodeName === "IMG") break; // reached the previous comparison's images
     if (n.nodeName === "STYLE" || n.nodeName === "SCRIPT") continue;
-    if (n.nodeName === "BR") flush();
+    if (n.nodeName === "BR") {
+      if (!flush() && sawLine) break;
+    }
     else if (n.nodeType === 3 && !n.parentElement?.closest("a, style, script")) {
       line = (n.textContent || "") + line;
     }
@@ -385,26 +610,47 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
   const { key, link: spLink, images } = comparison;
   const container = (spLink.closest("td, div, p") || spLink.parentElement) as HTMLElement | null;
   if (!container) return;
+  if (isTorrentDescriptionContainer(container) && !hasLocalSlowPicsColumnNames(images, spLink, container)) {
+    addManualColumnControl(images, spLink, container);
+    const cells = images.map(forumManualCell);
+    images.forEach((img, idx) => {
+      onImageClickOpen(img, (img.closest("a") as HTMLAnchorElement | null) ?? undefined, () => {
+        openImageViewer(cells, spLink, idx);
+      });
+    });
+    return;
+  }
   const link = makeShowComparisonLink();
+  let resolving = false;
   link.style.display = "block";
   link.style.marginTop = "6px";
   // Warm the ~1s slow.pics fetch on hover so the click feels instant (cached).
   link.addEventListener("mouseenter", () => { void fetchSlowPicsGridInfo(key); });
   link.addEventListener("click", async (e) => {
     e.preventDefault();
+    if (resolving) return;
+    resolving = true;
     const original = link.textContent;
     link.textContent = "Loading comparison…";
-    const info = await fetchSlowPicsGridInfo(key);
-    const resolved = resolveSlowPicsInfo(info, images, spLink, container);
-    if (resolved) {
-      // slow.pics is authoritative for the column COUNT; prefer the descriptive
-      // HDBits heading for the titles when it matches that count. If slow.pics
-      // is unavailable or only reports placeholder names, fall back to Source 1..N.
-      const grid = buildRescueGrid(images, resolved, spLink);
-      if (grid) { link.textContent = original; buildComparison(grid, container, link); return; }
+    try {
+      const info = await fetchSlowPicsGridInfo(key);
+      const resolved = resolveSlowPicsInfo(info, images, spLink, container);
+      if (resolved) {
+        // slow.pics is authoritative for the column COUNT; prefer the descriptive
+        // HDBits heading for the titles when it matches that count. Placeholder
+        // / missing titles fall back to the viewer manual-column control below.
+        const grid = buildRescueGrid(images, resolved, spLink);
+        if (grid) {
+          link.textContent = original;
+          buildComparison(grid, container, link);
+          return;
+        }
+      }
+      link.remove();
+      addManualColumnControl(images, spLink, container);
+    } finally {
+      resolving = false;
     }
-    link.remove();
-    addManualColumnControl(images, spLink, container);
   });
 
   // Click any of this comparison's images to open the viewer at that shot.
@@ -425,7 +671,7 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
             return;
           }
         }
-        link.click(); // couldn't shape it — fall back to the link's own flow
+        openImageViewer(images.map(forumManualCell), spLink, idx);
       });
     });
   });
@@ -433,44 +679,11 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
   insertLinkAfter(spLink, link);
 }
 
-/** Last resort: a tiny "columns: [ ] Show comparison" control. The user types
- *  1 to treat the block as a plain viewer gallery, or 2+ to reshape it as a
- *  comparison with that many columns. */
+/** Last resort: a compact "Show Viewer" control. The first click reveals a
+ *  columns input; blank / 1 treats the block as a plain viewer gallery, while
+ *  2+ reshapes it as a comparison with that many columns. */
 function addManualColumnControl(images: HTMLImageElement[], anchor: Node, container: HTMLElement): void {
-  const wrap = document.createElement("span");
-  wrap.style.display = "block";
-  wrap.style.marginTop = "6px";
-  const input = document.createElement("input");
-  input.type = "number";
-  input.min = "1";
-  input.placeholder = "cols";
-  input.style.width = "4em";
-  const link = makeShowComparisonLink();
-  link.addEventListener("click", (e) => {
-    e.preventDefault();
-    const cols = Number.parseInt(input.value, 10);
-    if (!(cols >= 1) || images.length % cols !== 0) {
-      link.textContent = `Show comparison (enter 1 or a column count that divides ${images.length})`;
-      return;
-    }
-    if (cols === 1) {
-      const grid: Grid = {
-        rows: images.map((img) => [forumManualCell(img)]),
-        numCols: 1,
-        names: null,
-        anchorEl: anchor,
-        gallery: true,
-      };
-      openWithDummyWrapper(grid);
-      return;
-    }
-    const names = Array.from({ length: cols }, (_, i) => `Source ${i + 1}`);
-    const grid = buildRescueGrid(images, { names, numCols: cols, imageUrls: [] }, anchor);
-    if (grid) buildComparison(grid, container, link);
-  });
-  wrap.append("columns: ", input, " ", link, " (1 = viewer)");
-  if (anchor.parentNode) insertLinkAfter(anchor, wrap);
-  else container.insertBefore(wrap, container.firstChild);
+  addManualColumnControlFromCells(images.map(forumManualCell), anchor, container, images);
 }
 
 function isHDBitsForumPage(): boolean {

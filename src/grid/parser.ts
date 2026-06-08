@@ -1524,8 +1524,8 @@ function isNightOfTheCometCurationShape(): boolean {
 }
 
 function isSuppressedNightCometLabel(label: string): boolean {
-  const t = label.replace(/\s*\[(?:show|hide)\]\s*/gi, " ").replace(/\s+/g, " ").trim();
-  return isNightOfTheCometCurationShape() && /Source vs Filtered vs Encode/i.test(t);
+  void label;
+  return false;
 }
 
 function isStructuralReleaseTitleLabel(label: string): boolean {
@@ -1538,12 +1538,7 @@ function isStructuralReleaseTitleLabel(label: string): boolean {
 }
 
 function shouldSuppressShowhideGrid(container: Element): boolean {
-  if (!isTorrentPage()) return false;
-  const label = showhideLabelText(container);
-  if (!label) return false;
-  if (isNightOfTheCometCurationShape() && /(?:Filled Top Border|Source vs Filtered vs Encode)/i.test(label)) {
-    return true;
-  }
+  void container;
   return false;
 }
 
@@ -1748,6 +1743,50 @@ function hasRejectedLeadingColumnTitle(container: Element): boolean {
   }
   const t = leadingText.trim();
   return !!t && hasVsOrPipe(t) && !asColumnTitles(t);
+}
+
+function hasClaimedScreenshotBetween(
+  anchorEl: Node | null,
+  firstImg: HTMLImageElement | undefined,
+  scope: Element,
+  excludeImgs: Set<HTMLImageElement>,
+): boolean {
+  if (!anchorEl || !firstImg || !scope.contains(anchorEl)) return false;
+  for (const img of scope.querySelectorAll<HTMLImageElement>("img")) {
+    if (!excludeImgs.has(img)) continue;
+    if (
+      (anchorEl.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+      (img.compareDocumentPosition(firstImg) & Node.DOCUMENT_POSITION_FOLLOWING)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasClaimedScreenshotBefore(
+  firstImg: HTMLImageElement | undefined,
+  scope: Element,
+  excludeImgs: Set<HTMLImageElement>,
+): boolean {
+  if (!firstImg) return false;
+  for (const img of scope.querySelectorAll<HTMLImageElement>("img")) {
+    if (!excludeImgs.has(img)) continue;
+    if (img.compareDocumentPosition(firstImg) & Node.DOCUMENT_POSITION_FOLLOWING) return true;
+  }
+  return false;
+}
+
+function hasPriorScreenshotOutsideGroups(groups: GridCell[][], scope: Element): boolean {
+  const firstImg = groups[0]?.[0]?.img;
+  if (!firstImg) return false;
+  const current = new Set(groups.flat().map((cell) => cell.img).filter((img): img is HTMLImageElement => !!img));
+  for (const img of scope.querySelectorAll<HTMLImageElement>("img")) {
+    if (current.has(img)) continue;
+    if (!isHDBitsScreenshotImage(img)) continue;
+    if (img.compareDocumentPosition(firstImg) & Node.DOCUMENT_POSITION_FOLLOWING) return true;
+  }
+  return false;
 }
 
 /** Reshape groups into a grid based on name count */
@@ -2007,12 +2046,17 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     }
   }
   if (!names) {
-    names = flatImplicitComparisonSourceNames(container, groups, total);
+    const implicit = flatImplicitComparisonSourceNames(container, groups, total);
+    if (implicit) {
+      names = implicit;
+      forceGenericNames = true;
+    }
   } else {
     const implicit = flatImplicitComparisonSourceNames(container, groups, total);
     if (implicit && hasTorrentLogPollutedNames(names)) {
       names = implicit;
       anchorEl = null;
+      forceGenericNames = true;
     }
   }
   if (!names) {
@@ -2103,6 +2147,21 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     names = null;
     anchorEl = null;
     forceGenericNames = true;
+  }
+  if (
+    names &&
+    isTorrentPage() &&
+    (
+      hasClaimedScreenshotBetween(anchorEl, groups[0]?.[0]?.img, container, excludeImgs) ||
+      (!anchorEl && (
+        hasClaimedScreenshotBefore(groups[0]?.[0]?.img, container, excludeImgs) ||
+        hasPriorScreenshotOutsideGroups(groups, container)
+      ))
+    )
+  ) {
+    names = null;
+    anchorEl = null;
+    forceGenericNames = false;
   }
   // Fall-through to the topic H1: if the chosen local label does NOT divide the
   // screenshots but the original poster's H1 title DOES, the H1 is the real
@@ -2211,7 +2270,13 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   // No usable source label: fall back to numbered defaults so review sweeps and
   // the viewer never surface a blank source list for a recognized comparison.
   let finalNames = finalizeNames(names);
+  if (forceGenericNames && isTorrentPage()) {
+    return torrentViewerGalleryFallback(container, groups, groupLabelEls);
+  }
   if (!finalNames) {
+    if (isTorrentPage()) {
+      return torrentViewerGalleryFallback(container, groups, groupLabelEls);
+    }
     if (
       !forceGenericNames &&
       !allowGenericNamesForUntitledTorrentGrid(container, groups, groupLabels, detailsLinkComparisonOnly, ambiguousTitle)
@@ -2338,10 +2403,19 @@ function buildSplitGalleryGrid(run: Element[], excludeImgs: Set<HTMLImageElement
   const names = label && allCells.length % label.names.length === 0 ? label.names : null;
   const shaped = reshapeGrid(rows, allCells, names);
   if (!shaped) return null;
+  const finalNames = finalizeNames(names);
+  if (!finalNames && isTorrentPage() && isTorrentDescriptionContainer(run[0])) {
+    return galleryGridFromGroups({
+      groups: rows,
+      groupLabels: rows.map(() => null),
+      groupLabelEls: rows.map(() => null),
+      groupLeadingBreaks: rows.map(() => 0),
+    });
+  }
   return {
     rows: shaped.gridRows,
     numCols: shaped.numCols,
-    names: finalizeNames(names) ?? genericSourceNames(shaped.numCols),
+    names: finalNames ?? genericSourceNames(shaped.numCols),
     anchorEl: label?.anchorEl ?? null,
   };
 }

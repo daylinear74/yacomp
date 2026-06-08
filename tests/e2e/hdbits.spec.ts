@@ -107,10 +107,18 @@ async function waitForHdbitsReady(page: Page): Promise<void> {
   );
 }
 
+function comparisonLinks(page: Page) {
+  return page.locator("._scf_comp_link").filter({ hasText: /^Show comparison$/ });
+}
+
+function viewerLinks(page: Page) {
+  return page.locator("._scf_comp_link").filter({ hasText: /^Show Viewer/ });
+}
+
 async function readGridNames(page: Page, linkIndex: number): Promise<string[]> {
   // Click the Nth comparison link, read source names off the viewer's
   // label, then close the viewer so the next assertion starts clean.
-  const link = page.locator("._scf_comp_link").nth(linkIndex);
+  const link = comparisonLinks(page).nth(linkIndex);
   await link.scrollIntoViewIfNeeded();
   await link.click();
 
@@ -223,7 +231,7 @@ test("hdbits: indivisible comparison-thread OP opens the drop-the-odd-shot picke
   await expect(page.locator("._scf_comp_row")).toHaveCount(18); // 36 shots / 2 cols
 });
 
-test("hdbits: ambiguous torrent gallery opens as a 1-wide viewer from image click only (Holubice 838405)", async ({ page }) => {
+test("hdbits: ambiguous torrent gallery gets Show Viewer and opens as 1-wide from image click (Holubice 838405)", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/114-iconic-holubice-gallery");
   await page.waitForFunction(
@@ -231,20 +239,37 @@ test("hdbits: ambiguous torrent gallery opens as a 1-wide viewer from image clic
     undefined,
     { timeout: 5000 },
   );
-  // The 10 sample shots used to be invented into a 5-column comparison. Now:
-  // no button, and clicking any shot opens a 1-wide gallery viewer.
-  await expect(page.locator("._scf_comp_link")).toHaveCount(0);
+  // The 10 sample shots used to be invented into a 5-column comparison. Now
+  // they get a viewer control, and clicking any shot opens a 1-wide gallery.
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerLinks(page)).toHaveCount(1);
   await page.locator('img[src*="g01"]').click();
   await expect(page.locator("._scf_comp")).toBeVisible();
   await expect(page.locator("._scf_comp_row")).toHaveCount(10); // 1 column → 10 rows
 });
 
-test("hdbits: plain torrent Screens blocks open as a 1-wide viewer from image click only", async ({ page }) => {
+test("hdbits: plain torrent Screens blocks get Show Viewer and open as a 1-wide viewer from image click", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/152-torrent-desc-release-screens-not-comparison");
   await waitForHdbitsReady(page);
 
-  await expect(page.locator("._scf_comp_link")).toHaveCount(0);
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerLinks(page)).toHaveCount(1);
+  await expect(page.locator("._scf_column_control")).toHaveText("Show Viewer");
+  await expect(page.locator('input[placeholder="cols"]')).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const control = document.querySelector("._scf_column_control");
+        const firstImage = document.querySelector('img[src*="g152a"]');
+        if (!control || !firstImage) return null;
+        const range = document.createRange();
+        range.setStartAfter(control);
+        range.setEndBefore(firstImage.closest("a") ?? firstImage);
+        return range.toString().trim();
+      }),
+    )
+    .toBe("");
   await page.locator('img[src*="g152a"]').click();
   await expect(page.locator("._scf_comp")).toBeVisible();
   await expect(page.locator("._scf_comp_row")).toHaveCount(4);
@@ -255,7 +280,8 @@ test("hdbits: BDInfo quote between prose and screenshots breaks false comparison
   await page.goto("/hdbits/case/157-torrent-desc-haram-bdinfo-before-screens-gallery");
   await waitForHdbitsReady(page);
 
-  await expect(page.locator("._scf_comp_link")).toHaveCount(0);
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerLinks(page)).toHaveCount(1);
   await page.locator('img[src*="haram01"]').click();
   await expect(page.locator("._scf_comp")).toBeVisible();
   await expect(page.locator("._scf_comp_row")).toHaveCount(6);
@@ -266,7 +292,8 @@ test("hdbits: stale comparison link after a BDInfo quote is removed and images o
   await page.goto("/hdbits/case/168-torrent-desc-stale-link-after-bdinfo-quote-gallery");
   await waitForHdbitsReady(page);
 
-  await expect(page.locator("._scf_comp_link")).toHaveCount(0);
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerLinks(page)).toHaveCount(1);
   await page.locator('img[src*="g168a"]').click();
   await expect(page.locator("._scf_comp")).toBeVisible();
   await expect(page.locator("._scf_comp_row")).toHaveCount(4);
@@ -277,13 +304,14 @@ test("hdbits: showhide log between source list and screenshots breaks false comp
   await page.goto("/hdbits/case/177-torrent-desc-showhide-log-before-screens-gallery");
   await waitForHdbitsReady(page);
 
-  await expect(page.locator("._scf_comp_link")).toHaveCount(0);
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerLinks(page)).toHaveCount(1);
   await page.locator('img[src*="g177a"]').click();
   await expect(page.locator("._scf_comp")).toBeVisible();
   await expect(page.locator("._scf_comp_row")).toHaveCount(6);
 });
 
-test("hdbits: non-comparison external torrent screenshots open as a click-only viewer", async ({ page }) => {
+test("hdbits: non-comparison external torrent screenshots get Show Viewer and open from image click", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.route(/thumbs\d*\.imgbox\.com/, (route) =>
     route.fulfill({ contentType: "image/svg+xml", body: STUB_SVG }),
@@ -294,7 +322,8 @@ test("hdbits: non-comparison external torrent screenshots open as a click-only v
   await page.goto("/hdbits/case/169-torrent-desc-xiyan-slowpics-untitled-and-imgbox-gallery");
   await waitForHdbitsReady(page);
 
-  await expect(page.locator("._scf_comp_link")).toHaveCount(3);
+  await expect(comparisonLinks(page)).toHaveCount(2);
+  await expect(viewerLinks(page)).toHaveCount(2);
   await page.locator('img[src*="siFYuCj2"]').dispatchEvent("click");
   await expect(page.locator("._scf_comp")).toBeVisible();
   await expect(page.locator("._scf_comp_row")).toHaveCount(3);
@@ -304,12 +333,13 @@ test("hdbits: non-comparison external torrent screenshots open as a click-only v
   );
 });
 
-test("hdbits: Dariush trailing screenshots open as a click-only viewer", async ({ page }) => {
+test("hdbits: Dariush trailing screenshots get Show Viewer and open from image click", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/162-torrent-desc-dariush-trailing-screenshots");
   await waitForHdbitsReady(page);
 
-  await expect(page.locator("._scf_comp_link")).toHaveCount(1);
+  await expect(comparisonLinks(page)).toHaveCount(1);
+  await expect(viewerLinks(page)).toHaveCount(1);
   await page.locator('img[src*="g162x"]').click();
   await expect(page.locator("._scf_comp")).toBeVisible();
   await expect(page.locator("._scf_comp_row")).toHaveCount(2);
@@ -320,7 +350,8 @@ test("hdbits: Dariush remainder without a large gap stays a plain viewer", async
   await page.goto("/hdbits/case/173-torrent-desc-dariush-no-large-gap-remainder");
   await waitForHdbitsReady(page);
 
-  await expect(page.locator("._scf_comp_link")).toHaveCount(0);
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerLinks(page)).toHaveCount(1);
   await page.locator('img[src*="g173x"]').click();
   await expect(page.locator("._scf_comp")).toBeVisible();
   await expect(page.locator("._scf_comp_row")).toHaveCount(8);
@@ -331,18 +362,20 @@ test("hdbits: large-gap trailing screenshots split for any uploader", async ({ p
   await page.goto("/hdbits/case/174-torrent-desc-generic-large-gap-remainder");
   await waitForHdbitsReady(page);
 
-  await expect(page.locator("._scf_comp_link")).toHaveCount(1);
+  await expect(comparisonLinks(page)).toHaveCount(1);
+  await expect(viewerLinks(page)).toHaveCount(1);
   await page.locator('img[src*="g174x"]').click();
   await expect(page.locator("._scf_comp")).toBeVisible();
   await expect(page.locator("._scf_comp_row")).toHaveCount(2);
 });
 
-test("hdbits: TheFarm torrent screenshots stay a click-only viewer", async ({ page }) => {
+test("hdbits: TheFarm torrent screenshots get Show Viewer without becoming comparisons", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/175-torrent-desc-thefarm-gallery-not-comparison");
   await waitForHdbitsReady(page);
 
-  await expect(page.locator("._scf_comp_link")).toHaveCount(0);
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerLinks(page)).toHaveCount(1);
   await page.locator('img[src*="g175a"]').click();
   await expect(page.locator("._scf_comp")).toBeVisible();
   await expect(page.locator("._scf_comp_row")).toHaveCount(4);
@@ -353,12 +386,16 @@ test("hdbits: manual slow.pics columns=1 opens the rescued block as a viewer", a
   await page.goto("/hdbits/case/176-torrent-desc-slowpics-mismatch-manual-viewer");
   await waitForHdbitsReady(page);
 
-  await page.locator("._scf_comp_link").first().click();
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerLinks(page)).toHaveText("Show Viewer");
+  await expect(page.locator('input[placeholder="cols"]')).toHaveCount(0);
+  await viewerLinks(page).first().click();
   const input = page.locator('input[placeholder="cols"]');
   await expect(input).toHaveCount(1);
-  await expect(page.locator('span:has(input[placeholder="cols"])')).toContainText("(1 = viewer)");
-  await input.fill("1");
-  await page.locator("._scf_comp_link").first().click();
+  await expect(viewerLinks(page)).toHaveCount(1);
+  await expect(page.locator('span:has(input[placeholder="cols"])')).toContainText("Show Viewer columns:");
+  await expect(page.locator('span:has(input[placeholder="cols"])')).toContainText("(blank or 1 = viewer)");
+  await input.press("Enter");
 
   await expect(page.locator("._scf_orphan_select")).toHaveCount(0);
   await expect(page.locator("._scf_comp")).toBeVisible();
@@ -370,11 +407,12 @@ test("hdbits: manual slow.pics columns=2 still builds a comparison", async ({ pa
   await page.goto("/hdbits/case/176-torrent-desc-slowpics-mismatch-manual-viewer");
   await waitForHdbitsReady(page);
 
-  await page.locator("._scf_comp_link").first().click();
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await viewerLinks(page).first().click();
   const input = page.locator('input[placeholder="cols"]');
   await expect(input).toHaveCount(1);
   await input.fill("2");
-  await page.locator("._scf_comp_link").first().click();
+  await input.press("Enter");
 
   await expect(page.locator("._scf_comp")).toBeVisible();
   await expect(page.locator("._scf_comp_row")).toHaveCount(4);
@@ -383,6 +421,55 @@ test("hdbits: manual slow.pics columns=2 still builds a comparison", async ({ pa
     .map((t) => t.replace(/^\d+\.\s*/, "").trim())
     .filter(Boolean);
   expect(names).toEqual(["Source 1", "Source 2"]);
+});
+
+test("hdbits: manual viewer columns must divide the screenshot count", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/176-torrent-desc-slowpics-mismatch-manual-viewer");
+  await waitForHdbitsReady(page);
+
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await viewerLinks(page).first().click();
+  const input = page.locator('input[placeholder="cols"]');
+  await expect(input).toHaveCount(1);
+  await input.fill("3");
+  await viewerLinks(page).first().click();
+
+  await expect(page.locator("._scf_comp")).toHaveCount(0);
+  await expect(page.locator("._scf_column_control")).toHaveCount(1);
+  await expect(viewerLinks(page)).toHaveText("Show Viewer (columns must divide 8)");
+});
+
+test("hdbits: stale saved Tonari manual control starts as tight Show Viewer", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/178-torrent-desc-tonari-stale-manual-control");
+  await waitForHdbitsReady(page);
+
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerLinks(page)).toHaveText("Show Viewer");
+  await expect(page.locator("._scf_column_control")).toHaveCount(1);
+  await expect(page.locator('input[placeholder="cols"]')).toHaveCount(0);
+  await expect(page.locator("span").filter({ hasText: /^columns:/ })).toHaveCount(0);
+
+  const gap = await page.evaluate(() => {
+    const control = document.querySelector("._scf_column_control");
+    const firstImage = document.querySelector('img[src*="g178a"]');
+    if (!control || !firstImage) return null;
+    const firstImageNode = firstImage.closest("a") ?? firstImage;
+    let brs = 0;
+    const text: string[] = [];
+    for (let node = control.nextSibling; node && node !== firstImageNode; node = node.nextSibling) {
+      if (node.nodeName === "BR") brs += 1;
+      else if (node.nodeType === Node.TEXT_NODE) text.push(node.textContent ?? "");
+      else text.push((node.textContent ?? "").trim());
+    }
+    return {
+      brs,
+      text: text.join("").trim(),
+      marginTop: (control as HTMLElement).style.marginTop,
+    };
+  });
+  expect(gap).toEqual({ brs: 1, text: "", marginTop: "" });
 });
 
 test("hdbits: Show comparison link sits immediately before the image run", async ({ page }) => {
@@ -426,9 +513,10 @@ test("hdbits: torrent description viewer is isolated from comment images", async
   await page.goto("/hdbits/case/_mixed-desc-comment-images");
   await waitForHdbitsReady(page);
 
-  await expect(page.locator("._scf_comp_link")).toHaveCount(0);
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerLinks(page)).toHaveCount(1);
   const descriptionCell = page.locator("#details td", { has: page.locator('img[src*="g152a"]') });
-  await expect(descriptionCell.locator("._scf_comp_link")).toHaveCount(0);
+  await expect(descriptionCell.locator("._scf_comp_link").filter({ hasText: /^Show Viewer/ })).toHaveCount(1);
 
   await descriptionCell.locator('img[src*="g152a"]').click();
   await expect(page.locator("._scf_comp")).toBeVisible();
@@ -902,7 +990,7 @@ for (const { file, meta } of cases) {
       { timeout: 5000 },
     );
 
-    const links = page.locator("._scf_comp_link");
+    const links = comparisonLinks(page);
     await expect(links).toHaveCount(meta.expectedGrids);
 
     if (meta.expectedNames && meta.expectedGrids > 0) {
