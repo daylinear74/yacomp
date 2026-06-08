@@ -23,6 +23,38 @@ export function hdbFull(src: string): string {
   );
 }
 
+export function externalImageFullUrl(src: string, href?: string | null): string {
+  try {
+    const base = typeof location === "undefined" ? "https://hdbits.org/" : location.href;
+    const url = new URL(src, base);
+    const imgboxHost = url.hostname.match(/^thumbs(\d*)\.imgbox\.com$/i);
+    const imgboxPath = url.pathname.match(/^\/([0-9a-f]{2})\/([0-9a-f]{2})\/([^/]+)_t\.(jpe?g|png|gif)$/i);
+    if (imgboxHost && imgboxPath) {
+      const [, a, b, id, ext] = imgboxPath;
+      return `${url.protocol}//images${imgboxHost[1]}.imgbox.com/${a}/${b}/${id}_o.${ext}`;
+    }
+    const pixhostHost = url.hostname.match(/^t(\d+)\.pixhost\.to$/i);
+    const pixhostPath = url.pathname.match(/^\/thumbs\/(\d+)\/([^?#]+)$/i);
+    if (pixhostHost && pixhostPath) {
+      const [, shard] = pixhostHost;
+      const [, folder, file] = pixhostPath;
+      return `${url.protocol}//img${shard}.pixhost.to/images/${folder}/${file}`;
+    }
+  } catch {
+    // Fall through to direct-image anchor handling below.
+  }
+  if (href && /\.(jpe?g|png|webp|gif|avif|bmp)(\?|$)/i.test(href)) {
+    try {
+      const base = typeof location === "undefined" ? "https://hdbits.org/" : location.href;
+      const url = new URL(href, base);
+      if (!(url.hostname === "pixhost.to" && /^\/show\//i.test(url.pathname))) return href;
+    } catch {
+      return href;
+    }
+  }
+  return src;
+}
+
 function isHDBitsThumbUrl(src: string): boolean {
   return /\/\/t\.hdbits\.org\//i.test(src);
 }
@@ -31,14 +63,35 @@ function isHDBitsImagePageUrl(href: string): boolean {
   return /\/\/img\.hdbits\.org\//i.test(href);
 }
 
+const EXTERNAL_SCREENSHOT_HOST_RE =
+  /(?:^|\.)((imgbox|imagebam|imgur|gifyu)\.com|pixhost\.to|postimg\.cc|ibb\.co|freeimage\.host|lensdump\.com)$/i;
+
+function isExternalScreenshotImagePageUrl(href: string): boolean {
+  if (!isTorrentPage()) return false;
+  try {
+    const url = new URL(href, location.href);
+    if (!/^https?:$/i.test(url.protocol)) return false;
+    if (isHDBitsImagePageUrl(url.href)) return false;
+    return EXTERNAL_SCREENSHOT_HOST_RE.test(url.hostname) ||
+      /\.(?:jpe?g|png|webp|gif|avif|bmp)$/i.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
 function hdbitsImageAnchor(img: HTMLImageElement): HTMLAnchorElement | null {
   const anchor = img.closest("a[href]") as HTMLAnchorElement | null;
   return anchor && isHDBitsImagePageUrl(anchor.href) ? anchor : null;
 }
 
+function externalScreenshotImageAnchor(img: HTMLImageElement): HTMLAnchorElement | null {
+  const anchor = img.closest("a[href]") as HTMLAnchorElement | null;
+  return anchor && isExternalScreenshotImagePageUrl(anchor.href) ? anchor : null;
+}
+
 function isHDBitsScreenshotImage(img: HTMLImageElement): boolean {
   if (isHDBitsRequestsMetadataElement(img)) return false;
-  return isHDBitsThumbUrl(img.currentSrc || img.src) || !!hdbitsImageAnchor(img);
+  return isHDBitsThumbUrl(img.currentSrc || img.src) || !!hdbitsImageAnchor(img) || !!externalScreenshotImageAnchor(img);
 }
 
 function hasHDBitsScreenshotImage(container: Element): boolean {
@@ -49,7 +102,7 @@ function hdbitsFullForImage(img: HTMLImageElement, anchor: HTMLAnchorElement | n
   const src = img.currentSrc || img.src;
   if (isHDBitsThumbUrl(src)) return hdbFull(src);
   if (anchor && isHDBitsImagePageUrl(anchor.href)) return hdbFull(anchor.href);
-  return src;
+  return externalImageFullUrl(src, anchor?.href);
 }
 
 interface GroupsResult {
@@ -120,13 +173,34 @@ function hasUnclaimedScreenshotImage(container: Element, excludeImgs: Set<HTMLIm
   return screenshotImagesIn(container).some((img) => !excludeImgs.has(img));
 }
 
-function isPreImageTitleBarrier(node: ChildNode): boolean {
+function isPreImageTitleBarrier(node: Node): boolean {
   if (node.nodeType !== 1) return false;
   const el = node as Element;
   if (hasHDBitsScreenshotImage(el)) return false;
   if (/^(?:TABLE|BLOCKQUOTE|PRE|UL|OL|HR)$/.test(el.nodeName)) return true;
-  if (el.matches("p.sub") && /\bquote\b/i.test(el.textContent || "")) return true;
+  if (el.matches("p.sub") && /\b(?:quote|wrote)\b/i.test(el.textContent || "")) return true;
+  if ([...el.querySelectorAll("p.sub")].some((sub) => /\b(?:quote|wrote)\b/i.test(sub.textContent || ""))) {
+    return true;
+  }
+  if (el.querySelector("table.main, blockquote, pre") && /\b(?:bdinfo|disc title|playlist|total bitrate)\b/i.test(el.textContent || "")) {
+    return true;
+  }
   return false;
+}
+
+function isPreImageBdInfoTitleBarrier(node: Node): boolean {
+  if (node.nodeType !== 1) return false;
+  const el = node as Element;
+  if (hasHDBitsScreenshotImage(el)) return false;
+  const text = el.textContent || "";
+  if (!/\b(?:bdinfo|disc title|disc label|playlist|total bitrate|MPLS|AACS)\b/i.test(text)) {
+    return false;
+  }
+  return (
+    /^(?:TABLE|BLOCKQUOTE)$/.test(el.nodeName) ||
+    !!el.querySelector("table.main, blockquote") ||
+    [...el.querySelectorAll("p.sub")].some((sub) => /\b(?:quote|wrote)\b/i.test(sub.textContent || ""))
+  );
 }
 
 function enforcesTorrentTitleDistance(container: Element): boolean {
@@ -149,6 +223,23 @@ function hasBlockedComparisonSignalBeforeImages(container: Element): boolean {
     if (/\bvs?\.?\b|\||slow\.pics/i.test(text)) return true;
   }
   return false;
+}
+
+function previousMeaningfulSibling(node: Node): Node | null {
+  for (let previous = node.previousSibling; previous; previous = previous.previousSibling) {
+    if (previous.nodeType === 8) continue;
+    if (previous.nodeType === 3 && !(previous.textContent || "").trim()) continue;
+    if (previous.nodeName === "BR") continue;
+    return previous;
+  }
+  return null;
+}
+
+function hasImmediatePriorTitleBarrier(container: Element, groups: GridCell[][]): boolean {
+  if (!enforcesTorrentTitleDistance(container)) return false;
+  if (hasUsableColumnTitleBeforeFirstScreenshot(container, groups)) return false;
+  const previous = previousMeaningfulSibling(container);
+  return !!previous && isPreImageBdInfoTitleBarrier(previous);
 }
 
 function clearPendingLabel(): {
@@ -329,6 +420,7 @@ function collectGroups(container: Element, excludeImgs: Set<HTMLImageElement>): 
  *  treated as part of one source name (e.g. "release - AC3 5.1 - 1.06 GiB"),
  *  so such per-group labels stay as single columns of one transposed grid. */
 function buildMultiCompGrids(
+  container: Element,
   groups: GridCell[][],
   groupLabels: (string | null)[],
   groupLabelEls: (ChildNode | null)[],
@@ -365,6 +457,7 @@ function buildMultiCompGrids(
     const imgs = sectionGroups.flat();
     if (imgs.length < 2) continue;
     if (!names) continue;
+    if (hasPlainInterludeAfterTechnicalSizeNames(container, names)) continue;
 
     const shaped = reshapeGrid(sectionGroups, imgs, names);
     if (!shaped) continue;
@@ -382,7 +475,7 @@ function buildMultiCompGrids(
     const { label, index, names } = singleValid[0];
     const sectionGroups = groups.slice(index);
     const imgs = sectionGroups.flat();
-    if (names && imgs.length >= 2) {
+    if (names && imgs.length >= 2 && !hasPlainInterludeAfterTechnicalSizeNames(container, names)) {
       const shaped = reshapeGrid(sectionGroups, imgs, names);
       if (shaped) {
         return [{
@@ -991,6 +1084,44 @@ function isGenericSourceNames(names: string[] | null): boolean {
   return !!names?.length && names.every((name, index) => name === `Source ${index + 1}`);
 }
 
+function isUploaderTechnicalSizeNames(names: string[]): boolean {
+  if (!hasUntitledGenericFallbackUploader()) return false;
+  return names.length >= 2 && names.every((name) =>
+    /^(?:encode|remux|source|filtered)?\s*size\s*:\s*\d+(?:\.\d+)?\s*[KMGT]i?B\b.*\b(?:kb\/s|mb\/s|kbps|mbps)\b/i
+      .test(name.trim()));
+}
+
+function logicalTextLinesBeforeFirstScreenshot(container: Element): string[] {
+  const lines = [""];
+  for (const node of container.childNodes) {
+    if (node.nodeType === 8) continue;
+    if (node.nodeName === "BR") {
+      lines.push("");
+      continue;
+    }
+    if (node.nodeName === "IMG" && isHDBitsScreenshotImage(node as HTMLImageElement)) break;
+    if (node.nodeName === "A" && hasHDBitsScreenshotImage(node as Element)) break;
+    if (node.nodeType === 1 && hasHDBitsScreenshotImage(node as Element)) break;
+    lines[lines.length - 1] += node.textContent || "";
+    if (node.nodeType === 1 && /^(?:DIV|P|PRE|TABLE|BLOCKQUOTE|UL|OL)$/.test(node.nodeName)) {
+      lines.push("");
+    }
+  }
+  return lines.map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+}
+
+function hasPlainInterludeAfterTechnicalSizeNames(container: Element, names: string[]): boolean {
+  if (!isUploaderTechnicalSizeNames(names)) return false;
+  const lines = logicalTextLinesBeforeFirstScreenshot(container);
+  const titleIndex = lines.findIndex((line) => {
+    const parsed = asColumnTitles(line);
+    return parsed?.length === names.length && parsed.every((name, index) => tidyName(name) === tidyName(names[index]));
+  });
+  if (titleIndex < 0) return false;
+  return lines.slice(titleIndex + 1).some((line) =>
+    !isAllowedComparisonHeadingInterlude(line));
+}
+
 function textBeforeFirstScreenshot(container: Element, groups: GridCell[][]): string {
   const img = groups[0]?.[0]?.img;
   if (!img) return "";
@@ -1084,12 +1215,6 @@ function buildAsd87ArrowComparisonGrid(collected: GroupsResult): Grid[] | null {
 
 function hasUntitledGenericFallbackUploader(): boolean {
   return hasTorrentReleaseGroup(/-(?:ENDSkY|Rose3Thorn)\b/i);
-}
-
-function isEndskyTechnicalSizeNames(names: string[]): boolean {
-  if (!hasUntitledGenericFallbackUploader()) return false;
-  const joined = names.join(" ");
-  return /\b(?:encode|remux)\s+size\s*:/i.test(joined) && /\b(?:GiB|MiB|Mb\/s|Kb\/s)\b/i.test(joined);
 }
 
 function endskyGenericNamesForUntitledGrid(groups: GridCell[][], total: number): string[] | null {
@@ -1516,6 +1641,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
       const restStart = leadingRun.groups.length;
       const restGrids = restStart < groups.length
         ? buildMultiCompGrids(
+          container,
           groups.slice(restStart),
           groupLabels.slice(restStart),
           groupLabelEls.slice(restStart),
@@ -1546,7 +1672,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
       }];
     }
   }
-  const multiComp = buildMultiCompGrids(groups, groupLabels, groupLabelEls, !hasWholeContainerLeadCmp);
+  const multiComp = buildMultiCompGrids(container, groups, groupLabels, groupLabelEls, !hasWholeContainerLeadCmp);
   if (multiComp && (!hasWholeContainerLeadCmp || multiComp.length > 1)) return multiComp;
 
   const leadingBeforeFooter = buildLeadingComparisonBeforeFooterGrid(container, groups, groupLabels, groupLabelEls, earlyLeadCmp);
@@ -1561,6 +1687,9 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     return null;
   }
   if (isTorrentScreensGalleryOnly(container, groups, groupLabels)) {
+    return torrentViewerGalleryFallback(container, groups, groupLabelEls);
+  }
+  if (hasImmediatePriorTitleBarrier(container, groups)) {
     return torrentViewerGalleryFallback(container, groups, groupLabelEls);
   }
 
@@ -1589,15 +1718,17 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     anchorEl = uploaderArrow.anchorEl;
     forceGenericNames = isGenericSourceNames(names);
   }
-  if (!names && leadCmp && leadCmp.reliable && total % leadCmp.names.length === 0 && !isEndskyTechnicalSizeNames(leadCmp.names)) {
-    names = leadCmp.names;
-    anchorEl = leadCmp.anchorEl;
-  } else if (!names && leadCmp && isEndskyTechnicalSizeNames(leadCmp.names)) {
-    const generic = endskyGenericNamesForUntitledGrid(groups, total);
-    if (generic) {
-      names = generic;
+  if (!names && leadCmp && leadCmp.reliable && total % leadCmp.names.length === 0) {
+    const technicalInterludeGeneric = hasPlainInterludeAfterTechnicalSizeNames(container, leadCmp.names)
+      ? endskyGenericNamesForUntitledGrid(groups, total)
+      : null;
+    if (technicalInterludeGeneric) {
+      names = technicalInterludeGeneric;
       anchorEl = null;
       forceGenericNames = true;
+    } else {
+      names = leadCmp.names;
+      anchorEl = leadCmp.anchorEl;
     }
   } else if (!names && leadCmp && !leadCmp.reliable) {
     ambiguousTitle = true;

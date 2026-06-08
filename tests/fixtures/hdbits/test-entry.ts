@@ -15,22 +15,28 @@ import { setupHDBitsCore } from "../../../src/sites/hdbits";
 import { setupKeyboard } from "../../../src/keyboard";
 import { saveConfig, getConfig, resetConfig } from "../../../src/config";
 
-// Test-only GM_xmlhttpRequest stub: serve a canned slow.pics collection page for
-// any slow.pics/c/<key> request so the slow.pics rescue/enrichment paths can be
-// exercised offline. 3 columns (S/F/E), same inline `var collection = {…}` shape
-// the real site renders.
-const STUB_SLOWPICS_HTML = `<html><body><script>var collection = ${JSON.stringify({
-  key: "STUBKEY",
-  name: "stub",
-  comparisons: [
-    { key: "r1", images: [{ name: "S", publicFileName: "a.png" }, { name: "F", publicFileName: "b.png" }, { name: "E", publicFileName: "c.png" }] },
-    { key: "r2", images: [{ name: "S", publicFileName: "d.png" }, { name: "F", publicFileName: "e.png" }, { name: "E", publicFileName: "f.png" }] },
-  ],
-})};</script></body></html>`;
+// Test-only GM_xmlhttpRequest stub: serve canned slow.pics collection pages so
+// rescue/enrichment paths can be exercised offline. UnknownNamesKey simulates a
+// successful fetch with unusable source names; FetchFailKey simulates no fetch.
+function stubSlowPicsHtml(url: string): string {
+  const names = /UnknownNamesKey/i.test(url) ? ["unknown", "", "Unknown"] : ["S", "F", "E"];
+  return `<html><body><script>var collection = ${JSON.stringify({
+    key: "STUBKEY",
+    name: "stub",
+    comparisons: [
+      { key: "r1", images: names.map((name, i) => ({ name, publicFileName: `${i + 1}.png` })) },
+      { key: "r2", images: names.map((name, i) => ({ name, publicFileName: `${i + 4}.png` })) },
+    ],
+  })};</script></body></html>`;
+}
 
 (globalThis as unknown as { GM_xmlhttpRequest: (d: GMXHRDetails) => void }).GM_xmlhttpRequest = (details) => {
   if (/slow\.pics\/c\//.test(details.url)) {
-    details.onload?.({ status: 200, responseText: STUB_SLOWPICS_HTML });
+    if (/FetchFailKey/i.test(details.url)) {
+      details.onerror?.(new Error("blocked"));
+      return;
+    }
+    details.onload?.({ status: 200, responseText: stubSlowPicsHtml(details.url) });
   } else {
     details.onerror?.(new Error("blocked"));
   }

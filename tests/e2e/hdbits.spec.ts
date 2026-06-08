@@ -261,6 +261,38 @@ test("hdbits: BDInfo quote between prose and screenshots breaks false comparison
   await expect(page.locator("._scf_comp_row")).toHaveCount(6);
 });
 
+test("hdbits: stale comparison link after a BDInfo quote is removed and images open viewer", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/168-torrent-desc-stale-link-after-bdinfo-quote-gallery");
+  await waitForHdbitsReady(page);
+
+  await expect(page.locator("._scf_comp_link")).toHaveCount(0);
+  await page.locator('img[src*="g168a"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(4);
+});
+
+test("hdbits: non-comparison external torrent screenshots open as a click-only viewer", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.route(/thumbs\d*\.imgbox\.com/, (route) =>
+    route.fulfill({ contentType: "image/svg+xml", body: STUB_SVG }),
+  );
+  await page.route(/images\d*\.imgbox\.com/, (route) =>
+    route.fulfill({ contentType: "image/svg+xml", body: STUB_SVG }),
+  );
+  await page.goto("/hdbits/case/169-torrent-desc-xiyan-slowpics-untitled-and-imgbox-gallery");
+  await waitForHdbitsReady(page);
+
+  await expect(page.locator("._scf_comp_link")).toHaveCount(3);
+  await page.locator('img[src*="siFYuCj2"]').dispatchEvent("click");
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(3);
+  await expect(page.locator("._scf_comp_img").first()).toHaveAttribute(
+    "src",
+    "https://images2.imgbox.com/ac/67/siFYuCj2_o.png",
+  );
+});
+
 test("hdbits: Dariush trailing screenshots open as a click-only viewer", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/162-torrent-desc-dariush-trailing-screenshots");

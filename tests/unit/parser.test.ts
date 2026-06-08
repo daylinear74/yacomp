@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { reshapeGrid } from "../../src/grid/parser";
+import { externalImageFullUrl, reshapeGrid } from "../../src/grid/parser";
 import type { GridCell } from "../../src/grid/types";
 
 const cell = (full: string): GridCell => ({ full });
@@ -55,5 +55,19 @@ describe("reshapeGrid", () => {
   test("returns null for a ragged group list with no names", () => {
     const groups = [[cell("a")], [cell("b"), cell("c")]];
     expect(reshapeGrid(groups, groups.flat(), null)).toBeNull();
+  });
+});
+
+describe("externalImageFullUrl", () => {
+  test("upgrades imgbox thumbnails to original image URLs", () => {
+    expect(externalImageFullUrl("https://thumbs2.imgbox.com/ac/67/siFYuCj2_t.png")).toBe(
+      "https://images2.imgbox.com/ac/67/siFYuCj2_o.png",
+    );
+  });
+
+  test("upgrades pixhost thumbnails to direct full image URLs", () => {
+    expect(externalImageFullUrl("https://t2.pixhost.to/thumbs/8319/733177733_screenshot-6917.png")).toBe(
+      "https://img2.pixhost.to/images/8319/733177733_screenshot-6917.png",
+    );
   });
 });

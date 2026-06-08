@@ -8,7 +8,7 @@ import { getGrids, hdbFull } from "../grid";
 import type { Grid, GridCell } from "../grid";
 import { hasVsOrPipe, splitNames, looksLikeNames } from "../grid/names";
 import { buildComparison, insertLinkAfter, openOrphanSelect, openWithDummyWrapper } from "../viewer";
-import { fetchSlowPicsGridInfo, parseSlowPicsKey, slowPicsKeyFromAnchor } from "./slowpics-source";
+import { fetchSlowPicsGridInfo, parseSlowPicsKey, slowPicsKeyFromAnchor, type SlowPicsGridInfo } from "./slowpics-source";
 import { findSlowPicsComparisons, buildRescueGrid, type SlowPicsComparison } from "./hdbits-slowpics";
 
 const FORUM_MANUAL_PANEL_ID = "_scf_manual_panel_";
@@ -33,6 +33,12 @@ function makeShowComparisonLink(label = "Show comparison"): HTMLAnchorElement {
   link.className = "_scf_comp_link";
   link.textContent = label;
   return link;
+}
+
+function removeExistingComparisonLinks(): void {
+  for (const link of document.querySelectorAll("._scf_comp_link")) {
+    link.remove();
+  }
 }
 
 function firstGridNode(grid: Grid): Node | null {
@@ -135,6 +141,85 @@ function namesAreGeneric(names: string[] | null): boolean {
   return names.every((n) => /^(Source(\s+\d+)?|Filtered|Encode)$/.test(n.trim()));
 }
 
+function genericSourceNames(count: number): string[] {
+  return Array.from({ length: count }, (_, i) => `Source ${i + 1}`);
+}
+
+function slowPicsNamesAreUsable(names: string[] | null | undefined): names is string[] {
+  if (!names?.length) return false;
+  return names.every((name) => {
+    const trimmed = name.trim();
+    return !!trimmed && !/^unknown$/i.test(trimmed);
+  });
+}
+
+function slowPicsNamesOrGeneric(info: { names: string[]; numCols: number }): string[] {
+  return slowPicsNamesAreUsable(info.names) ? info.names.slice(0, info.numCols) : genericSourceNames(info.numCols);
+}
+
+function imageRangeNode(img: HTMLImageElement): Node {
+  return img.closest("a[href]") ?? img;
+}
+
+function hasLineBreakBetweenImages(a: HTMLImageElement, b: HTMLImageElement): boolean {
+  try {
+    const range = document.createRange();
+    range.setStartAfter(imageRangeNode(a));
+    range.setEndBefore(imageRangeNode(b));
+    return !!range.cloneContents().querySelector("br");
+  } catch {
+    return false;
+  }
+}
+
+function visualColumnCount(images: HTMLImageElement[]): number | null {
+  if (images.length < 2) return null;
+  const rows: number[] = [];
+  let count = 1;
+  for (let i = 0; i < images.length - 1; i++) {
+    if (hasLineBreakBetweenImages(images[i], images[i + 1])) {
+      rows.push(count);
+      count = 1;
+    } else {
+      count++;
+    }
+  }
+  rows.push(count);
+  const cols = rows.length > 1 ? rows[0] : 0;
+  return cols >= 2 && rows.every((row) => row === cols) && images.length % cols === 0 ? cols : null;
+}
+
+function fallbackColumnCounts(total: number, visualCols: number | null): number[] {
+  const preferred = [visualCols ?? 0, 3, 2, 4, 5, 6];
+  return [...new Set(preferred)].filter((cols) => cols >= 2 && total % cols === 0);
+}
+
+function fallbackSlowPicsInfo(
+  images: HTMLImageElement[],
+  spLink: HTMLAnchorElement,
+  container: HTMLElement,
+): SlowPicsGridInfo | null {
+  const counts = fallbackColumnCounts(images.length, visualColumnCount(images));
+  for (const numCols of counts) {
+    const names = headingNamesBeforeLink(spLink, numCols, container);
+    if (names) return { names, numCols, imageUrls: [] };
+  }
+  const numCols = counts[0];
+  return numCols ? { names: genericSourceNames(numCols), numCols, imageUrls: [] } : null;
+}
+
+function resolveSlowPicsInfo(
+  info: SlowPicsGridInfo | null,
+  images: HTMLImageElement[],
+  spLink: HTMLAnchorElement,
+  container: HTMLElement,
+): SlowPicsGridInfo | null {
+  const base = info ?? fallbackSlowPicsInfo(images, spLink, container);
+  if (!base) return null;
+  const localNames = headingNamesBeforeLink(spLink, base.numCols, container);
+  return { ...base, names: localNames ?? slowPicsNamesOrGeneric(base) };
+}
+
 function isSuppressedHDBitsGrid(grid: Grid): boolean {
   const pageText = `${document.title} ${document.body.textContent || ""}`;
   const anchorText = grid.anchorEl?.textContent?.replace(/\s*\[(?:show|hide)\]\s*/gi, " ").replace(/\s+/g, " ").trim() || "";
@@ -150,7 +235,7 @@ async function maybeEnrichNames(grid: Grid): Promise<void> {
   const key = slowPicsKeyBefore(grid.rows[0]?.[0]?.img);
   if (!key) return;
   const info = await fetchSlowPicsGridInfo(key);
-  if (info && info.numCols === grid.numCols) grid.names = info.names.slice(0, grid.numCols);
+  if (info && info.numCols === grid.numCols) grid.names = slowPicsNamesOrGeneric(info);
 }
 
 // The setup body without the host guard, so test fixtures can drive the
@@ -159,6 +244,7 @@ async function maybeEnrichNames(grid: Grid): Promise<void> {
 export function setupHDBitsCore(): void {
   injectCSS();
   injectTriggerLinkCSS();
+  removeExistingComparisonLinks();
   addForumManualComparisonControl();
 
   // Title-inference order (owner ruling): a local DOM label (per-group "GER:/
@@ -309,11 +395,12 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
     const original = link.textContent;
     link.textContent = "Loading comparison…";
     const info = await fetchSlowPicsGridInfo(key);
-    if (info) {
+    const resolved = resolveSlowPicsInfo(info, images, spLink, container);
+    if (resolved) {
       // slow.pics is authoritative for the column COUNT; prefer the descriptive
-      // HDBits heading for the titles when it matches that count.
-      const names = headingNamesBeforeLink(spLink, info.numCols, container) ?? info.names;
-      const grid = buildRescueGrid(images, { ...info, names }, spLink);
+      // HDBits heading for the titles when it matches that count. If slow.pics
+      // is unavailable or only reports placeholder names, fall back to Source 1..N.
+      const grid = buildRescueGrid(images, resolved, spLink);
       if (grid) { link.textContent = original; buildComparison(grid, container, link); return; }
     }
     link.remove();
@@ -326,9 +413,9 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
   images.forEach((img, idx) => {
     onImageClickOpen(img, (img.closest("a") as HTMLAnchorElement | null) ?? undefined, () => {
       void fetchSlowPicsGridInfo(key).then((info) => {
-        if (info) {
-          const names = headingNamesBeforeLink(spLink, info.numCols, container) ?? info.names;
-          const grid = buildRescueGrid(images, { ...info, names }, spLink);
+        const resolved = resolveSlowPicsInfo(info, images, spLink, container);
+        if (resolved) {
+          const grid = buildRescueGrid(images, resolved, spLink);
           if (grid) {
             buildComparison(
               { ...grid, initialRow: Math.floor(idx / grid.numCols), initialCol: idx % grid.numCols },
