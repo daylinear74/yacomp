@@ -17,7 +17,7 @@ differences, brightness drift, and gamma mismatches.
 
 | Integration style | Sites |
 | --- | --- |
-| Detect screenshot grids | HDB |
+| Detect screenshot grids and viewer galleries | HDB |
 | Replace the native viewer | PTP, BLU, ATH, BHD, GPW, SSD, FRDS |
 | Add a viewer button | slow.pics, comp.pics |
 
@@ -27,8 +27,9 @@ Install a userscript manager such as [Tampermonkey](https://www.tampermonkey.net
 or [Violentmonkey](https://violentmonkey.github.io/), then **[click here to
 install the latest release](https://github.com/daylinear74/yacomp/releases/latest/download/yacomp.user.js)**.
 
-- On grid-detection sites, yacomp adds a **Show comparison** link near detected
-  screenshot grids.
+- On HDB torrent pages, detected comparison grids get a **Show comparison** link.
+  Other screenshot groups are handled as plain viewer galleries: click an image
+  to open it in yacomp, without adding a separate **Show viewer** button.
 - On HDB forum pages it also adds a **Custom comparison** builder below the page
   title, for markup too irregular to auto-detect safely (see *Features*).
 - On native-viewer sites, use the site's comparison UI as usual; yacomp takes
@@ -40,6 +41,10 @@ install the latest release](https://github.com/daylinear74/yacomp/releases/lates
 
 - **Consistent comparison viewer** — open any supported comparison in the same
   fullscreen UI, regardless of the site's native presentation.
+- **HDB screenshot gallery viewer** — torrent screenshots that are not safe
+  comparisons still open in the same viewer from an image click, so image-host
+  thumbnails, saved pages, and sample galleries do not fall back to tiny native
+  previews.
 - **Fast source & row navigation** — hover to switch sources by horizontal
   position, plus arrow / vim / number keys for sources and rows.
 - **Zoom & pan** — fit, 1:1, incremental zoom, `Ctrl` + wheel cursor-centered
@@ -147,6 +152,11 @@ arrow **and** vim keys) can be cleared with `×`.
 A per-site toggle for every supported integration (HDB, PTP, BLU, ATH, BHD, GPW,
 SSD, FRDS, slow.pics, comp.pics). Disabling a site stops yacomp from injecting
 there without an uninstall.
+
+- **HDB image click** (`Viewer` / `Native`) — controls what happens when clicking
+  HDB comparison or gallery thumbnails. `Viewer` opens yacomp at that image;
+  `Native` leaves the original HDB/image-host link behavior alone. Default
+  `Viewer`.
 
 ### Filter cycle
 

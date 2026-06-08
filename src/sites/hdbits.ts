@@ -434,29 +434,41 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
 }
 
 /** Last resort: a tiny "columns: [ ] Show comparison" control. The user types
- *  the column count and the flat block is reshaped into that many columns. */
+ *  1 to treat the block as a plain viewer gallery, or 2+ to reshape it as a
+ *  comparison with that many columns. */
 function addManualColumnControl(images: HTMLImageElement[], anchor: Node, container: HTMLElement): void {
   const wrap = document.createElement("span");
   wrap.style.display = "block";
   wrap.style.marginTop = "6px";
   const input = document.createElement("input");
   input.type = "number";
-  input.min = "2";
+  input.min = "1";
   input.placeholder = "cols";
   input.style.width = "4em";
   const link = makeShowComparisonLink();
   link.addEventListener("click", (e) => {
     e.preventDefault();
     const cols = Number.parseInt(input.value, 10);
-    if (!(cols >= 2) || images.length % cols !== 0) {
-      link.textContent = `Show comparison (enter a column count that divides ${images.length})`;
+    if (!(cols >= 1) || images.length % cols !== 0) {
+      link.textContent = `Show comparison (enter 1 or a column count that divides ${images.length})`;
+      return;
+    }
+    if (cols === 1) {
+      const grid: Grid = {
+        rows: images.map((img) => [forumManualCell(img)]),
+        numCols: 1,
+        names: null,
+        anchorEl: anchor,
+        gallery: true,
+      };
+      openWithDummyWrapper(grid);
       return;
     }
     const names = Array.from({ length: cols }, (_, i) => `Source ${i + 1}`);
     const grid = buildRescueGrid(images, { names, numCols: cols, imageUrls: [] }, anchor);
     if (grid) buildComparison(grid, container, link);
   });
-  wrap.append("columns: ", input, " ", link);
+  wrap.append("columns: ", input, " ", link, " (1 = viewer)");
   if (anchor.parentNode) insertLinkAfter(anchor, wrap);
   else container.insertBefore(wrap, container.firstChild);
 }

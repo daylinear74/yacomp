@@ -337,6 +337,43 @@ test("hdbits: TheFarm torrent screenshots stay a click-only viewer", async ({ pa
   await expect(page.locator("._scf_comp_row")).toHaveCount(4);
 });
 
+test("hdbits: manual slow.pics columns=1 opens the rescued block as a viewer", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/176-torrent-desc-slowpics-mismatch-manual-viewer");
+  await waitForHdbitsReady(page);
+
+  await page.locator("._scf_comp_link").first().click();
+  const input = page.locator('input[placeholder="cols"]');
+  await expect(input).toHaveCount(1);
+  await expect(page.locator('span:has(input[placeholder="cols"])')).toContainText("(1 = viewer)");
+  await input.fill("1");
+  await page.locator("._scf_comp_link").first().click();
+
+  await expect(page.locator("._scf_orphan_select")).toHaveCount(0);
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(8);
+});
+
+test("hdbits: manual slow.pics columns=2 still builds a comparison", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/176-torrent-desc-slowpics-mismatch-manual-viewer");
+  await waitForHdbitsReady(page);
+
+  await page.locator("._scf_comp_link").first().click();
+  const input = page.locator('input[placeholder="cols"]');
+  await expect(input).toHaveCount(1);
+  await input.fill("2");
+  await page.locator("._scf_comp_link").first().click();
+
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(4);
+  await page.keyboard.press("Digit1");
+  const names = (await page.locator("._scf_comp_label span").allTextContents())
+    .map((t) => t.replace(/^\d+\.\s*/, "").trim())
+    .filter(Boolean);
+  expect(names).toEqual(["Source 1", "Source 2"]);
+});
+
 test("hdbits: Show comparison link sits immediately before the image run", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/158-torrent-desc-comparison-note-before-images");
