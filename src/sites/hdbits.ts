@@ -196,12 +196,12 @@ function addManualColumnControlFromCells(
   const wrap = document.createElement("span");
   wrap.className = "_scf_column_control";
   const input = document.createElement("input");
-  input.type = "number";
-  input.min = "1";
-  input.placeholder = "cols";
+  input.type = "text";
+  input.inputMode = "numeric";
+  input.pattern = "[0-9]*";
+  input.placeholder = "1";
   input.style.width = "4em";
   const link = makeShowComparisonLink("Show Viewer");
-  let expanded = false;
   const submit = () => {
     const raw = input.value.trim();
     const cols = raw ? Number.parseInt(raw, 10) : 1;
@@ -228,15 +228,9 @@ function addManualColumnControlFromCells(
   });
   link.addEventListener("click", (e) => {
     e.preventDefault();
-    if (!expanded) {
-      expanded = true;
-      wrap.append(" columns: ", input, " (blank or 1 = viewer)");
-      input.focus();
-      return;
-    }
     submit();
   });
-  wrap.append(link);
+  wrap.append(link, " columns: ", input);
   insertNodeBeforeImageRun(images, wrap, container);
   return link;
 }
@@ -679,9 +673,9 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
   insertLinkAfter(spLink, link);
 }
 
-/** Last resort: a compact "Show Viewer" control. The first click reveals a
- *  columns input; blank / 1 treats the block as a plain viewer gallery, while
- *  2+ reshapes it as a comparison with that many columns. */
+/** Last resort: a compact "Show Viewer" control with a columns input. Blank / 1
+ *  treats the block as a plain viewer gallery, while 2+ reshapes it as a
+ *  comparison with that many columns. */
 function addManualColumnControl(images: HTMLImageElement[], anchor: Node, container: HTMLElement): void {
   addManualColumnControlFromCells(images.map(forumManualCell), anchor, container, images);
 }

@@ -255,8 +255,8 @@ test("hdbits: plain torrent Screens blocks get Show Viewer and open as a 1-wide 
 
   await expect(comparisonLinks(page)).toHaveCount(0);
   await expect(viewerLinks(page)).toHaveCount(1);
-  await expect(page.locator("._scf_column_control")).toHaveText("Show Viewer");
-  await expect(page.locator('input[placeholder="cols"]')).toHaveCount(0);
+  await expect(page.locator("._scf_column_control")).toHaveText("Show Viewer columns:");
+  await expect(page.locator('input[type="text"][placeholder="1"]')).toHaveCount(1);
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -482,13 +482,10 @@ test("hdbits: manual slow.pics columns=1 opens the rescued block as a viewer", a
 
   await expect(comparisonLinks(page)).toHaveCount(0);
   await expect(viewerLinks(page)).toHaveText("Show Viewer");
-  await expect(page.locator('input[placeholder="cols"]')).toHaveCount(0);
-  await viewerLinks(page).first().click();
-  const input = page.locator('input[placeholder="cols"]');
+  const input = page.locator('input[type="text"][placeholder="1"]');
   await expect(input).toHaveCount(1);
   await expect(viewerLinks(page)).toHaveCount(1);
-  await expect(page.locator('span:has(input[placeholder="cols"])')).toContainText("Show Viewer columns:");
-  await expect(page.locator('span:has(input[placeholder="cols"])')).toContainText("(blank or 1 = viewer)");
+  await expect(page.locator('span:has(input[type="text"][placeholder="1"])')).toHaveText("Show Viewer columns:");
   await input.press("Enter");
 
   await expect(page.locator("._scf_orphan_select")).toHaveCount(0);
@@ -502,8 +499,7 @@ test("hdbits: manual slow.pics columns=2 still builds a comparison", async ({ pa
   await waitForHdbitsReady(page);
 
   await expect(comparisonLinks(page)).toHaveCount(0);
-  await viewerLinks(page).first().click();
-  const input = page.locator('input[placeholder="cols"]');
+  const input = page.locator('input[type="text"][placeholder="1"]');
   await expect(input).toHaveCount(1);
   await input.fill("2");
   await input.press("Enter");
@@ -523,8 +519,7 @@ test("hdbits: manual viewer columns must divide the screenshot count", async ({ 
   await waitForHdbitsReady(page);
 
   await expect(comparisonLinks(page)).toHaveCount(0);
-  await viewerLinks(page).first().click();
-  const input = page.locator('input[placeholder="cols"]');
+  const input = page.locator('input[type="text"][placeholder="1"]');
   await expect(input).toHaveCount(1);
   await input.fill("3");
   await viewerLinks(page).first().click();
@@ -542,7 +537,7 @@ test("hdbits: stale saved Tonari manual control starts as tight Show Viewer", as
   await expect(comparisonLinks(page)).toHaveCount(0);
   await expect(viewerLinks(page)).toHaveText("Show Viewer");
   await expect(page.locator("._scf_column_control")).toHaveCount(1);
-  await expect(page.locator('input[placeholder="cols"]')).toHaveCount(0);
+  await expect(page.locator('input[type="text"][placeholder="1"]')).toHaveCount(1);
   await expect(page.locator("span").filter({ hasText: /^columns:/ })).toHaveCount(0);
 
   const gap = await page.evaluate(() => {
