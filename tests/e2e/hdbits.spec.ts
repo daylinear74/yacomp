@@ -275,6 +275,88 @@ test("hdbits: plain torrent Screens blocks get Show Viewer and open as a 1-wide 
   await expect(page.locator("._scf_comp_row")).toHaveCount(4);
 });
 
+test("hdbits: JPG-only HDBits originals fall back after the PNG full URL fails", async ({ page }) => {
+  const fullRequests: string[] = [];
+  const jpgOnlySvg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="350" height="446">' +
+    '<rect width="350" height="446" fill="#444"/></svg>';
+
+  await page.route(/\/\/t\.hdbits\.org\//, (route) =>
+    route.fulfill({ contentType: "image/svg+xml", body: STUB_SVG }),
+  );
+  await page.route(/\/\/i\.hdbits\.org\//, (route) => {
+    const url = route.request().url();
+    fullRequests.push(url);
+    if (/\/jpgonly\.png(?:[?#]|$)/.test(url)) {
+      return route.fulfill({ status: 404, contentType: "text/plain", body: "missing png" });
+    }
+    return route.fulfill({
+      contentType: "image/svg+xml",
+      body: /\/jpgonly\.jpg(?:[?#]|$)/.test(url) ? jpgOnlySvg : STUB_SVG,
+    });
+  });
+
+  await page.goto("/hdbits/case/179-torrent-desc-hdbits-jpg-original-fallback");
+  await waitForHdbitsReady(page);
+
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerLinks(page)).toHaveCount(1);
+  await page.locator('img[src*="jpgonly"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(2);
+  await expect
+    .poll(() =>
+      page
+        .locator("._scf_comp_img")
+        .first()
+        .evaluate((el) => (el as HTMLImageElement).currentSrc || (el as HTMLImageElement).src),
+    )
+    .toContain("/jpgonly.jpg");
+  expect(fullRequests.some((url) => /\/jpgonly\.png(?:[?#]|$)/.test(url))).toBe(true);
+  expect(fullRequests.some((url) => /\/jpgonly\.jpg(?:[?#]|$)/.test(url))).toBe(true);
+});
+
+test("hdbits: WebP-only HDBits originals fall back after PNG and JPG both fail", async ({ page }) => {
+  const fullRequests: string[] = [];
+  const webpOnlySvg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180">' +
+    '<rect width="320" height="180" fill="#555"/></svg>';
+
+  await page.route(/\/\/t\.hdbits\.org\//, (route) =>
+    route.fulfill({ contentType: "image/svg+xml", body: STUB_SVG }),
+  );
+  await page.route(/\/\/i\.hdbits\.org\//, (route) => {
+    const url = route.request().url();
+    fullRequests.push(url);
+    if (/\/webponly\.(?:png|jpg)(?:[?#]|$)/.test(url)) {
+      return route.fulfill({ status: 404, contentType: "text/plain", body: "missing png/jpg" });
+    }
+    return route.fulfill({
+      contentType: "image/svg+xml",
+      body: /\/webponly\.webp(?:[?#]|$)/.test(url) ? webpOnlySvg : STUB_SVG,
+    });
+  });
+
+  await page.goto("/hdbits/case/181-torrent-desc-hdbits-webp-original-fallback");
+  await waitForHdbitsReady(page);
+
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerLinks(page)).toHaveCount(1);
+  await page.locator('img[src*="webponly"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(2);
+  await expect
+    .poll(() =>
+      page.locator("._scf_comp_img").evaluateAll((els) =>
+        els.map((el) => (el as HTMLImageElement).currentSrc || (el as HTMLImageElement).src)
+          .find((src) => src.includes("/webponly.")) ?? ""),
+    )
+    .toContain("/webponly.webp");
+  expect(fullRequests.some((url) => /\/webponly\.png(?:[?#]|$)/.test(url))).toBe(true);
+  expect(fullRequests.some((url) => /\/webponly\.jpg(?:[?#]|$)/.test(url))).toBe(true);
+  expect(fullRequests.some((url) => /\/webponly\.webp(?:[?#]|$)/.test(url))).toBe(true);
+});
+
 test("hdbits: BDInfo quote between prose and screenshots breaks false comparison names (Haram 2014)", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/157-torrent-desc-haram-bdinfo-before-screens-gallery");
@@ -307,6 +389,18 @@ test("hdbits: showhide log between source list and screenshots breaks false comp
   await expect(comparisonLinks(page)).toHaveCount(0);
   await expect(viewerLinks(page)).toHaveCount(1);
   await page.locator('img[src*="g177a"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(6);
+});
+
+test("hdbits: technical doc labels before a torrent gallery are not source columns", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/180-torrent-desc-killshot-bdinfo-eac3to-gallery");
+  await waitForHdbitsReady(page);
+
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerLinks(page)).toHaveCount(1);
+  await page.locator('img[src*="k180a"]').click();
   await expect(page.locator("._scf_comp")).toBeVisible();
   await expect(page.locator("._scf_comp_row")).toHaveCount(6);
 });

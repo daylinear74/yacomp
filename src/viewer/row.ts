@@ -37,6 +37,25 @@ export function rowCellsAspectRatio(rowCells: KnownCellDimensions[]): string | n
   return rowCanvasAspectRatio(rowCells);
 }
 
+function hdbNextFallbackSrc(src: string): string | null {
+  const match = src.match(/^((?:https?:)?\/\/i\.hdbits\.org\/[^/?#]+)\.(png|jpe?g|webp)([?#].*)?$/i);
+  if (!match) return null;
+  const ext = match[2].toLowerCase();
+  const next = ext === "png" ? "jpg" : ext === "jpg" || ext === "jpeg" ? "webp" : null;
+  return next ? `${match[1]}.${next}${match[3] ?? ""}` : null;
+}
+
+function installHdbImageFallback(img: HTMLImageElement): void {
+  img.addEventListener("error", () => {
+    const fallback = hdbNextFallbackSrc(img.currentSrc || img.src);
+    if (!fallback) return;
+    const tried = (img.dataset.hdbFallbackTried || "").split(",").filter(Boolean);
+    if (tried.includes(fallback)) return;
+    img.dataset.hdbFallbackTried = [...tried, fallback].join(",");
+    img.src = fallback;
+  });
+}
+
 export function buildRow(
   rowCells: { full: string; width?: number | null; height?: number | null }[],
   numCols: number,
@@ -51,14 +70,15 @@ export function buildRow(
 
   const sizer = document.createElement("img");
   sizer.className = "_scf_comp_sizer";
+  installHdbImageFallback(sizer);
   const knownAspectRatio = rowCellsAspectRatio(rowCells);
   if (knownAspectRatio) rowDiv.style.aspectRatio = knownAspectRatio;
   if (deferred) {
     sizer.dataset.src = rowCells[0].full;
     if (!knownAspectRatio) rowDiv.style.aspectRatio = "16 / 9";
   } else {
-    sizer.src = rowCells[0].full;
     sizer.addEventListener("load", () => rowDiv.classList.remove("_scf_loading"), { once: true });
+    sizer.src = rowCells[0].full;
   }
   rowDiv.appendChild(sizer);
 
@@ -84,11 +104,13 @@ export function buildRow(
     cell.className = "_scf_comp_cell";
     const img = document.createElement("img");
     img.className = "_scf_comp_img";
+    installHdbImageFallback(img);
     const src = rowCells[ci].full;
     // Eager-load only column 0 of non-deferred rows; every other cell
     // waits until the user activates it (switchColumn / loadRowColumn)
     // or the row enters the IO buffer (loadRow loads the active col).
     if (!deferred && ci === 0) {
+      img.addEventListener("load", () => adjustRowAR(img), { once: true });
       img.src = src;
     } else {
       img.dataset.src = src;
@@ -96,7 +118,6 @@ export function buildRow(
     img.style.visibility = ci === 0 ? "visible" : "hidden";
     if (img.src) {
       void applyFilterToImg(img);
-      img.addEventListener("load", () => adjustRowAR(img), { once: true });
     }
     cell.appendChild(img);
     rowDiv.appendChild(cell);
@@ -124,14 +145,15 @@ function loadCellSrc(
   adjustRowAR: (img: HTMLImageElement) => void,
 ): void {
   if (!img.dataset.src) return;
-  img.src = img.dataset.src;
+  const src = img.dataset.src;
   delete img.dataset.src;
+  img.addEventListener("load", () => adjustRowAR(img), { once: true });
+  img.src = src;
   void applyFilterToImg(img, {
     brightness: comp.colBrightness[ci],
     contrast: comp.colContrast[ci],
     gammaCheck: comp.colGammaCheck[ci],
   });
-  img.addEventListener("load", () => adjustRowAR(img), { once: true });
 }
 
 // IO-triggered row entry: load the sizer (for the row's natural aspect
@@ -143,9 +165,10 @@ export function loadRow(rd: RowData, comp: Comp): void {
   rd.loaded = true;
   const { sizer, rowDiv, imgs, adjustRowAR } = rd;
   if (sizer.dataset.src) {
-    sizer.src = sizer.dataset.src;
+    const src = sizer.dataset.src;
     delete sizer.dataset.src;
     sizer.addEventListener("load", () => rowDiv.classList.remove("_scf_loading"), { once: true });
+    sizer.src = src;
   }
   const activeCol = comp.currentCol || 0;
   if (imgs[activeCol]) loadCellSrc(imgs[activeCol], activeCol, comp, adjustRowAR);

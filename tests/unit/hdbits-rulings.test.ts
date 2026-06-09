@@ -277,6 +277,11 @@ SUBTITLES......: English .srt / English SDH .srt
 iMDB...........: https://www.imdb.com/title/tt0109759
 ENCODER........: Azevedo
 x264 [info]: frame I:727 Avg QP:18.90 size:249839`)).toBeNull());
+  test("drops technical section labels even when they contain comparison separators", () => {
+    expect(asColumnTitles("BDInfo vs eac3to log")).toBeNull();
+    expect(asColumnTitles("Disc Menu vs Special Features")).toBeNull();
+    expect(asColumnTitles("Technical information: Source vs Encode")).toBeNull();
+  });
   test("drops slash-delimited parenthetical notes inside a single release label (1019)", () =>
     expect(asColumnTitles("Power.S03E01.Call.Me.James.1080p.NF.WEBRip.DD5.1.x264-NTb (Source 4K / 1080p Re-Encoded / Netflix / No Logo)")).toBeNull());
   test("uses the last comparison line from a multi-line heading (1266/1267)", () =>

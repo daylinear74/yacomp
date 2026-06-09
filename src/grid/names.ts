@@ -112,6 +112,7 @@ export function isFieldLabel(text: string): boolean {
 // "Summary:", "Logs:", "Quote", "Hidden text", "Spoiler") — never a source label.
 const FOOTER_LABEL_RE = /^(?:see\s+also|slow\s?\.?\s?pics?|comparisons?|screenshots?|more\s+screens?|notes?|summary|logs?|edit|update|p\.?\s?s\.?|quote|hidden\s+text|spoilers?|click\s+to\s+\w+)\s*:?\s*$/i;
 const DECORATED_STRUCTURAL_LABEL_RE = /^(?:summary|notes?|logs?)\s*[:：].*$/i;
+const TECHNICAL_SECTION_LABEL_RE = /\b(?:bd\s*info|eac3to(?:\s+logs?)?|disc\s+menu|special\s+features|technical\s+information)\b/i;
 export function isFooterLabel(text: string): boolean {
   const t = text.trim();
   if (/^encode\s+notes?\b/i.test(t)) return true;
@@ -133,6 +134,7 @@ export function isNonSourceLabel(text: string): boolean {
     isQuoteAttribution(text) ||
     isFieldLabel(text) ||
     isFooterLabel(text) ||
+    TECHNICAL_SECTION_LABEL_RE.test(text) ||
     isUrlLabel(text)
   );
 }
@@ -292,6 +294,7 @@ export function asColumnTitles(text: string): string[] | null {
   // No length cap: a legit 6-column title with bitrates runs long (2245), and
   // prose is rejected semantically below, not by length.
   if (!raw) return null;
+  if (TECHNICAL_SECTION_LABEL_RE.test(raw)) return null;
   if (/\bvideo size\s*:/i.test(raw)) return null;
   if (looksLikeTechnicalFileList(raw) || looksLikeTechnicalSettingsLine(raw)) return null;
   const stacked = stackedBitrateTitleNames(raw);
