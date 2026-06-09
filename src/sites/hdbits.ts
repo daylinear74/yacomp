@@ -14,6 +14,20 @@ import { findSlowPicsComparisons, buildRescueGrid, type SlowPicsComparison } fro
 const FORUM_MANUAL_PANEL_ID = "_scf_manual_panel_";
 const FORUM_MANUAL_CSS_ID = "_scf_hdbits_manual_css_";
 const FORUM_MANUAL_SELECTED_CLASS = "_scf_manual_selected";
+const COLUMN_INPUT_CSS_ID = "_scf_hdbits_column_input_css_";
+
+function injectColumnInputCSS(): void {
+  if (document.getElementById(COLUMN_INPUT_CSS_ID)) return;
+  const style = document.createElement("style");
+  style.id = COLUMN_INPUT_CSS_ID;
+  style.textContent = `
+    ._scf_column_input::placeholder {
+      color: #666;
+      opacity: 1;
+    }
+  `;
+  document.head.appendChild(style);
+}
 
 export function findComparisonLinkAnchor(container: Element): Node | null {
   const parent = container.parentElement || container;
@@ -193,14 +207,16 @@ function addManualColumnControlFromCells(
   container: HTMLElement,
   images: HTMLImageElement[],
 ): HTMLAnchorElement {
+  injectColumnInputCSS();
   const wrap = document.createElement("span");
   wrap.className = "_scf_column_control";
   const input = document.createElement("input");
-  input.type = "text";
-  input.inputMode = "numeric";
-  input.pattern = "[0-9]*";
+  input.type = "number";
+  input.min = "1";
+  input.className = "_scf_column_input";
   input.placeholder = "1";
   input.style.width = "4em";
+  input.style.padding = "0 .5rem";
   const link = makeShowComparisonLink("Show Viewer");
   const submit = () => {
     const raw = input.value.trim();
