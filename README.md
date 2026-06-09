@@ -31,8 +31,8 @@ install the latest release](https://github.com/daylinear74/yacomp/releases/lates
   Other screenshot groups get a compact **Show Viewer** control placed directly
   above the image run, and image clicks open the same gallery viewer by default.
   If a block is ambiguous, **Show Viewer** includes a column-count field:
-  blank or `1` opens it as a gallery, while `2+` builds a manual comparison when
-  the image count divides cleanly.
+  blank or `1` opens it as a gallery, while `2+` builds a manual comparison; a
+  non-divisible image count leaves the final row short.
 - On HDB forum pages it also adds a **Custom comparison** builder below the page
   title, for markup too irregular to auto-detect safely (see *Features*).
 - On native-viewer sites, use the site's comparison UI as usual; yacomp takes

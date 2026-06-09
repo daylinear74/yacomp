@@ -21,9 +21,13 @@ function injectColumnInputCSS(): void {
   const style = document.createElement("style");
   style.id = COLUMN_INPUT_CSS_ID;
   style.textContent = `
+    ._scf_column_input {
+      color: #777;
+      color: color-mix(in srgb, currentColor 45%, #999);
+    }
     ._scf_column_input::placeholder {
-      color: #666;
-      opacity: 1;
+      color: inherit;
+      opacity: .68;
     }
   `;
   document.head.appendChild(style);
@@ -164,7 +168,7 @@ function insertNodeBeforeImageRun(images: HTMLImageElement[], node: Node, contai
 }
 
 function gridFromCells(cells: GridCell[], cols: number, anchor: Node | null | undefined): Grid | null {
-  if (cols < 1 || cells.length < 2 || cells.length % cols !== 0) return null;
+  if (cols < 1 || cols > cells.length || cells.length < 2) return null;
   const rows: GridCell[][] = [];
   for (let i = 0; i < cells.length; i += cols) {
     rows.push(cells.slice(i, i + cols));
@@ -215,14 +219,14 @@ function addManualColumnControlFromCells(
   input.min = "1";
   input.className = "_scf_column_input";
   input.placeholder = "1";
-  input.style.width = "4em";
-  input.style.padding = "0 .5rem";
+  input.style.width = "2.6em";
+  input.style.padding = "0 2px";
   const link = makeShowComparisonLink("Show Viewer");
   const submit = () => {
     const raw = input.value.trim();
     const cols = raw ? Number.parseInt(raw, 10) : 1;
-    if (!(cols >= 1) || cells.length % cols !== 0) {
-      link.textContent = `Show Viewer (columns must divide ${cells.length})`;
+    if (!(cols >= 1) || cols > cells.length) {
+      link.textContent = "Show Viewer";
       return;
     }
     const grid = gridFromCells(cells, cols, anchor);

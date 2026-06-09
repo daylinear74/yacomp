@@ -264,17 +264,28 @@ test("hdbits: plain torrent Screens blocks get Show Viewer and open as a 1-wide 
         const style = getComputedStyle(el);
         const placeholder = getComputedStyle(el, "::placeholder");
         return {
+          inlineWidth: (el as HTMLInputElement).style.width,
           paddingLeft: style.paddingLeft,
           paddingRight: style.paddingRight,
-          placeholderColor: placeholder.color,
+          inputIsBlack: style.color === "rgb(0, 0, 0)",
+          placeholderFollowsInput: placeholder.color === style.color,
+          placeholderOpacity: placeholder.opacity,
         };
       }),
     )
     .toEqual({
-      paddingLeft: "8px",
-      paddingRight: "8px",
-      placeholderColor: "rgb(102, 102, 102)",
+      inlineWidth: "2.6em",
+      paddingLeft: "2px",
+      paddingRight: "2px",
+      inputIsBlack: false,
+      placeholderFollowsInput: true,
+      placeholderOpacity: "0.68",
     });
+  const defaultInputColor = await columnInput.evaluate((el) => getComputedStyle(el).color);
+  await page.addStyleTag({ content: "._scf_column_control { color: rgb(139, 67, 128) !important; }" });
+  await expect
+    .poll(() => columnInput.evaluate((el) => getComputedStyle(el).color))
+    .not.toBe(defaultInputColor);
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -531,7 +542,7 @@ test("hdbits: manual slow.pics columns=2 still builds a comparison", async ({ pa
   expect(names).toEqual(["Source 1", "Source 2"]);
 });
 
-test("hdbits: manual viewer columns must divide the screenshot count", async ({ page }) => {
+test("hdbits: manual viewer columns can leave a short final row", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/176-torrent-desc-slowpics-mismatch-manual-viewer");
   await waitForHdbitsReady(page);
@@ -542,9 +553,15 @@ test("hdbits: manual viewer columns must divide the screenshot count", async ({ 
   await input.fill("3");
   await viewerLinks(page).first().click();
 
-  await expect(page.locator("._scf_comp")).toHaveCount(0);
-  await expect(page.locator("._scf_column_control")).toHaveCount(1);
-  await expect(viewerLinks(page)).toHaveText("Show Viewer (columns must divide 8)");
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(3);
+  await expect
+    .poll(() =>
+      page.locator("._scf_comp_row").evaluateAll((rows) =>
+        rows.map((row) => row.querySelectorAll("._scf_comp_img").length),
+      ),
+    )
+    .toEqual([3, 3, 2]);
 });
 
 test("hdbits: stale saved Tonari manual control starts as tight Show Viewer", async ({ page }) => {
