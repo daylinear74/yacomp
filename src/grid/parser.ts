@@ -1726,6 +1726,30 @@ function hasLargeGapBeforeRemainder(remainder: GroupsResult | null): boolean {
   return (remainder?.groupLeadingBreaks[0] ?? 0) >= 3;
 }
 
+/** Surface torrent-description groups that precede EVERY grid a section
+ *  strategy emitted (release sample shots posted above the vs-labeled
+ *  comparison sections of an RPU-fix post) as a 1-wide viewer gallery. The
+ *  parse claims the whole container, so without a grid of their own those
+ *  screenshots would be dead — no control and no click-to-view. Forum posts
+ *  are left alone: stray leading images there stay suppressed. */
+function withUncoveredLeadingGallery(container: Element, collected: GroupsResult, grids: Grid[]): Grid[] {
+  if (!enforcesTorrentTitleDistance(container)) return grids;
+  const used = new Set<HTMLImageElement>();
+  for (const grid of grids) {
+    for (const cell of grid.rows.flat()) if (cell.img) used.add(cell.img);
+  }
+  const leading: GroupsResult = { groups: [], groupLabels: [], groupLabelEls: [], groupLeadingBreaks: [] };
+  for (let i = 0; i < collected.groups.length; i++) {
+    if (collected.groups[i].some((cell) => !!cell.img && used.has(cell.img))) break;
+    leading.groups.push(collected.groups[i]);
+    leading.groupLabels.push(collected.groupLabels[i]);
+    leading.groupLabelEls.push(collected.groupLabelEls[i]);
+    leading.groupLeadingBreaks.push(collected.groupLeadingBreaks[i]);
+  }
+  const gallery = leading.groups.length ? galleryGridFromGroups(leading) : null;
+  return gallery ? [gallery, ...grids] : grids;
+}
+
 function hasRejectedLeadingColumnTitle(container: Element): boolean {
   let leadingText = "";
   for (const node of container.childNodes) {
@@ -1896,7 +1920,9 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     }
   }
   const multiComp = buildMultiCompGrids(container, groups, groupLabels, groupLabelEls, !hasWholeContainerLeadCmp);
-  if (multiComp && (!hasWholeContainerLeadCmp || multiComp.length > 1)) return multiComp;
+  if (multiComp && (!hasWholeContainerLeadCmp || multiComp.length > 1)) {
+    return withUncoveredLeadingGallery(container, collected, multiComp);
+  }
 
   const leadingBeforeFooter = buildLeadingComparisonBeforeFooterGrid(container, groups, groupLabels, groupLabelEls, earlyLeadCmp);
   if (leadingBeforeFooter) return leadingBeforeFooter;

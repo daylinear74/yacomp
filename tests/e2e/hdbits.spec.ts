@@ -603,6 +603,34 @@ test("hdbits: stale saved Tonari manual control starts as tight Show Viewer", as
   expect(gap).toEqual({ brs: 1, text: "", marginTop: "" });
 });
 
+test("hdbits: leading sample shots above labeled comparison sections get Show Viewer (RPU-fix shape)", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/182-torrent-desc-rpu-leading-screens-before-comparisons");
+  await waitForHdbitsReady(page);
+
+  // The three vs-labeled sections inside the COMPARISONS showhide are real
+  // comparisons; the four sample shots above them must still get a viewer
+  // gallery instead of being claimed and dead.
+  await expect(comparisonLinks(page)).toHaveCount(3);
+  await expect(viewerLinks(page)).toHaveCount(1);
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const control = document.querySelector("._scf_column_control");
+        const firstImage = document.querySelector('img[src*="r182lead1"]');
+        if (!control || !firstImage) return null;
+        const range = document.createRange();
+        range.setStartAfter(control);
+        range.setEndBefore(firstImage.closest("a") ?? firstImage);
+        return range.toString().trim();
+      }),
+    )
+    .toBe("");
+  await page.locator('img[src*="r182lead2"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(4);
+});
+
 test("hdbits: Show comparison link sits immediately before the image run", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/158-torrent-desc-comparison-note-before-images");
