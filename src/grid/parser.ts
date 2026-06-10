@@ -1518,11 +1518,6 @@ function torrentViewerGalleryFallback(
   }];
 }
 
-function isNightOfTheCometCurationShape(): boolean {
-  const pageText = `${document.title} ${document.body.textContent || ""}`;
-  return /Night of the Comet/i.test(pageText) && /Prior Release Comparisons/i.test(pageText);
-}
-
 function isSuppressedNightCometLabel(label: string): boolean {
   void label;
   return false;
