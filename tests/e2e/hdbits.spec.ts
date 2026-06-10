@@ -255,37 +255,40 @@ test("hdbits: plain torrent Screens blocks get Show Viewer and open as a 1-wide 
 
   await expect(comparisonLinks(page)).toHaveCount(0);
   await expect(viewerLinks(page)).toHaveCount(1);
-  await expect(page.locator("._scf_column_control")).toHaveText("Show Viewer columns:");
-  const columnInput = page.locator('input[type="number"][placeholder="1"]');
-  await expect(columnInput).toHaveCount(1);
+  const control = page.locator("._scf_column_control");
+  await expect(control.locator("._scf_comp_link")).toHaveText("Show Viewer");
+  const columnSelect = control.locator("select._scf_column_select");
+  await expect(columnSelect).toHaveValue("1");
+  await expect(columnSelect.locator("option")).toHaveCount(4); // 1..image count
+  // Natural-English wording around the dropdown: "Show Viewer with [1] column".
+  expect(
+    await control.evaluate((el) =>
+      [...el.childNodes]
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent),
+    ),
+  ).toEqual([" with ", " column"]);
   await expect
     .poll(() =>
-      columnInput.evaluate((el) => {
+      columnSelect.evaluate((el) => {
         const style = getComputedStyle(el);
-        const placeholder = getComputedStyle(el, "::placeholder");
         return {
-          inlineWidth: (el as HTMLInputElement).style.width,
           paddingLeft: style.paddingLeft,
           paddingRight: style.paddingRight,
-          inputIsBlack: style.color === "rgb(0, 0, 0)",
-          placeholderFollowsInput: placeholder.color === style.color,
-          placeholderOpacity: placeholder.opacity,
+          selectIsBlack: style.color === "rgb(0, 0, 0)",
         };
       }),
     )
     .toEqual({
-      inlineWidth: "2.6em",
-      paddingLeft: "2px",
-      paddingRight: "2px",
-      inputIsBlack: false,
-      placeholderFollowsInput: true,
-      placeholderOpacity: "0.68",
+      paddingLeft: "1px",
+      paddingRight: "1px",
+      selectIsBlack: false,
     });
-  const defaultInputColor = await columnInput.evaluate((el) => getComputedStyle(el).color);
+  const defaultSelectColor = await columnSelect.evaluate((el) => getComputedStyle(el).color);
   await page.addStyleTag({ content: "._scf_column_control { color: rgb(139, 67, 128) !important; }" });
   await expect
-    .poll(() => columnInput.evaluate((el) => getComputedStyle(el).color))
-    .not.toBe(defaultInputColor);
+    .poll(() => columnSelect.evaluate((el) => getComputedStyle(el).color))
+    .not.toBe(defaultSelectColor);
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -511,11 +514,12 @@ test("hdbits: manual slow.pics columns=1 opens the rescued block as a viewer", a
 
   await expect(comparisonLinks(page)).toHaveCount(0);
   await expect(viewerLinks(page)).toHaveText("Show Viewer");
-  const input = page.locator('input[type="number"][placeholder="1"]');
-  await expect(input).toHaveCount(1);
+  const select = page.locator("select._scf_column_select");
+  await expect(select).toHaveCount(1);
+  await expect(select).toHaveValue("1");
+  await expect(select.locator("option")).toHaveCount(8); // 1..image count
   await expect(viewerLinks(page)).toHaveCount(1);
-  await expect(page.locator('span:has(input[type="number"][placeholder="1"])')).toHaveText("Show Viewer columns:");
-  await input.press("Enter");
+  await select.press("Enter");
 
   await expect(page.locator("._scf_orphan_select")).toHaveCount(0);
   await expect(page.locator("._scf_comp")).toBeVisible();
@@ -528,10 +532,12 @@ test("hdbits: manual slow.pics columns=2 still builds a comparison", async ({ pa
   await waitForHdbitsReady(page);
 
   await expect(comparisonLinks(page)).toHaveCount(0);
-  const input = page.locator('input[type="number"][placeholder="1"]');
-  await expect(input).toHaveCount(1);
-  await input.fill("2");
-  await input.press("Enter");
+  const select = page.locator("select._scf_column_select");
+  await expect(select).toHaveCount(1);
+  await select.selectOption("2");
+  // The trailing word pluralizes with the choice: "with [2] columns".
+  await expect(page.locator("._scf_column_control")).toContainText("columns");
+  await viewerLinks(page).first().click();
 
   await expect(page.locator("._scf_comp")).toBeVisible();
   await expect(page.locator("._scf_comp_row")).toHaveCount(4);
@@ -548,9 +554,9 @@ test("hdbits: manual viewer columns can leave a short final row", async ({ page 
   await waitForHdbitsReady(page);
 
   await expect(comparisonLinks(page)).toHaveCount(0);
-  const input = page.locator('input[type="number"][placeholder="1"]');
-  await expect(input).toHaveCount(1);
-  await input.fill("3");
+  const select = page.locator("select._scf_column_select");
+  await expect(select).toHaveCount(1);
+  await select.selectOption("3");
   await viewerLinks(page).first().click();
 
   await expect(page.locator("._scf_comp")).toBeVisible();
@@ -572,7 +578,8 @@ test("hdbits: stale saved Tonari manual control starts as tight Show Viewer", as
   await expect(comparisonLinks(page)).toHaveCount(0);
   await expect(viewerLinks(page)).toHaveText("Show Viewer");
   await expect(page.locator("._scf_column_control")).toHaveCount(1);
-  await expect(page.locator('input[type="number"][placeholder="1"]')).toHaveCount(1);
+  await expect(page.locator("select._scf_column_select")).toHaveCount(1);
+  await expect(page.locator('input[type="number"]')).toHaveCount(0);
   await expect(page.locator("span").filter({ hasText: /^columns:/ })).toHaveCount(0);
 
   const gap = await page.evaluate(() => {

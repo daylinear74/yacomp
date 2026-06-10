@@ -14,20 +14,19 @@ import { findSlowPicsComparisons, buildRescueGrid, type SlowPicsComparison } fro
 const FORUM_MANUAL_PANEL_ID = "_scf_manual_panel_";
 const FORUM_MANUAL_CSS_ID = "_scf_hdbits_manual_css_";
 const FORUM_MANUAL_SELECTED_CLASS = "_scf_manual_selected";
-const COLUMN_INPUT_CSS_ID = "_scf_hdbits_column_input_css_";
+const COLUMN_SELECT_CSS_ID = "_scf_hdbits_column_select_css_";
 
-function injectColumnInputCSS(): void {
-  if (document.getElementById(COLUMN_INPUT_CSS_ID)) return;
+function injectColumnSelectCSS(): void {
+  if (document.getElementById(COLUMN_SELECT_CSS_ID)) return;
   const style = document.createElement("style");
-  style.id = COLUMN_INPUT_CSS_ID;
+  style.id = COLUMN_SELECT_CSS_ID;
   style.textContent = `
-    ._scf_column_input {
+    ._scf_column_select {
+      font: inherit;
       color: #777;
       color: color-mix(in srgb, currentColor 45%, #999);
-    }
-    ._scf_column_input::placeholder {
-      color: inherit;
-      opacity: .68;
+      padding: 0 1px;
+      margin: 0;
     }
   `;
   document.head.appendChild(style);
@@ -211,37 +210,36 @@ function addManualColumnControlFromCells(
   container: HTMLElement,
   images: HTMLImageElement[],
 ): HTMLAnchorElement {
-  injectColumnInputCSS();
+  injectColumnSelectCSS();
   const wrap = document.createElement("span");
   wrap.className = "_scf_column_control";
-  const input = document.createElement("input");
-  input.type = "number";
-  input.min = "1";
-  input.className = "_scf_column_input";
-  input.placeholder = "1";
-  input.style.width = "2.6em";
-  input.style.padding = "0 2px";
+  const select = document.createElement("select");
+  select.className = "_scf_column_select";
+  for (let i = 1; i <= cells.length; i++) {
+    const option = document.createElement("option");
+    option.value = String(i);
+    option.textContent = String(i);
+    select.appendChild(option);
+  }
+  select.value = "1";
+  const columnsText = document.createTextNode(" column");
   const link = makeShowComparisonLink("Show Viewer");
   const submit = () => {
-    const raw = input.value.trim();
-    const cols = raw ? Number.parseInt(raw, 10) : 1;
-    if (!(cols >= 1) || cols > cells.length) {
-      link.textContent = "Show Viewer";
-      return;
-    }
+    const cols = Number.parseInt(select.value, 10);
+    if (!(cols >= 1) || cols > cells.length) return;
     const grid = gridFromCells(cells, cols, anchor);
     if (!grid) return;
-    input.blur();
+    select.blur();
     if (cols === 1) {
       openWithDummyWrapper(grid);
       return;
     }
     buildComparison(grid, container, link);
   };
-  input.addEventListener("input", () => {
-    link.textContent = "Show Viewer";
+  select.addEventListener("change", () => {
+    columnsText.data = select.value === "1" ? " column" : " columns";
   });
-  input.addEventListener("keydown", (e) => {
+  select.addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
     submit();
@@ -250,7 +248,7 @@ function addManualColumnControlFromCells(
     e.preventDefault();
     submit();
   });
-  wrap.append(link, " columns: ", input);
+  wrap.append(link, " with ", select, columnsText);
   insertNodeBeforeImageRun(images, wrap, container);
   return link;
 }
