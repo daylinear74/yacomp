@@ -193,7 +193,10 @@ Things you should keep:
   These are what the parser walks.
 - `t.hdbits.org` thumb URLs. The runner stubs both `t.hdbits.org` and
   `i.hdbits.org` at the Playwright route layer (see
-  `tests/e2e/hdbits.spec.ts`), so no real requests fire.
+  `tests/e2e/hdbits.spec.ts`), and every other external host is blocked
+  at the context layer (`tests/e2e/fixtures.ts`), so no real requests
+  fire — placeholder hosts like `example.invalid` are safe to use and
+  need no per-test stubbing.
 - Source labels (`Source vs. Encode`, color spans, bold tags). Those
   are what the parser is trying to recognize.
 

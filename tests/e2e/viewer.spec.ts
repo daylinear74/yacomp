@@ -1,5 +1,6 @@
-import { test, expect, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import { test, expect } from "./fixtures";
 
 // Stub the slow.pics CDN so the suite is hermetic (no external network).
 // Specific fixture files use production-risk dimensions; the fallback keeps
