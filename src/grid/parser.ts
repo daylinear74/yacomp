@@ -2219,6 +2219,15 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     ({ groups, groupLabels, groupLabelEls, groupLeadingBreaks } = collected);
     total = groups.flat().length;
   }
+  // Every return below must carry the trailing galleries split off above —
+  // those screenshots were deliberately separated from the leading section, so
+  // even when the leading section itself dies (unshapeable leftovers, an
+  // adjacent slow.pics owner), the trailing gallery must still surface instead
+  // of leaving its images claimed-but-dead with no control and no click.
+  const withTrailing = (grids: Grid[] | null): Grid[] | null => {
+    if (grids?.length) return [...grids, ...trailingGalleries];
+    return trailingGalleries.length ? [...trailingGalleries] : grids;
+  };
   if (
     names?.some((name) => /^comparison$/i.test(name)) &&
     isTorrentPage() &&
@@ -2227,7 +2236,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     groups.length === 1 &&
     total >= 2
   ) {
-    return torrentViewerGalleryFallback(container, groups, groupLabelEls);
+    return withTrailing(torrentViewerGalleryFallback(container, groups, groupLabelEls));
   }
   if (
     !names &&
@@ -2237,10 +2246,10 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     groups.length === 1 &&
     total >= 2
   ) {
-    return torrentViewerGalleryFallback(container, groups, groupLabelEls);
+    return withTrailing(torrentViewerGalleryFallback(container, groups, groupLabelEls));
   }
   if (!names && isTorrentPage() && hasAdjacentSlowPicsLinkBeforeImage(container, groups[0]?.[0]?.img)) {
-    return null;
+    return withTrailing(null);
   }
 
   const ambiguousGallery = torrentAmbiguousGalleryFallback(
@@ -2251,7 +2260,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     ambiguousTitle,
     excludeImgs,
   );
-  if ((!names || isGenericSourceNames(names)) && ambiguousGallery) return ambiguousGallery;
+  if ((!names || isGenericSourceNames(names)) && ambiguousGallery) return withTrailing(ambiguousGallery);
 
   const shaped = reshapeGrid(groups, groups.flat(), names);
   if (!shaped) {
@@ -2262,11 +2271,11 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     // show them as a 1-wide viewer. Scoped to a single flat image group on a
     // torrent page so it never competes with a real multi-group comparison.
     const adjacentSlowPics = hasAdjacentSlowPicsLinkBeforeImage(container, groups[0]?.[0]?.img);
-    if (ambiguousGallery) return ambiguousGallery;
+    if (ambiguousGallery) return withTrailing(ambiguousGallery);
     if (isTorrentPage() && hasSlowPicsLink(container) && !adjacentSlowPics && groups.length === 1 && total >= 2) {
-      return torrentViewerGalleryFallback(container, groups, groupLabelEls);
+      return withTrailing(torrentViewerGalleryFallback(container, groups, groupLabelEls));
     }
-    return torrentViewerGalleryFallback(container, groups, groupLabelEls) ?? cmpThreadLargestBlock(container, groups);
+    return withTrailing(torrentViewerGalleryFallback(container, groups, groupLabelEls) ?? cmpThreadLargestBlock(container, groups));
   }
 
   // Fallback: match strong count to numCols
@@ -2298,17 +2307,17 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   // the viewer never surface a blank source list for a recognized comparison.
   let finalNames = finalizeNames(names);
   if (forceGenericNames && isTorrentPage()) {
-    return torrentViewerGalleryFallback(container, groups, groupLabelEls);
+    return withTrailing(torrentViewerGalleryFallback(container, groups, groupLabelEls));
   }
   if (!finalNames) {
     if (isTorrentPage()) {
-      return torrentViewerGalleryFallback(container, groups, groupLabelEls);
+      return withTrailing(torrentViewerGalleryFallback(container, groups, groupLabelEls));
     }
     if (
       !forceGenericNames &&
       !allowGenericNamesForUntitledTorrentGrid(container, groups, groupLabels, detailsLinkComparisonOnly, ambiguousTitle)
     ) {
-      return torrentViewerGalleryFallback(container, groups, groupLabelEls);
+      return withTrailing(torrentViewerGalleryFallback(container, groups, groupLabelEls));
     }
     finalNames = Array.from({ length: shaped.numCols }, (_, i) => `Source ${i + 1}`);
   }

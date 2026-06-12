@@ -661,6 +661,43 @@ test("hdbits: a bold feature list never supplies column titles for trailing shot
   await expect(page.locator("._scf_comp_row")).toHaveCount(4);
 });
 
+test("hdbits: every separated image group gets its own Show Viewer control", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.route(/thumbs\d*\.imgbox\.com|images\d*\.imgbox\.com|catbox\.moe/, (route) =>
+    route.fulfill({ contentType: "image/svg+xml", body: STUB_SVG }),
+  );
+  await page.goto("/hdbits/case/185-torrent-desc-per-group-viewer-galleries");
+  await waitForHdbitsReady(page);
+
+  // The showhide imgbox pair and the six trailing shots each get a control;
+  // the trailing gallery must survive even though the leading section (the
+  // lone REPACK shot) can't be shaped.
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerLinks(page)).toHaveCount(2);
+  const optionCounts = await page
+    .locator("._scf_column_control select")
+    .evaluateAll((els) => els.map((el) => (el as HTMLSelectElement).options.length));
+  expect(optionCounts.sort((a, b) => a - b)).toEqual([2, 6]);
+  // The trailing control sits immediately before its image run.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const controls = [...document.querySelectorAll("._scf_column_control")];
+        const control = controls.find((c) => c.querySelector("select")?.options.length === 6);
+        const firstImage = document.querySelector('img[src*="g185a"]');
+        if (!control || !firstImage) return null;
+        const range = document.createRange();
+        range.setStartAfter(control);
+        range.setEndBefore(firstImage.closest("a") ?? firstImage);
+        return range.toString().trim();
+      }),
+    )
+    .toBe("");
+  await page.locator('img[src*="g185c"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(6);
+});
+
 test("hdbits: Show comparison link sits immediately before the image run", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/158-torrent-desc-comparison-note-before-images");
