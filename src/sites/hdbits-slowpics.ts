@@ -28,7 +28,7 @@ function isBefore(a: Node, b: Node): boolean {
  *  a screenshot. Such a screenshot carries its own DOM label, so it belongs to
  *  the DOM parser, not to the slow.pics link — per the title-inference order a
  *  local label outranks the adjacent slow.pics collection. */
-function hasLocalLabelBetween(link: Node, img: Node): boolean {
+export function hasLocalLabelBetween(link: Node, img: Node): boolean {
   try {
     const range = document.createRange();
     range.setStartAfter(link);

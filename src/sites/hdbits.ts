@@ -9,7 +9,7 @@ import type { Grid, GridCell } from "../grid";
 import { hasVsOrPipe, splitNames, looksLikeNames } from "../grid/names";
 import { buildComparison, insertLinkAfter, openOrphanSelect, openWithDummyWrapper } from "../viewer";
 import { fetchSlowPicsGridInfo, parseSlowPicsKey, slowPicsKeyFromAnchor, type SlowPicsGridInfo } from "./slowpics-source";
-import { findSlowPicsComparisons, buildRescueGrid, type SlowPicsComparison } from "./hdbits-slowpics";
+import { findSlowPicsComparisons, buildRescueGrid, hasLocalLabelBetween, type SlowPicsComparison } from "./hdbits-slowpics";
 
 const FORUM_MANUAL_PANEL_ID = "_scf_manual_panel_";
 const FORUM_MANUAL_CSS_ID = "_scf_hdbits_manual_css_";
@@ -337,17 +337,22 @@ function attachGridImageClicks(grid: Grid, container: HTMLElement, link: HTMLAnc
   }
 }
 
-/** Nearest preceding slow.pics/c key for a DOM node (its comparison's link). */
+/** Nearest preceding slow.pics/c key for a DOM node (its comparison's link).
+ *  Ownership follows the rescue path's boundary rule: a local text label
+ *  between the link and the screenshots means the grid is the DOM parser's own
+ *  caption-labeled comparison, and the link — e.g. a NOTES bullet much earlier
+ *  in the post pointing at a DIFFERENT comparison — must not rename it. */
 function slowPicsKeyBefore(node: Node | null | undefined): string | null {
   if (!node) return null;
-  let owner: string | null = null;
+  let owner: { key: string; link: HTMLAnchorElement } | null = null;
   for (const a of document.querySelectorAll<HTMLAnchorElement>("a[href]")) {
     const key = parseSlowPicsKey(a.href);
     if (!key) continue;
-    if (a.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING) owner = key;
+    if (a.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING) owner = { key, link: a };
     else break;
   }
-  return owner;
+  if (!owner || hasLocalLabelBetween(owner.link, node)) return null;
+  return owner.key;
 }
 
 // Names the DOM parser assigns when it couldn't read real source titles —

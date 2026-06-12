@@ -38,7 +38,12 @@ function looksLikeTechnicalParts(parts: string[]): boolean {
   return trimmed.every((part) => /^(?:format settings|reference frames(?:\s*:.*)?|input\s*=.*|output\s*=.*)$/i.test(part));
 }
 
-const GENERIC_HEADING_PREFIX_RE = /^\s*(?:screenshots?\s+comparison|comparison|screenshots?)(?:\s+images?)?(?:\s*\([^)]*\))?\s*:?\s*/i;
+// "Comparison:" may carry ONE qualifier word — "Filter Comparison: Source vs
+// Filtered vs Encode", "Encode Comparison: …", "Screenshots Comparison (…)" —
+// which is part of the heading, not of the first source name. Anchored to the
+// line start, so a source that merely ENDS in "Comparison" ("ABM WEB-DL
+// Comparison", 147) is untouched.
+const GENERIC_HEADING_PREFIX_RE = /^\s*(?:(?:[A-Za-z0-9'-]+\s+)?comparisons?|screenshots?)(?:\s+images?)?(?:\s*\([^)]*\))?\s*:?\s*/i;
 // A mediainfo FIELD prefix on a comparison line ("Video: GER … | USA …",
 // "Audio: …") merely states what kind of comparison it is — strip it so the
 // real source names remain (owner ruling, 2221/2425).
