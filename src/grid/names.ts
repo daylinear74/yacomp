@@ -68,6 +68,11 @@ const SLASH_RE = /\s+\/\s+/;
 const TIMES_RE = /\s+×\s+/;
 const WIDE_SPACE_RE = /\s{3,}/;
 const STRUCTURED_LABEL_SELECTOR = 'span[style*="color"], strong, b';
+const NON_SCREENSHOT_IMG_RE = /(?:\/\/|\.)flagcounter\.com\//i;
+const HDBITS_THUMB_RE = /\/\/t\.hdbits\.org\//i;
+const HDBITS_IMAGE_PAGE_RE = /\/\/img\.hdbits\.org\//i;
+const EXTERNAL_SCREENSHOT_HOST_RE = /(?:^|\.)(?:imgbox|imagebam|imgur|gifyu)\.com$|(?:^|\.)pixhost\.to$|(?:^|\.)postimg\.cc$|(?:^|\.)ibb\.co$|(?:^|\.)freeimage\.host$|(?:^|\.)lensdump\.com$/i;
+const DIRECT_IMAGE_URL_RE = /\.(?:jpe?g|png|webp|gif|avif|bmp)(?:[?#]|$)/i;
 const TECH_ASSIGNMENT_RE = /\b(?:cabac|ref|deblock|analyse|me|subme|psy|psy_rd|mixed_ref|me_range|chroma_me|trellis|8x8dct|cqm|deadzone|fast_pskip|chroma_qp_offset|threads|sliced_threads|nr|decimate|interlaced|bluray_compat|constrained_intra|bframes|b_pyramid|b_adapt|b_bias|direct|weightb|open_gop|weightp|keyint|keyint_min|scenecut|intra_refresh|rc_lookahead|rc|mbtree|bitrate|ratetol|qcomp|qpmin|qpmax|qpstep|cplxblur|qblur|ip_ratio|aq)\s*=/i;
 const GENERIC_ASSIGNMENT_RE = /\b[A-Za-z_][A-Za-z0-9_]*\s*=/;
 const MEDIAINFO_FIELD_RE = /^(?:id|format(?:\/info| profile| settings)?|codec id(?:\/info)?|duration|bit\s*rate(?: mode)?|bitrate|width|height|display aspect ratio|frame rate(?: mode)?|color space|chroma subsampling|bit depth|scan type|compression mode|stream size|title|language|default|forced|complete name|file size|overall bit rate|writing (?:application|library))\b/i;
@@ -747,6 +752,7 @@ export function namesFromLeadingText(container: Element): string[] | null {
 function colorSpansHeadEqualImageGroups(container: Element, spans: Element[]): boolean {
   const counts = spans.map(() => 0);
   for (const img of container.querySelectorAll("img")) {
+    if (!isColorSpanGroupingImage(img as HTMLImageElement)) continue;
     let owner = -1;
     for (let i = 0; i < spans.length; i++) {
       if (spans[i].compareDocumentPosition(img) & Node.DOCUMENT_POSITION_FOLLOWING) owner = i;
@@ -755,6 +761,26 @@ function colorSpansHeadEqualImageGroups(container: Element, spans: Element[]): b
     if (owner >= 0) counts[owner]++;
   }
   return counts.every((count) => count > 0 && count === counts[0]);
+}
+
+function urlHost(url: string): string {
+  try {
+    const base = typeof location !== "undefined" ? location.href : "https://example.invalid/";
+    return new URL(url, base).hostname;
+  } catch {
+    return "";
+  }
+}
+
+function isColorSpanGroupingImage(img: HTMLImageElement): boolean {
+  if (isHDBitsRequestsMetadataElement(img)) return false;
+  const src = img.currentSrc || img.src || "";
+  const anchor = img.closest?.("a[href]") as HTMLAnchorElement | null;
+  const href = anchor?.href || "";
+  if (NON_SCREENSHOT_IMG_RE.test(src) || NON_SCREENSHOT_IMG_RE.test(href)) return false;
+  if (HDBITS_THUMB_RE.test(src) || HDBITS_IMAGE_PAGE_RE.test(href)) return true;
+  if (EXTERNAL_SCREENSHOT_HOST_RE.test(urlHost(href))) return true;
+  return DIRECT_IMAGE_URL_RE.test(href) || DIRECT_IMAGE_URL_RE.test(src);
 }
 
 /** Strategy 2b: color-coded span labels */

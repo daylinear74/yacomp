@@ -592,8 +592,7 @@ function buildMultiCompGrids(
     .filter((g): g is { label: string; index: number; names: string[] | null } =>
       !!g.label &&
       hasVsOrPipe(g.label) &&
-      !isStructuralReleaseTitleLabel(g.label) &&
-      !isSuppressedNightCometLabel(g.label));
+      !isStructuralReleaseTitleLabel(g.label));
   if (!labeledGroups.length) return null;
   if (groups.length > 1 && labeledGroups.length === 1 && labeledGroups[0].index === 0) return null;
   // Single-comparison-as-per-source-groups shape: EVERY group has its own
@@ -1524,11 +1523,6 @@ function torrentViewerGalleryFallback(
   }];
 }
 
-function isSuppressedNightCometLabel(label: string): boolean {
-  void label;
-  return false;
-}
-
 function isStructuralReleaseTitleLabel(label: string): boolean {
   if (!isTorrentPage()) return false;
   const t = label.replace(/\s+/g, " ").trim();
@@ -1536,11 +1530,6 @@ function isStructuralReleaseTitleLabel(label: string): boolean {
   return /\b(?:19|20)\d{2}\b/.test(t) &&
     /\b(?:480p|576p|720p|1080p|2160p|Blu-?ray|WEB-?DL|WEBRip|HDTV|x264|x265|HEVC|AVC)\b/i.test(t) &&
     /\s+-\s+[A-Za-z0-9][A-Za-z0-9._-]{1,20}$/.test(t);
-}
-
-function shouldSuppressShowhideGrid(container: Element): boolean {
-  void container;
-  return false;
 }
 
 function allowGenericNamesForUntitledTorrentGrid(
@@ -1871,7 +1860,6 @@ export function reshapeGrid(groups: GridCell[][], allImages: GridCell[], names: 
 export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement> = new Set()): Grid[] | null {
   let collected = collectGroups(container, excludeImgs);
   if (!collected) return null;
-  if (shouldSuppressShowhideGrid(container)) return null;
   let { groups, groupLabels, groupLabelEls, groupLeadingBreaks } = collected;
   if (isTheFarmTorrentDescription(container)) return torrentViewerGalleryFallback(container, groups, groupLabelEls);
   const trailingGalleries: Grid[] = [];

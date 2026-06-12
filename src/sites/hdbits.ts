@@ -696,9 +696,9 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
   insertLinkAfter(spLink, link);
 }
 
-/** Last resort: a compact "Show Viewer" control with a columns input. Blank / 1
- *  treats the block as a plain viewer gallery, while 2+ reshapes it as a
- *  comparison with that many columns. */
+/** Last resort: a compact "Show Viewer" control with a columns dropdown. One
+ *  column opens a plain viewer gallery; 2+ columns reshape the block as a
+ *  manual comparison, allowing a short final row. */
 function addManualColumnControl(images: HTMLImageElement[], anchor: Node, container: HTMLElement): void {
   addManualColumnControlFromCells(images.map(forumManualCell), anchor, container, images);
 }

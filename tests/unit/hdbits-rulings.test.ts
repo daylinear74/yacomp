@@ -21,6 +21,30 @@ const fakeContainer = (...childNodes: ChildNode[]): Element =>
   ({ childNodes }) as unknown as Element;
 const fakeColorContainer = (...labels: string[]): Element =>
   ({ querySelectorAll: () => labels.map((textContent) => ({ textContent })) }) as unknown as Element;
+const fakeColorImageContainer = (): Element => {
+  const following = 4;
+  const span = (textContent: string, pos: number): Element =>
+    ({
+      textContent,
+      compareDocumentPosition: (other: { pos: number }) => pos < other.pos ? following : 0,
+    }) as unknown as Element;
+  const img = (src: string, pos: number): HTMLImageElement =>
+    ({
+      pos,
+      src,
+      currentSrc: src,
+      closest: (selector: string) => selector === "a[href]" ? { href: src } : null,
+    }) as unknown as HTMLImageElement;
+  const spans = [span("Source", 1), span("Encode", 3)];
+  const imgs = [
+    img("https://t.hdbits.org/source-a.jpg", 2),
+    img("https://s11.flagcounter.com/count2/example.png", 2.5),
+    img("https://t.hdbits.org/encode-a.jpg", 4),
+  ];
+  return {
+    querySelectorAll: (selector: string) => selector === "img" ? imgs : spans,
+  } as unknown as Element;
+};
 
 describe("ruling: vs / vs. / v. / | separators take precedence (1202, 0478, 0288)", () => {
   test("vs", () => expect(splitNames("Source vs Encode")).toEqual(["Source", "Encode"]));
@@ -340,6 +364,18 @@ describe("column-title producers route through asColumnTitles (MODEL.md 3a-conti
       "NOTES: ????️",
       "LOGS: ????",
     ))).toBeNull());
+
+  test("color spans ignore non-screenshot images when checking equal groups", () => {
+    const previousNode = (globalThis as unknown as { Node?: unknown }).Node;
+    (globalThis as unknown as { Node: { DOCUMENT_POSITION_FOLLOWING: number } }).Node = {
+      DOCUMENT_POSITION_FOLLOWING: 4,
+    };
+    try {
+      expect(namesFromColorSpans(fakeColorImageContainer())).toEqual(["Source", "Encode"]);
+    } finally {
+      (globalThis as unknown as { Node?: unknown }).Node = previousNode;
+    }
+  });
 });
 
 describe("ruling: footer / external-comparison labels (007, 2503)", () => {
