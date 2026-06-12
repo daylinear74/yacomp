@@ -646,6 +646,21 @@ test("hdbits: color section headings over text-only sections stay a gallery, not
   await expect(page.locator("._scf_comp_row")).toHaveCount(9);
 });
 
+test("hdbits: a bold feature list never supplies column titles for trailing shots", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/184-torrent-desc-bold-feature-list-not-title");
+  await waitForHdbitsReady(page);
+
+  // The br-laden special-features strong is a list, not a heading; the comma
+  // line plucked from it ("In Memoriam - …, including …") must not title a
+  // 2-column comparison. The four shots are a viewer gallery.
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerLinks(page)).toHaveCount(1);
+  await page.locator('img[src*="f184b"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(4);
+});
+
 test("hdbits: Show comparison link sits immediately before the image run", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/158-torrent-desc-comparison-note-before-images");

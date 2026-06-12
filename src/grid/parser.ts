@@ -792,6 +792,12 @@ function leadingVsLabelInfo(container: Element): { names: string[]; anchorEl: El
     if (!VS_LABEL_WRAPPER.has(el.nodeName)) continue;
     const isBold = el.nodeName === "STRONG" || el.nodeName === "B" || !!el.querySelector("strong, b");
     if (!isBold) continue;
+    // A heading is a SINGLE line. A br-laden bold block is a special-features /
+    // notes list, and treating it as a title lets columnTitleCandidateText pluck
+    // an arbitrary comma line out of it ("In Memoriam - …, including …").
+    // Multi-line vs-titles are leadingComparisonNames' job, with its distance
+    // and barrier rules.
+    if (el.querySelector("br")) continue;
     const text = el.textContent!.trim();
     if (isStructuralReleaseTitleLabel(text)) continue;
     const names = asColumnTitles(text);
