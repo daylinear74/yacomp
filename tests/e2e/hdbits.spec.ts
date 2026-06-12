@@ -631,6 +631,21 @@ test("hdbits: leading sample shots above labeled comparison sections get Show Vi
   await expect(page.locator("._scf_comp_row")).toHaveCount(4);
 });
 
+test("hdbits: color section headings over text-only sections stay a gallery, not columns", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/183-torrent-desc-color-section-headings-not-columns");
+  await waitForHdbitsReady(page);
+
+  // "Video"/"Audio"/"Subtitles + Chapters" color spans head TEXT sections (the
+  // comparisons live at slow.pics links) — they must not become column titles
+  // for the trailing release shots.
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerLinks(page)).toHaveCount(1);
+  await page.locator('img[src*="c183a"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(9);
+});
+
 test("hdbits: Show comparison link sits immediately before the image run", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/158-torrent-desc-comparison-note-before-images");

@@ -734,18 +734,37 @@ export function namesFromLeadingText(container: Element): string[] | null {
   return leadingText ? asColumnTitles(leadingText) : null;
 }
 
+/** Each span must head its own run of images, and the runs must be the same
+ *  size — the winged per-source-group shape. Section headings over text-only
+ *  sections ("Video"/"Audio"/"Subtitles + Chapters" with the comparisons at
+ *  external links) leave their images all in ONE trailing run, so they fail
+ *  this and never become columns for an unrelated gallery. */
+function colorSpansHeadEqualImageGroups(container: Element, spans: Element[]): boolean {
+  const counts = spans.map(() => 0);
+  for (const img of container.querySelectorAll("img")) {
+    let owner = -1;
+    for (let i = 0; i < spans.length; i++) {
+      if (spans[i].compareDocumentPosition(img) & Node.DOCUMENT_POSITION_FOLLOWING) owner = i;
+      else break;
+    }
+    if (owner >= 0) counts[owner]++;
+  }
+  return counts.every((count) => count > 0 && count === counts[0]);
+}
+
 /** Strategy 2b: color-coded span labels */
 export function namesFromColorSpans(container: Element): string[] | null {
   const colorSpans = [...container.querySelectorAll('span[style*="color"]')]
-    .filter((span) => !isHDBitsRequestsMetadataElement(span));
+    .filter((span) => !isHDBitsRequestsMetadataElement(span))
+    .filter((span) => {
+      const text = span.textContent!.trim();
+      return !!text && !isNonSourceLabel(text);
+    });
   if (colorSpans.length >= 2) {
-    const csNames = colorSpans
-      .map((s) => s.textContent!.trim())
-      .filter((text) => !isNonSourceLabel(text))
-      .filter(Boolean);
-    if (csNames.length >= 2) {
-      const names = asColumnTitles(csNames.join(" | "));
-      if (names?.length === csNames.length) return names;
+    const csNames = colorSpans.map((s) => s.textContent!.trim());
+    const names = asColumnTitles(csNames.join(" | "));
+    if (names?.length === csNames.length && colorSpansHeadEqualImageGroups(container, colorSpans)) {
+      return names;
     }
   }
   return null;
