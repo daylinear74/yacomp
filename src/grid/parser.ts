@@ -10,6 +10,10 @@ import {
   foldTrailingSize, isNonSourceLabel, isUrlLabel, isFooterLabel, tidyName, isMultiSourceLabel,
   stripAsymmetricTitle, isHDBitsRequestsMetadataElement,
 } from "./names";
+import {
+  EXTERNAL_SCREENSHOT_HOST_RE, DIRECT_IMAGE_URL_RE, NON_SCREENSHOT_IMG_RE,
+  isHDBitsThumbUrl, isHDBitsImagePageUrl,
+} from "./screenshot-urls";
 
 // Re-exported from names.ts (moved there so name strategies can guard with it).
 export { looksLikeProse };
@@ -167,17 +171,6 @@ export function externalImageFullUrl(src: string, href?: string | null): string 
   return src;
 }
 
-function isHDBitsThumbUrl(src: string): boolean {
-  return /\/\/t\.hdbits\.org\//i.test(src);
-}
-
-function isHDBitsImagePageUrl(href: string): boolean {
-  return /\/\/img\.hdbits\.org\//i.test(href);
-}
-
-const EXTERNAL_SCREENSHOT_HOST_RE =
-  /(?:^|\.)((imgbox|imagebam|imgur|gifyu)\.com|pixhost\.to|postimg\.cc|ibb\.co|freeimage\.host|lensdump\.com)$/i;
-
 function isExternalScreenshotImagePageUrl(href: string): boolean {
   if (!isTorrentPage()) return false;
   try {
@@ -185,7 +178,7 @@ function isExternalScreenshotImagePageUrl(href: string): boolean {
     if (!/^https?:$/i.test(url.protocol)) return false;
     if (isHDBitsImagePageUrl(url.href)) return false;
     return EXTERNAL_SCREENSHOT_HOST_RE.test(url.hostname) ||
-      /\.(?:jpe?g|png|webp|gif|avif|bmp)$/i.test(url.pathname);
+      DIRECT_IMAGE_URL_RE.test(url.pathname);
   } catch {
     return false;
   }
@@ -273,7 +266,6 @@ function isExternalTextLink(anchor: HTMLAnchorElement): boolean {
 // Counting them as grid cells throws off the column-count divisibility — e.g. a
 // clean 60-image 5-wide grid + 1 FlagCounter image = 61, which divides by
 // nothing — so they are excluded from group collection.
-const NON_SCREENSHOT_IMG_RE = /(?:\/\/|\.)flagcounter\.com\//i;
 function isNonScreenshotImg(img: HTMLImageElement): boolean {
   return NON_SCREENSHOT_IMG_RE.test(img.src);
 }

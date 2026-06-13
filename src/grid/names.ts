@@ -2,6 +2,11 @@
 // ║  Name-finding strategies                                                  ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
+import {
+  NON_SCREENSHOT_IMG_RE, HDBITS_THUMB_RE, HDBITS_IMAGE_PAGE_RE,
+  EXTERNAL_SCREENSHOT_HOST_RE, DIRECT_IMAGE_URL_RE, urlHost,
+} from "./screenshot-urls";
+
 // Reject pipe/vs splits that look like metadata (years, runtimes, dates)
 const META_RE = /^(\d{4}|\d+\s*min(?:\/[a-z]+)?|[a-z]{3,9}\s+\d{1,2},?\s*\d{4}|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})$/i;
 // A bare mediainfo/BDInfo metric value ("69.36 kbps", "48 kHz", "23.976 fps").
@@ -68,11 +73,6 @@ const SLASH_RE = /\s+\/\s+/;
 const TIMES_RE = /\s+×\s+/;
 const WIDE_SPACE_RE = /\s{3,}/;
 const STRUCTURED_LABEL_SELECTOR = 'span[style*="color"], strong, b';
-const NON_SCREENSHOT_IMG_RE = /(?:\/\/|\.)flagcounter\.com\//i;
-const HDBITS_THUMB_RE = /\/\/t\.hdbits\.org\//i;
-const HDBITS_IMAGE_PAGE_RE = /\/\/img\.hdbits\.org\//i;
-const EXTERNAL_SCREENSHOT_HOST_RE = /(?:^|\.)(?:imgbox|imagebam|imgur|gifyu)\.com$|(?:^|\.)pixhost\.to$|(?:^|\.)postimg\.cc$|(?:^|\.)ibb\.co$|(?:^|\.)freeimage\.host$|(?:^|\.)lensdump\.com$/i;
-const DIRECT_IMAGE_URL_RE = /\.(?:jpe?g|png|webp|gif|avif|bmp)(?:[?#]|$)/i;
 const TECH_ASSIGNMENT_RE = /\b(?:cabac|ref|deblock|analyse|me|subme|psy|psy_rd|mixed_ref|me_range|chroma_me|trellis|8x8dct|cqm|deadzone|fast_pskip|chroma_qp_offset|threads|sliced_threads|nr|decimate|interlaced|bluray_compat|constrained_intra|bframes|b_pyramid|b_adapt|b_bias|direct|weightb|open_gop|weightp|keyint|keyint_min|scenecut|intra_refresh|rc_lookahead|rc|mbtree|bitrate|ratetol|qcomp|qpmin|qpmax|qpstep|cplxblur|qblur|ip_ratio|aq)\s*=/i;
 const GENERIC_ASSIGNMENT_RE = /\b[A-Za-z_][A-Za-z0-9_]*\s*=/;
 const MEDIAINFO_FIELD_RE = /^(?:id|format(?:\/info| profile| settings)?|codec id(?:\/info)?|duration|bit\s*rate(?: mode)?|bitrate|width|height|display aspect ratio|frame rate(?: mode)?|color space|chroma subsampling|bit depth|scan type|compression mode|stream size|title|language|default|forced|complete name|file size|overall bit rate|writing (?:application|library))\b/i;
@@ -761,15 +761,6 @@ function colorSpansHeadEqualImageGroups(container: Element, spans: Element[]): b
     if (owner >= 0) counts[owner]++;
   }
   return counts.every((count) => count > 0 && count === counts[0]);
-}
-
-function urlHost(url: string): string {
-  try {
-    const base = typeof location !== "undefined" ? location.href : "https://example.invalid/";
-    return new URL(url, base).hostname;
-  } catch {
-    return "";
-  }
 }
 
 function isColorSpanGroupingImage(img: HTMLImageElement): boolean {
