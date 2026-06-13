@@ -2084,6 +2084,21 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
       anchorEl = previous.anchorEl;
     }
   }
+  if (!names) {
+    // The comparison title can be an inline "A vs B" line in the PARENT, directly
+    // above this container, with its source names split across sibling elements
+    // (color spans + a bold "vs") — which previousSiblingColumnTitleInfo, reading
+    // one sibling node at a time, can only see the last fragment of. (UHD vs UHD
+    // Hybrid: <span>UHD</span> <strong>vs</strong> <span>UHD Hybrid</span> over a
+    // 2-wide grid nested in an inner centered div.) leadingComparisonNamesBeforeContainer
+    // assembles the whole introductory line; gated on a clean divide so it can't
+    // title an unrelated gallery.
+    const parentInlineCmp = leadingComparisonNamesBeforeContainer(container);
+    if (parentInlineCmp && total % parentInlineCmp.names.length === 0) {
+      names = parentInlineCmp.names;
+      anchorEl = parentInlineCmp.anchorEl;
+    }
+  }
   if (!names && !detailsLinkComparisonOnly && hasLocalNonNameHeading(groupLabels)) {
     // The group label is a non-name heading — a section divider ("Video
     // Bitrate", "General") or a gallery caption. The real column title may sit
