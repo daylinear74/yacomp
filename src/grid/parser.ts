@@ -602,7 +602,7 @@ function buildMultiCompGrids(
 
   const results: Grid[] = [];
   for (let i = 0; i < labeledGroups.length; i++) {
-    const { label, index, names } = labeledGroups[i];
+    const { index, names } = labeledGroups[i];
     const nextIndex = labeledGroups[i + 1]?.index ?? groups.length;
     const sectionGroups = groups.slice(index, nextIndex);
     const imgs = sectionGroups.flat();
@@ -623,7 +623,7 @@ function buildMultiCompGrids(
 
   const singleValid = labeledGroups.filter((g) => g.names);
   if (allowSingleLateFallback && singleValid.length === 1 && singleValid[0].index > 0) {
-    const { label, index, names } = singleValid[0];
+    const { index, names } = singleValid[0];
     const sectionGroups = groups.slice(index);
     const imgs = sectionGroups.flat();
     if (names && imgs.length >= 2 && !hasPlainInterludeAfterTechnicalSizeNames(container, names)) {
@@ -1339,7 +1339,6 @@ function asd87ArrowNamesFromLabel(label: string): string[] | null {
 function asd87ArrowLabelInfo(
   groupLabels: (string | null)[],
   groupLabelEls: (ChildNode | null)[],
-  total: number,
 ): { names: string[]; anchorEl: ChildNode | null } | null {
   for (let i = 0; i < Math.min(groupLabels.length, 2); i++) {
     const label = groupLabels[i];
@@ -1942,7 +1941,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   let ambiguousTitle = false;
   let detailsLinkComparisonOnly = false;
   const leadCmp = earlyLeadCmp;
-  const uploaderArrow = asd87ArrowLabelInfo(groupLabels, groupLabelEls, total);
+  const uploaderArrow = asd87ArrowLabelInfo(groupLabels, groupLabelEls);
   if (uploaderArrow) {
     names = uploaderArrow.names;
     anchorEl = uploaderArrow.anchorEl;

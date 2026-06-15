@@ -346,7 +346,7 @@ function cleanNamePart(text: string): string {
   // Drop a trailing link appended to a real label ("Blu-ray https://…" → "Blu-ray")
   // and a stray trailing colon ("Amazon 1080p (8.4Mbps):" → "Amazon 1080p (8.4Mbps)").
   s = s.replace(/\s+https?:\/\/\S+\s*$/i, "");
-  s = s.replace(/^([A-Za-z]+s?):\s+/, "$1 ");
+  s = s.replace(/^([A-Za-z]+):\s+/, "$1 ");
   s = s.replace(/\s*:\s*$/, "");
   // HDBits uploaders sometimes write centered labels as
   // "< SOURCE >-< Encode >-< Alt >", where the angle brackets are decorative.
