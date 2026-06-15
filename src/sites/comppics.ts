@@ -5,6 +5,7 @@
 import type { Grid } from "../grid";
 import { activeComps } from "../filters/zoom";
 import { openWithDummyWrapper } from "../viewer";
+import { isEditing } from "../ui/shadow";
 
 interface ComppicsData {
   imageUrls?: unknown;
@@ -15,16 +16,6 @@ interface ComppicsData {
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
-
-function isEditing(): boolean {
-  const el = document.activeElement;
-  const tag = el?.tagName;
-  return (
-    tag === "INPUT" ||
-    tag === "TEXTAREA" ||
-    !!(el as HTMLElement | null)?.isContentEditable
-  );
 }
 
 export function isComppicsNativeHotkey(e: KeyboardEvent): boolean {

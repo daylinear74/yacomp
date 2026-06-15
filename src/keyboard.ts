@@ -24,7 +24,7 @@ import {
 } from "./filters/zoom";
 import { openSlowPicsViewer } from "./sites/slowpics";
 import { visibleColumnOffset } from "./viewer/source-visibility";
-import { getShadowRoot } from "./ui/shadow";
+import { getShadowRoot, isEditing } from "./ui/shadow";
 import { isHelpOpen, hideHelpOverlay, toggleHelpOverlay } from "./viewer/help-overlay";
 import { ACTIONS, type ActionId } from "./shortcuts/registry";
 import { keyShortcutMatchesEvent, mouseShortcutMatches, type MouseShortcut } from "./shortcuts/types";
@@ -62,19 +62,6 @@ export function applyBracketAdjustment(
   const next = adjustBrightness(comp.colBrightness[col], direction);
   comp.colBrightness[col] = next;
   return "☀ " + srcName + " " + brightnessAdjustmentLabel(next);
-}
-
-function isEditing(): boolean {
-  let el: Element | null = document.activeElement;
-  while (el?.shadowRoot?.activeElement) {
-    el = el.shadowRoot.activeElement;
-  }
-  const tag = el?.tagName;
-  return (
-    tag === "INPUT" ||
-    tag === "TEXTAREA" ||
-    !!(el as HTMLElement | null)?.isContentEditable
-  );
 }
 
 function hasCompAdjustments(): boolean {

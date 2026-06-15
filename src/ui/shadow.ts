@@ -20,7 +20,17 @@ export function getShadowRoot(): ShadowRoot {
   return root!;
 }
 
-export function getShadowHost(): HTMLElement {
-  if (!host) init();
-  return host!;
+/** True when the focused element is a text field, including one nested inside
+ *  an open shadow root (our settings UI lives in a shadow tree). */
+export function isEditing(): boolean {
+  let el: Element | null = document.activeElement;
+  while (el?.shadowRoot?.activeElement) {
+    el = el.shadowRoot.activeElement;
+  }
+  const tag = el?.tagName;
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    !!(el as HTMLElement | null)?.isContentEditable
+  );
 }
