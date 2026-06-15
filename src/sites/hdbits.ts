@@ -93,6 +93,7 @@ function isTorrentDescriptionContainer(container: Element): boolean {
 
 function previousMeaningfulSibling(node: Node): Node | null {
   for (let previous = node.previousSibling; previous; previous = previous.previousSibling) {
+    if (previous.nodeType === Node.COMMENT_NODE) continue;
     if (isBlankTextNode(previous)) continue;
     if (isBreakNode(previous)) continue;
     return previous;
@@ -450,11 +451,6 @@ function resolveSlowPicsInfo(
   return names ? { ...base, names } : null;
 }
 
-function isSuppressedHDBitsGrid(grid: Grid): boolean {
-  void grid;
-  return false;
-}
-
 /** On click, upgrade a grid's generic/absent names with slow.pics column
  *  titles (when the linked comparison has the same column count). */
 async function maybeEnrichNames(grid: Grid): Promise<void> {
@@ -499,7 +495,6 @@ export function setupHDBitsCore(): void {
 
   const claimed = new Set<HTMLImageElement>();
   for (const { grid, container } of getGrids(slowpicsImgs)) {
-    if (isSuppressedHDBitsGrid(grid)) continue;
     for (const cell of grid.rows.flat()) if (cell.img) claimed.add(cell.img);
     const cells = grid.rows.flat();
     const images = cells.map((cell) => cell.img).filter((img): img is HTMLImageElement => !!img);
