@@ -20,6 +20,11 @@ export function looksLikeNames(parts: string[]): boolean {
   if (parts.length < 2) return false;
   if (looksLikeTechnicalParts(parts)) return false;
   if (parts.some((p) => META_RE.test(p.trim()))) return false;
+  // A bare index token ("#5", "# 6") is a source-NUMBER reference, never a
+  // comparison column name. It appears when a release source-manifest line
+  // ("Source #4, #5, #6: iTunes, Megogo, Netflix") is comma-split — the trailing
+  // "#5"/"#6" are indices into that list, not three sources to compare.
+  if (parts.some((p) => /^#\s*\d+$/.test(p.trim()))) return false;
   // A MIX of a bare-metric column ("69.36 kbps") and a non-metric column
   // ("Subtitle: English") is a mediainfo/BDInfo table, not a comparison. An
   // all-source set (no metric columns) or an all-metric set (a genuine bitrate
