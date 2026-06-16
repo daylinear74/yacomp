@@ -1,6 +1,7 @@
 import { fillCanvasEnabled, toggleFillCanvas, applyFillCanvas } from "../filters/zoom";
 import { showToast } from "../ui/toast";
 import type { Toolbar } from "./toolbar";
+import { createToolbarDropdown } from "./dropdown-control";
 
 export interface FillCanvasBtn {
   fillCanvasBtnEl: HTMLDivElement;
@@ -9,37 +10,14 @@ export interface FillCanvasBtn {
 }
 
 export function createFillCanvasBtn(toolbar: Toolbar): FillCanvasBtn {
-  const slot = toolbar.addSlot(() => setOpen(false));
-
-  const fillCanvasBtnEl = document.createElement("div");
-  fillCanvasBtnEl.className = "_scf_fill_canvas_toggle";
-
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "_scf_fill_canvas_btn";
-  button.title = "Canvas (C)";
-  button.setAttribute("aria-label", "Choose canvas mode");
-  button.setAttribute("aria-expanded", "false");
-
-  const iconEl = document.createElement("span");
-  iconEl.className = "_scf_fill_canvas_icon";
-  iconEl.setAttribute("aria-hidden", "true");
-  button.appendChild(iconEl);
-
-  const panel = document.createElement("div");
-  panel.className = "_scf_fill_canvas_panel";
-  panel.hidden = true;
-
-  fillCanvasBtnEl.append(button, panel);
-  toolbar.toolbarEl.appendChild(fillCanvasBtnEl);
-  let pointerOpening = false;
-
-  function setOpen(open: boolean) {
-    fillCanvasBtnEl.classList.toggle("_scf_open", open);
-    panel.hidden = !open;
-    button.setAttribute("aria-expanded", String(open));
-    if (open) slot.notifyOpen();
-  }
+  const { container, button, panel, setOpen, cleanup } = createToolbarDropdown(toolbar, {
+    containerClass: "_scf_fill_canvas_toggle",
+    buttonClass: "_scf_fill_canvas_btn",
+    iconClass: "_scf_fill_canvas_icon",
+    panelClass: "_scf_fill_canvas_panel",
+    title: "Canvas (C)",
+    ariaLabel: "Choose canvas mode",
+  });
 
   function setMode(cover: boolean) {
     const changed = fillCanvasEnabled !== cover;
@@ -81,24 +59,6 @@ export function createFillCanvasBtn(toolbar: Toolbar): FillCanvasBtn {
     }
   }
 
-  button.addEventListener("pointerdown", () => {
-    pointerOpening = true;
-  });
-  button.addEventListener("click", () => {
-    setOpen(panel.hidden);
-    if (pointerOpening) button.blur();
-    pointerOpening = false;
-  });
-
-  const closeOnOutsideClick = (e: MouseEvent) => {
-    if (!toolbar.toolbarEl.contains(e.target as Node | null)) setOpen(false);
-  };
-  document.addEventListener("mousedown", closeOnOutsideClick);
-
-  function cleanup() {
-    document.removeEventListener("mousedown", closeOnOutsideClick);
-  }
-
   updateFillCanvasBtn();
-  return { fillCanvasBtnEl, updateFillCanvasBtn, cleanup };
+  return { fillCanvasBtnEl: container, updateFillCanvasBtn, cleanup };
 }

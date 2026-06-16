@@ -1,6 +1,7 @@
 import type { Comp } from "./types";
 import type { Toolbar } from "./toolbar";
 import { sourceMenuCountText } from "./source-visibility";
+import { createToolbarDropdown } from "./dropdown-control";
 
 export interface SourceMenu {
   updateSourceMenu: () => void;
@@ -13,40 +14,18 @@ function sourceName(comp: Comp, col: number): string {
 }
 
 export function createSourceMenu(comp: Comp, toolbar: Toolbar): SourceMenu {
-  const slot = toolbar.addSlot(() => setOpen(false));
-
-  const sourceMenuEl = document.createElement("div");
-  sourceMenuEl.className = "_scf_source_menu";
-
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "_scf_source_menu_btn";
-  button.title = "Sources";
-  button.setAttribute("aria-label", "Choose visible sources");
-  button.setAttribute("aria-expanded", "false");
-
-  const iconEl = document.createElement("span");
-  iconEl.className = "_scf_source_menu_icon";
-  iconEl.setAttribute("aria-hidden", "true");
+  const { button, panel, cleanup } = createToolbarDropdown(toolbar, {
+    containerClass: "_scf_source_menu",
+    buttonClass: "_scf_source_menu_btn",
+    iconClass: "_scf_source_menu_icon",
+    panelClass: "_scf_source_menu_panel",
+    title: "Sources",
+    ariaLabel: "Choose visible sources",
+  });
 
   const countEl = document.createElement("span");
   countEl.className = "_scf_source_menu_count";
-  button.append(iconEl, countEl);
-
-  const panel = document.createElement("div");
-  panel.className = "_scf_source_menu_panel";
-  panel.hidden = true;
-
-  sourceMenuEl.append(button, panel);
-  toolbar.toolbarEl.appendChild(sourceMenuEl);
-  let pointerOpening = false;
-
-  function setOpen(open: boolean) {
-    sourceMenuEl.classList.toggle("_scf_open", open);
-    panel.hidden = !open;
-    button.setAttribute("aria-expanded", String(open));
-    if (open) slot.notifyOpen();
-  }
+  button.append(countEl);
 
   function updateSourceMenu() {
     countEl.textContent = sourceMenuCountText(comp.visibleCols.length, comp.numCols);
@@ -76,24 +55,6 @@ export function createSourceMenu(comp: Comp, toolbar: Toolbar): SourceMenu {
       row.append(input, idx, text);
       panel.appendChild(row);
     }
-  }
-
-  button.addEventListener("pointerdown", () => {
-    pointerOpening = true;
-  });
-  button.addEventListener("click", () => {
-    setOpen(panel.hidden);
-    if (pointerOpening) button.blur();
-    pointerOpening = false;
-  });
-
-  const closeOnOutsideClick = (e: MouseEvent) => {
-    if (!toolbar.toolbarEl.contains(e.target as Node | null)) setOpen(false);
-  };
-  document.addEventListener("mousedown", closeOnOutsideClick);
-
-  function cleanup() {
-    document.removeEventListener("mousedown", closeOnOutsideClick);
   }
 
   updateSourceMenu();
