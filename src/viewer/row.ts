@@ -45,12 +45,16 @@ function hdbNextFallbackSrc(src: string): string | null {
   return next ? `${match[1]}.${next}${match[3] ?? ""}` : null;
 }
 
-function installHdbImageFallback(img: HTMLImageElement): void {
+function installHdbImageFallback(img: HTMLImageElement, onGiveUp?: () => void): void {
   img.addEventListener("error", () => {
     const fallback = hdbNextFallbackSrc(img.currentSrc || img.src);
-    if (!fallback) return;
     const tried = (img.dataset.hdbFallbackTried || "").split(",").filter(Boolean);
-    if (tried.includes(fallback)) return;
+    if (!fallback || tried.includes(fallback)) {
+      // No (further) format to try — the image is dead. Tell the caller so a
+      // row spinner can stop instead of spinning forever over a blank cell.
+      onGiveUp?.();
+      return;
+    }
     img.dataset.hdbFallbackTried = [...tried, fallback].join(",");
     img.src = fallback;
   });
@@ -70,7 +74,10 @@ export function buildRow(
 
   const sizer = document.createElement("img");
   sizer.className = "_scf_comp_sizer";
-  installHdbImageFallback(sizer);
+  // A dead sizer image fires `error`, never `load`, so clear the row's loading
+  // spinner when the fallback chain is exhausted (a 404 screenshot on an old
+  // thread would otherwise spin forever over a blank row).
+  installHdbImageFallback(sizer, () => rowDiv.classList.remove("_scf_loading"));
   const knownAspectRatio = rowCellsAspectRatio(rowCells);
   if (knownAspectRatio) rowDiv.style.aspectRatio = knownAspectRatio;
   if (deferred) {

@@ -199,6 +199,9 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
         if (activeImg && activeImg.src && !activeImg.complete) {
           rowDiv.classList.add("_scf_loading");
           activeImg.addEventListener("load", () => rowDiv.classList.remove("_scf_loading"), { once: true });
+          // A dead column image never fires `load`; clear the spinner on error
+          // too so switching to a 404 source doesn't leave it spinning.
+          activeImg.addEventListener("error", () => rowDiv.classList.remove("_scf_loading"), { once: true });
         } else {
           rowDiv.classList.remove("_scf_loading");
         }
