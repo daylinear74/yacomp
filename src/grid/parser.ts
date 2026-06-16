@@ -493,6 +493,12 @@ function collectGroups(container: Element, excludeImgs: Set<HTMLImageElement>): 
   };
 
   const visit = (node: ChildNode): void => {
+    if (node.nodeType === 8) {
+      // An HTML comment is not content — skip it, matching every other
+      // childNodes walk in the parser. Otherwise its text is absorbed as a
+      // group label (a "<!-- GER vs USA -->" among shots fabricates a title).
+      return;
+    }
     if (node.nodeName === "BR") {
       finishLineBreak();
     } else if (splitTextNodeBreaks && node.nodeType === 3 && /[\r\n]/.test(node.textContent || "")) {
@@ -1638,6 +1644,7 @@ function trimToLeadingColumnRun(collected: GroupsResult, numCols: number): Group
 
 function hasSameLinePreviousSibling(el: Element): boolean {
   for (let node = el.previousSibling; node; node = node.previousSibling) {
+    if (node.nodeType === 8) continue; // an HTML comment is not same-line content
     if (node.nodeName === "BR") return false;
     if ((node.textContent || "").trim()) return true;
   }

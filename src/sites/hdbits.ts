@@ -258,6 +258,7 @@ function addManualColumnControlFromCells(
 function immediateImagesAfter(node: Node): HTMLImageElement[] {
   const images: HTMLImageElement[] = [];
   for (let cur = node.nextSibling; cur; cur = cur.nextSibling) {
+    if (cur.nodeType === Node.COMMENT_NODE) continue; // a comment doesn't end the run
     if (cur.nodeName === "BR") continue;
     if (cur.nodeType === Node.TEXT_NODE && !(cur.textContent || "").trim()) continue;
     const found = cur instanceof HTMLImageElement
