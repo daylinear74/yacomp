@@ -2149,15 +2149,11 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
       names = h1;
       anchorEl = null;
     } else {
-      if (
-        isTorrentPage() &&
-        hasSlowPicsLink(container) &&
-        !hasAdjacentSlowPicsLinkBeforeImage(container, groups[0]?.[0]?.img) &&
-        groups.length === 1 &&
-        total >= 2
-      ) {
-        return torrentViewerGalleryFallback(container, groups, groupLabelEls);
-      }
+      // The leading vs/| title was unusable and no H1 rescue divides the grid —
+      // show the shots as a viewer gallery. Unlike the cmpThreadLargestBlock-
+      // tailed siblings (hasLocalNonNameHeading / the !shaped fallback), there is
+      // no fork here: both the slow.pics-single-block case and the general case
+      // resolve to the same torrentViewerGalleryFallback, so it is unconditional.
       return torrentViewerGalleryFallback(container, groups, groupLabelEls);
     }
   }
