@@ -136,17 +136,6 @@ export function readSlowPicsCurrentPosition(
   });
 }
 
-export function readSlowPicsInitialZoom(
-  collection: SlowPicsCollection,
-  dom: SlowPicsDomReader = document,
-  pageLocation: SlowPicsLocationReader = location,
-): GridInitialZoom | null {
-  void collection;
-  void dom;
-  void pageLocation;
-  return { mode: "fit" };
-}
-
 export function openSlowPicsViewer(): boolean {
   const col = (window.unsafeWindow || window).collection;
   if (!col || !col.comparisons || !col.comparisons.length) return false;
@@ -169,7 +158,7 @@ export function openSlowPicsViewer(): boolean {
     names,
     initialRow: currentPosition?.row,
     initialCol: currentPosition?.col,
-    initialZoom: readSlowPicsInitialZoom(col),
+    initialZoom: { mode: "fit" },
   });
   return true;
 }

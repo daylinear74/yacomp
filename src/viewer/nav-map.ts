@@ -22,7 +22,6 @@ export interface NavMapJumpGeometry {
 }
 
 export interface NavMap {
-  navMapEl: HTMLDivElement;
   navMapImg: HTMLImageElement;
   updateNavMap: () => void;
   cleanup: () => void;
@@ -185,5 +184,5 @@ export function createNavMap(
     window.removeEventListener("mouseup", onNavDragEnd);
   }
 
-  return { navMapEl, navMapImg, updateNavMap, cleanup };
+  return { navMapImg, updateNavMap, cleanup };
 }

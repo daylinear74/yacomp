@@ -3,7 +3,6 @@ import type { Toolbar } from "./toolbar";
 import { sourceMenuCountText } from "./source-visibility";
 
 export interface SourceMenu {
-  sourceMenuEl: HTMLDivElement;
   updateSourceMenu: () => void;
   cleanup: () => void;
 }
@@ -98,5 +97,5 @@ export function createSourceMenu(comp: Comp, toolbar: Toolbar): SourceMenu {
   }
 
   updateSourceMenu();
-  return { sourceMenuEl, updateSourceMenu, cleanup };
+  return { updateSourceMenu, cleanup };
 }

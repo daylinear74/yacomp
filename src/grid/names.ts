@@ -154,11 +154,9 @@ export function isNonSourceLabel(text: string): boolean {
   );
 }
 
-/** Prose detector (lives here so any name strategy can guard with it). A
- *  sentence boundary (".", "!", "?" then a capital) or a comma followed by a
- *  lowercase sentence connector marks prose. No length cap — legit release names
- *  run long, and a comma before a CAPITAL/digit (region lists, bitrates) is fine.
- *  Re-exported from parser.ts for back-compat. */
+// Blank out sentence punctuation inside parentheses so a parenthetical aside
+// can't read as a sentence boundary; also de-fang abbreviations ("Bros.") and
+// the "Shout! Factory" label. Helper for looksLikeProse below.
 function maskNestedSentencePunctuation(text: string): string {
   let depth = 0;
   let out = "";
@@ -173,6 +171,11 @@ function maskNestedSentencePunctuation(text: string): string {
     .replace(/\bshout!\s+factory\b/gi, (m) => m.replace("!", " "));
 }
 
+/** Prose detector (lives here so any name strategy can guard with it). A
+ *  sentence boundary (".", "!", "?" then a capital) or a comma followed by a
+ *  lowercase sentence connector marks prose. No length cap — legit release names
+ *  run long, and a comma before a CAPITAL/digit (region lists, bitrates) is fine.
+ *  Re-exported BY parser.ts for back-compat. */
 export function looksLikeProse(parts: string[]): boolean {
   return parts.some((p) => {
     const t = maskNestedSentencePunctuation(p.trim());

@@ -14,7 +14,7 @@ import {
 } from "../config";
 import {
   setZoomMode, setZoomWidth,
-  applyZoom, calcZoom, snapZoom, captureZoomAnchor, zoomToast, navMapEnabled,
+  applyZoom, calcZoom, snapZoom, captureZoomAnchor, zoomToast,
   doZoom1to1, refit1to1, centerOnActiveCell, zoomStepBaseWidth,
   fillCanvasEnabled, applyFillCanvas, setFillCanvas, setNavMap,
   activeComps, addComp, removeComp,
