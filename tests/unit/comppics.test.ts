@@ -2,9 +2,33 @@ import { describe, test, expect } from "bun:test";
 import {
   parseComppicsComparisonData,
   isComppicsNativeHotkey,
+  extractArray,
 } from "../../src/sites/comppics";
 
 const PAGE = "https://comp.pics/compare/abc";
+
+describe("extractArray (comp.pics compareData literal)", () => {
+  test("reads a plain string array", () => {
+    expect(extractArray(`var x = { imageNames: ["Remux","WEB-DL"] };`, "imageNames"))
+      .toEqual(["Remux", "WEB-DL"]);
+  });
+
+  test("keeps names whose text contains a ] (bracket tags don't truncate)", () => {
+    // HDR comparisons routinely tag sources "[B] Remux", "WEB-DL [HDR]" — the
+    // non-greedy regex used to stop at the first ] and drop every column name.
+    expect(extractArray(`compareData = { imageNames: ["[B] Remux","WEB-DL [HDR]","[DV] Encode"] }`, "imageNames"))
+      .toEqual(["[B] Remux", "WEB-DL [HDR]", "[DV] Encode"]);
+  });
+
+  test("returns null for a missing key", () => {
+    expect(extractArray(`var x = { imageUrls: ["a.png"] }`, "imageNames")).toBeNull();
+  });
+
+  test("isolates the right array among several", () => {
+    expect(extractArray(`{ imageUrls: ["a.png","b.png"], imageNames: ["A","B"], totalRows: 1 }`, "imageNames"))
+      .toEqual(["A", "B"]);
+  });
+});
 
 describe("parseComppicsComparisonData", () => {
   test("builds a grid and resolves relative image paths", () => {

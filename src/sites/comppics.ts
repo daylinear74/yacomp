@@ -90,11 +90,42 @@ function columnNames(imageNames: string[], totalColumns: number, totalRows: numb
   return names;
 }
 
-function extractArray(scriptText: string, key: string): string[] | null {
-  const match = scriptText.match(new RegExp(`${key}\\s*:\\s*(\\[[\\s\\S]*?\\])`));
-  if (!match) return null;
+// Slice the array literal that starts at `open` (an "["), to its matching "]",
+// honoring string literals so a bracket INSIDE a quoted value (e.g. an image
+// name like "[B] Remux") doesn't close the array early.
+function sliceBalancedArray(text: string, open: number): string | null {
+  let depth = 0;
+  let inString = false;
+  let quote = "";
+  for (let i = open; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (ch === "\\") i++; // skip the escaped char
+      else if (ch === quote) inString = false;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      inString = true;
+      quote = ch;
+    } else if (ch === "[") {
+      depth++;
+    } else if (ch === "]") {
+      if (--depth === 0) return text.slice(open, i + 1);
+    }
+  }
+  return null;
+}
+
+// Exported for unit testing — pulls a string array out of a comp.pics
+// `compareData` script literal (e.g. imageNames).
+export function extractArray(scriptText: string, key: string): string[] | null {
+  const match = scriptText.match(new RegExp(`${key}\\s*:\\s*(\\[)`));
+  if (!match || match.index === undefined) return null;
+  const open = match.index + match[0].length - 1; // index of the "["
+  const raw = sliceBalancedArray(scriptText, open);
+  if (!raw) return null;
   try {
-    const parsed: unknown = JSON.parse(match[1]);
+    const parsed: unknown = JSON.parse(raw);
     return isStringArray(parsed) ? parsed : null;
   } catch {
     return null;
