@@ -50,7 +50,7 @@ export function applyBracketAdjustment(
   const direction = e.code === "BracketRight" ? 1 : -1;
   const step = bcStep();
   const delta = direction > 0 ? step : -step;
-  const srcName = "Source " + (col + 1);
+  const srcName = sourceNameForColumn(comp, col);
   if (e.shiftKey) {
     comp.colContrast[col] = Math.max(
       BC_MIN,
