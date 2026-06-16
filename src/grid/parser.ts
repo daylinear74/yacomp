@@ -14,6 +14,7 @@ import {
   EXTERNAL_SCREENSHOT_HOST_RE, DIRECT_IMAGE_URL_RE, NON_SCREENSHOT_IMG_RE,
   isHDBitsThumbUrl, isHDBitsImagePageUrl,
 } from "./screenshot-urls";
+import { genericSourceNames } from "../util";
 
 // Re-exported from names.ts (moved there so name strategies can guard with it).
 export { looksLikeProse };
@@ -1237,10 +1238,6 @@ function stableGridColumnCount(groups: GridCell[][]): number | null {
     return firstLen;
   }
   return null;
-}
-
-function genericSourceNames(count: number): string[] {
-  return Array.from({ length: count }, (_, i) => `Source ${i + 1}`);
 }
 
 function isGenericSourceNames(names: string[] | null): boolean {

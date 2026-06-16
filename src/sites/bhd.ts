@@ -5,16 +5,13 @@
 import type { Grid, GridCell } from "../grid";
 import { injectCSS } from "../ui/css";
 import { openWithDummyWrapper } from "../viewer";
+import { cleanText } from "../util";
 
 export interface BHDScreenCell {
   pair: number;
   item: number;
   src: string;
   title?: string | null;
-}
-
-function cleanText(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
 }
 
 function numericAttr(el: Element, name: string): number | null {

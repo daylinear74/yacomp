@@ -5,6 +5,7 @@
 import { zoomScaleFactor, zoomPercentBase, verboseZoom, oneToOnePixels } from "../config";
 import { showToast, type ToastLine } from "../ui/toast";
 import { getShadowRoot } from "../ui/shadow";
+import { clamp } from "../util";
 import type { Comp, RowData } from "../viewer/types";
 
 export let zoomMode: "fit" | "1:1" | "custom" = "fit";
@@ -53,10 +54,6 @@ export interface CapturedZoomAnchor extends RowZoomAnchor {
   comp: Comp;
   rowIdx: number;
   currentRowIdx: number;
-}
-
-function clamp(n: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, n));
 }
 
 function suppressRowSync(comp: Comp): void {

@@ -5,10 +5,7 @@
 import type { Grid, GridCell } from "../grid";
 import { injectCSS } from "../ui/css";
 import { openWithDummyWrapper } from "../viewer";
-
-function cleanText(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
-}
+import { cleanText } from "../util";
 
 export function parseGPWNames(text: string): string[] | null {
   const label = cleanText(text).replace(/:$/, "").trim();

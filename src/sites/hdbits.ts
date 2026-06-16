@@ -10,6 +10,7 @@ import { hasVsOrPipe, splitNames, looksLikeNames } from "../grid/names";
 import { buildComparison, insertLinkAfter, openOrphanSelect, openWithDummyWrapper } from "../viewer";
 import { fetchSlowPicsGridInfo, parseSlowPicsKey, slowPicsKeyFromAnchor, type SlowPicsGridInfo } from "./slowpics-source";
 import { findSlowPicsComparisons, buildRescueGrid, hasLocalLabelBetween, type SlowPicsComparison } from "./hdbits-slowpics";
+import { genericSourceNames } from "../util";
 
 const FORUM_MANUAL_PANEL_ID = "_scf_manual_panel_";
 const FORUM_MANUAL_CSS_ID = "_scf_hdbits_manual_css_";
@@ -361,10 +362,6 @@ function slowPicsKeyBefore(node: Node | null | undefined): string | null {
 function namesAreGeneric(names: string[] | null): boolean {
   if (!names) return true;
   return names.every((n) => /^(Source(\s+\d+)?|Filtered|Encode)$/.test(n.trim()));
-}
-
-function genericSourceNames(count: number): string[] {
-  return Array.from({ length: count }, (_, i) => `Source ${i + 1}`);
 }
 
 function slowPicsNamesAreUsable(names: string[] | null | undefined): names is string[] {

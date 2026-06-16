@@ -4,6 +4,7 @@
 
 import { navMapEnabled, fillCanvasEnabled } from "../filters/zoom";
 import { getShadowRoot } from "../ui/shadow";
+import { clamp } from "../util";
 import type { RowData, Comp } from "./types";
 
 const NAV_MAX = 200;
@@ -25,10 +26,6 @@ export interface NavMap {
   navMapImg: HTMLImageElement;
   updateNavMap: () => void;
   cleanup: () => void;
-}
-
-function clamp(n: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, n));
 }
 
 export function calcNavMapJumpScroll(
