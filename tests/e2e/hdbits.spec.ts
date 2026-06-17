@@ -1063,7 +1063,7 @@ test("hdbits: forum manual custom comparison grouped-by-source mode pairs column
   // Grouped by source: the selection is read as two contiguous per-source
   // blocks [m1,m2] and [m3,m4], so row r pairs the r-th shot of each block.
   await panel.locator("._scf_manual_grouped").check();
-  await panel.locator("._scf_manual_cols").fill("2");
+  await panel.locator("._scf_manual_cols").selectOption("2");
   await panel.locator("._scf_manual_build").click();
 
   await expect(page.locator("._scf_comp")).toBeVisible();
@@ -1243,7 +1243,7 @@ test("hdbits: saved Over the Garden Wall forum page uses the current manual fall
   await dragAcrossScreenshots(page, "td.comment a[href*='img.hdbits.org'] img", 6);
   await expect(page.locator("._scf_manual_selected")).toHaveCount(6);
 
-  await panel.locator("._scf_manual_cols").fill("6");
+  await panel.locator("._scf_manual_cols").selectOption("6");
   await panel.locator("._scf_manual_build").click();
   await expect(page.locator("._scf_comp")).toBeVisible();
   await page.keyboard.press("Digit1");

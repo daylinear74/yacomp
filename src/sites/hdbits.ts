@@ -747,13 +747,74 @@ function injectForumManualCSS(): void {
       display: none;
     }
     ._scf_manual_cols {
-      width: 4em;
+      width: auto;
+      vertical-align: middle;
     }
     ._scf_manual_names {
       width: 16em;
     }
+    ._scf_manual_grouped_label {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+    ._scf_manual_grouped_label ._scf_manual_grouped {
+      margin: 0;
+      flex: none;
+    }
     ._scf_manual_status {
       opacity: 0.85;
+    }
+    ._scf_manual_help_wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+    ._scf_manual_panel ._scf_manual_help {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      padding: 0;
+      border: 1px solid rgba(128, 128, 128, 0.55);
+      border-radius: 50%;
+      background: transparent;
+      color: inherit;
+      opacity: 0.6;
+      font: 700 10px/1 system-ui, sans-serif;
+      cursor: help;
+      transition: opacity 0.12s, border-color 0.12s;
+    }
+    ._scf_manual_panel ._scf_manual_help:hover,
+    ._scf_manual_panel ._scf_manual_help:focus-visible {
+      opacity: 1;
+      border-color: #4da3ff;
+      outline: none;
+    }
+    ._scf_manual_hint {
+      position: absolute;
+      top: calc(100% + 7px);
+      right: 0;
+      z-index: 2147483601;
+      display: none;
+      width: max-content;
+      max-width: 280px;
+      padding: 7px 10px;
+      background: #15171c;
+      color: #eaeaea;
+      border: 1px solid #4da3ff;
+      border-radius: 6px;
+      font-size: 11px;
+      line-height: 1.45;
+      white-space: normal;
+      box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55);
+    }
+    ._scf_manual_help_wrap:hover ._scf_manual_hint,
+    ._scf_manual_help:focus-visible + ._scf_manual_hint {
+      display: block;
     }
     body._scf_manual_selecting .std-content img {
       cursor: crosshair;
@@ -968,6 +1029,7 @@ function addForumManualComparisonControl(): void {
   if (!title) return;
 
   injectForumManualCSS();
+  injectColumnSelectCSS(); // the builder's column dropdown reuses the viewer's select look
 
   const selected: HTMLImageElement[] = [];
   let anchor: HTMLImageElement | null = null;
@@ -1002,12 +1064,41 @@ function addForumManualComparisonControl(): void {
 
   const colLabel = document.createElement("label");
   colLabel.textContent = "columns ";
-  const cols = document.createElement("input");
-  cols.type = "number";
-  cols.min = "2";
-  cols.value = "2";
-  cols.className = "_scf_manual_cols";
+  const cols = document.createElement("select");
+  cols.className = "_scf_manual_cols _scf_column_select";
   colLabel.appendChild(cols);
+
+  // The column options are the divisors (≥2) of the current selection, so every
+  // one Build-s cleanly. An explicit `preferred` count (an auto-detected row
+  // width, or a label's name count picked before the images) is always offered
+  // even when it doesn't divide yet — and with nothing selected we still show a
+  // sensible default so the dropdown is never empty. Repopulated on every
+  // selection change; keeps the current pick when still valid.
+  function repopulateColumns(preferred?: number): void {
+    const total = selected.length;
+    const valid: number[] = [];
+    for (let c = 2; c <= total; c++) if (total % c === 0) valid.push(c);
+    if (preferred !== undefined && preferred >= 2 && !valid.includes(preferred)) {
+      valid.push(preferred);
+      valid.sort((a, b) => a - b);
+    }
+    if (valid.length === 0) valid.push(preferred && preferred >= 2 ? preferred : 2);
+    const current = Number.parseInt(cols.value, 10);
+    const want =
+      preferred !== undefined && valid.includes(preferred) ? preferred
+      : valid.includes(current) ? current
+      : valid[0];
+    cols.replaceChildren(
+      ...valid.map((c) => {
+        const option = document.createElement("option");
+        option.value = String(c);
+        option.textContent = String(c);
+        return option;
+      }),
+    );
+    cols.value = String(want);
+  }
+  repopulateColumns(); // never leave the dropdown empty before the first selection
 
   // Source-grouped layout: the poster put each source in its own contiguous
   // block of shots (all of column A, then all of column B) instead of
@@ -1022,7 +1113,9 @@ function addForumManualComparisonControl(): void {
   const sourceGrouped = document.createElement("input");
   sourceGrouped.type = "checkbox";
   sourceGrouped.className = "_scf_manual_grouped";
-  groupedLabel.append(sourceGrouped, " grouped by source");
+  const groupedText = document.createElement("span");
+  groupedText.textContent = "grouped by source";
+  groupedLabel.append(sourceGrouped, groupedText);
 
   const build = document.createElement("button");
   build.type = "button";
@@ -1037,6 +1130,23 @@ function addForumManualComparisonControl(): void {
   const status = document.createElement("span");
   status.className = "_scf_manual_status";
   status.textContent = "0 selected";
+
+  // The selection how-to lives behind a "?" hint instead of crowding the bar.
+  const helpWrap = document.createElement("span");
+  helpWrap.className = "_scf_manual_help_wrap";
+  const help = document.createElement("button");
+  help.type = "button";
+  help.className = "_scf_manual_help";
+  help.textContent = "?";
+  help.setAttribute("aria-label", "Selection help");
+  help.tabIndex = 0;
+  help.addEventListener("click", (e) => e.preventDefault());
+  const hint = document.createElement("span");
+  hint.className = "_scf_manual_hint";
+  hint.setAttribute("role", "tooltip");
+  hint.textContent =
+    "Click a gallery to select it · Ctrl-click toggles one · Shift-click selects a range · click a text label to name the columns.";
+  helpWrap.append(help, hint);
 
   const updateStatus = (message?: string) => {
     status.textContent = message ?? `${selected.length} selected`;
@@ -1081,6 +1191,7 @@ function addForumManualComparisonControl(): void {
 
   const refreshSelection = () => {
     updateManualSelectionStyles(selected);
+    repopulateColumns();
     updateStatus();
   };
 
@@ -1101,7 +1212,7 @@ function addForumManualComparisonControl(): void {
   };
 
   const setColumns = (n: number) => {
-    if (n >= 2) cols.value = String(n);
+    if (n >= 2) repopulateColumns(n);
   };
 
   // Fill the column names (and matching count) from a label, optionally keeping
@@ -1234,7 +1345,7 @@ function addForumManualComparisonControl(): void {
   start.addEventListener("click", () => {
     controls.hidden = false;
     setSelecting(true);
-    updateStatus("click a gallery · Ctrl-click toggles · Shift-click ranges · click a label to name");
+    updateStatus();
   });
 
   build.addEventListener("click", () => {
@@ -1288,7 +1399,7 @@ function addForumManualComparisonControl(): void {
 
   clear.addEventListener("click", reset);
 
-  controls.append(namesLabel, colLabel, groupedLabel, build, clear, status);
+  controls.append(namesLabel, colLabel, groupedLabel, build, clear, status, helpWrap);
   panel.append(start, controls);
   title.insertAdjacentElement("afterend", panel);
 }
