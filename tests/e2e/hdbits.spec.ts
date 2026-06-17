@@ -451,12 +451,12 @@ test("hdbits: non-comparison external torrent screenshots get Show Viewer and op
 
   await expect(comparisonLinks(page)).toHaveCount(2);
   await expect(viewerLinks(page)).toHaveCount(2);
-  await page.locator('img[src*="siFYuCj2"]').dispatchEvent("click");
+  await page.locator('img[src*="imgbox6901"]').dispatchEvent("click");
   await expect(page.locator("._scf_comp")).toBeVisible();
   await expect(page.locator("._scf_comp_row")).toHaveCount(3);
   await expect(page.locator("._scf_comp_img").first()).toHaveAttribute(
     "src",
-    "https://images2.imgbox.com/ac/67/siFYuCj2_o.png",
+    "https://images2.imgbox.com/aa/01/imgbox6901_o.png",
   );
 });
 
