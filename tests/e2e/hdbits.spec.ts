@@ -1212,7 +1212,7 @@ test("hdbits: forum manual — single labels accumulate into a title with Ctrl/C
   await expect(names).toHaveValue("Audio | CZE");
 });
 
-test("hdbits: forum manual — a manual column count rotates titles instead of adding columns", async ({ page }) => {
+test("hdbits: forum manual — locking the column count rotates titles instead of adding columns", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/191-forum-post-title-chooser-accumulation");
   await waitForHdbitsReady(page);
@@ -1222,9 +1222,11 @@ test("hdbits: forum manual — a manual column count rotates titles instead of a
   const names = panel.locator("._scf_manual_names");
   const cols = panel.locator("._scf_manual_cols");
 
-  // Select the 4-image gallery (so the dropdown offers 2/4), then pin columns to 2.
+  // Select the 4-image gallery (so the dropdown offers 2/4), set 2, then LOCK.
   await page.locator('img[src*="t191a"]').click();
   await cols.selectOption("2");
+  await panel.locator("._scf_manual_cols_lock").click();
+  await expect(cols).toBeDisabled();
 
   await page.locator(".lbl-usa").click();
   await page.locator(".lbl-cze").click({ modifiers: ["ControlOrMeta"] });

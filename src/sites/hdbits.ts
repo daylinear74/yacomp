@@ -750,6 +750,25 @@ function injectForumManualCSS(): void {
       width: auto;
       vertical-align: middle;
     }
+    ._scf_manual_panel ._scf_manual_cols_lock {
+      margin: 0 0 0 -2px;
+      padding: 0 3px;
+      border: 1px solid transparent;
+      background: transparent;
+      font-size: 11px;
+      line-height: 1;
+      cursor: pointer;
+      opacity: 0.7;
+      vertical-align: middle;
+    }
+    ._scf_manual_panel ._scf_manual_cols_lock:hover {
+      opacity: 1;
+    }
+    ._scf_manual_panel ._scf_manual_cols_lock._scf_locked {
+      opacity: 1;
+      border-color: #4da3ff;
+      border-radius: 4px;
+    }
     ._scf_manual_names {
       width: 16em;
     }
@@ -1056,13 +1075,13 @@ function addForumManualComparisonControl(): void {
   // "USA", then ⌘-clicking "CZE" builds "USA | CZE", and a later plain click
   // rotates the first column. A label that already reads as 2+ names (e.g.
   // "Source vs Encode") replaces the whole title at once. When the column count
-  // was set MANUALLY (the dropdown), ⌘-click rotates within those fixed slots
-  // instead of growing the title; otherwise it adds columns. ⌘-clicking a name
-  // already in the title does nothing.
+  // is LOCKED (the lock toggle), ⌘-click rotates within those fixed slots instead
+  // of growing the title; otherwise it adds columns. ⌘-clicking a name already in
+  // the title does nothing.
   const titleParts: string[] = [];
   const titleRanges: (Range | null)[] = [];
   let titlePointer = 0;
-  let colsManual = false;
+  let colsLocked = false;
   let anchor: HTMLImageElement | null = null;
   let selecting = false;
   let dragSelecting = false;
@@ -1099,6 +1118,23 @@ function addForumManualComparisonControl(): void {
   cols.className = "_scf_manual_cols _scf_column_select";
   colLabel.appendChild(cols);
 
+  // Lock the column count: once on, the dropdown freezes and Ctrl/⌘-clicking a
+  // title rotates within these columns instead of adding more.
+  const colsLock = document.createElement("button");
+  colsLock.type = "button";
+  colsLock.className = "_scf_manual_cols_lock";
+  colsLock.title = "Lock the column count — Ctrl/⌘-click a title then rotates within these columns instead of adding more";
+  colsLock.setAttribute("aria-pressed", "false");
+  colsLock.textContent = "🔓";
+  const setColsLocked = (locked: boolean) => {
+    colsLocked = locked;
+    cols.disabled = locked;
+    colsLock.textContent = locked ? "🔒" : "🔓";
+    colsLock.setAttribute("aria-pressed", String(locked));
+    colsLock.classList.toggle("_scf_locked", locked);
+  };
+  colsLock.addEventListener("click", () => setColsLocked(!colsLocked));
+
   // The column options are the divisors (≥2) of the current selection, so every
   // one Build-s cleanly. An explicit `preferred` count (an auto-detected row
   // width, or a label's name count picked before the images) is always offered
@@ -1106,6 +1142,7 @@ function addForumManualComparisonControl(): void {
   // sensible default so the dropdown is never empty. Repopulated on every
   // selection change; keeps the current pick when still valid.
   function repopulateColumns(preferred?: number): void {
+    if (colsLocked) return; // the count is frozen by the lock toggle
     const total = selected.length;
     const valid: number[] = [];
     for (let c = 2; c <= total; c++) if (total % c === 0) valid.push(c);
@@ -1130,9 +1167,6 @@ function addForumManualComparisonControl(): void {
     cols.value = String(want);
   }
   repopulateColumns(); // never leave the dropdown empty before the first selection
-  // A user pick (not a programmatic repopulate) pins the column count: from then
-  // on ⌘-click rotates the title within these columns instead of adding more.
-  cols.addEventListener("change", () => { colsManual = true; });
 
   // Source-grouped layout: the poster put each source in its own contiguous
   // block of shots (all of column A, then all of column B) instead of
@@ -1218,7 +1252,7 @@ function addForumManualComparisonControl(): void {
     titleParts.splice(0, titleParts.length);
     titleRanges.splice(0, titleRanges.length);
     titlePointer = 0;
-    colsManual = false;
+    setColsLocked(false);
     anchor = null;
     namesInput.value = "";
     sourceGrouped.checked = false;
@@ -1257,8 +1291,8 @@ function addForumManualComparisonControl(): void {
 
   const renderTitle = () => {
     namesInput.value = titleParts.join(" | ");
-    // When the count wasn't pinned by the user, keep it in step with the title.
-    if (!colsManual && titleParts.length >= 2) setColumns(titleParts.length);
+    // While unlocked, keep the column count in step with the title.
+    if (!colsLocked && titleParts.length >= 2) setColumns(titleParts.length);
     updateStatus(titleParts.length ? `title: ${titleParts.join(" | ")}` : undefined);
     setForumTitleHighlights(titleRanges.filter((r): r is Range => !!r));
   };
@@ -1311,7 +1345,7 @@ function addForumManualComparisonControl(): void {
     let changed = false;
     for (const name of names) {
       if (titleParts.includes(name)) continue; // already a column — ⌘-click is a no-op
-      if (colsManual) {
+      if (colsLocked) {
         const n = Number.parseInt(cols.value, 10) || titleParts.length || 2;
         setSlot(titlePointer % n, name, range);
         titlePointer = (titlePointer + 1) % n;
@@ -1503,7 +1537,7 @@ function addForumManualComparisonControl(): void {
 
   clear.addEventListener("click", reset);
 
-  controls.append(namesLabel, colLabel, groupedLabel, build, clear, status, helpWrap);
+  controls.append(namesLabel, colLabel, colsLock, groupedLabel, build, clear, status, helpWrap);
   panel.append(start, controls);
   title.insertAdjacentElement("afterend", panel);
 }
