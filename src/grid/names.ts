@@ -753,7 +753,7 @@ export function namesFromLeadingText(container: Element): string[] | null {
 }
 
 /** Each span must head its own run of images, and the runs must be the same
- *  size — the winged per-source-group shape. Section headings over text-only
+ *  size — the per-source-group (source-grouped) shape. Section headings over text-only
  *  sections ("Video"/"Audio"/"Subtitles + Chapters" with the comparisons at
  *  external links) leave their images all in ONE trailing run, so they fail
  *  this and never become columns for an unrelated gallery. */

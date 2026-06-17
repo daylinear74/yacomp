@@ -17,7 +17,7 @@ to verify titles/counts; find them by a slow.pics link whose images have no
 preceding source label.
 
 **reply posts with screenshots (H1-only-for-OP).** Owner spot-checked these as
-already correct: 62860 post#11 (winged-style ✓), 59424 post#14 (replenish, no
+already correct: 62860 post#11 (source-grouped style ✓), 59424 post#14 (replenish, no
 comparison ✓), 77086 post#7 (replenish ✓), 58805 post#2 ✓, 72847 post#2 ✓. The
 single-post corpus still can't exercise the reply path in general; confirm on a
 live multi-post thread that the topic H1 is not applied to a reply., 78200 post#2

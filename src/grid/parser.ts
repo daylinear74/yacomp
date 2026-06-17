@@ -1852,15 +1852,15 @@ export function reshapeGrid(groups: GridCell[][], allImages: GridCell[], names: 
   return { numCols, gridRows };
 }
 
-/** Winged per-source comparison whose groups have UNEQUAL counts. Each group is
- *  one source's column of shots, labeled with that source's name (USA: 10 shots,
+/** Source-grouped comparison whose groups have UNEQUAL counts. Each group is one
+ *  source's column of shots, labeled with that source's name (USA: 10 shots,
  *  CZE: 10 shots). When an extra group of a DIFFERENT length is tacked on (an
  *  "Audio" waveform set of 4), it is a separate comparison: keep the largest set
  *  of equal-count groups and transpose those into the grid, dropping the odd
  *  one(s) — rather than chunking all of them into a garbage grid. Equal-count
- *  winged groups are the normal transpose path's job; this only rescues the
+ *  source groups are the normal transpose path's job; this only rescues the
  *  odd-group-out shape (so it needs ≥2 keepers + ≥1 dropped → ≥3 groups). */
-function buildWingedOddGroupComparison(
+function buildOddSourceGroupComparison(
   groups: GridCell[][],
   groupLabels: (string | null)[],
   groupLabelEls: (ChildNode | null)[],
@@ -1959,8 +1959,8 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   const asd87ArrowGrid = buildAsd87ArrowComparisonGrid(collected);
   if (asd87ArrowGrid) return asd87ArrowGrid;
 
-  const wingedOdd = buildWingedOddGroupComparison(groups, groupLabels, groupLabelEls);
-  if (wingedOdd) return wingedOdd;
+  const oddSourceGroup = buildOddSourceGroupComparison(groups, groupLabels, groupLabelEls);
+  if (oddSourceGroup) return oddSourceGroup;
 
   collected = trimTrailingFooterSection(trimTrailingLabeledSectionAfterSingleGridLabel(collected));
   ({ groups, groupLabels, groupLabelEls, groupLeadingBreaks } = collected);

@@ -1033,7 +1033,7 @@ test("hdbits: forum manual custom comparison builds a Source N grid from selecte
   expect(names).toEqual(["Source 1", "Source 2"]);
 });
 
-test("hdbits: forum manual custom comparison winged mode pairs columns column-major", async ({ page }) => {
+test("hdbits: forum manual custom comparison grouped-by-source mode pairs columns column-major", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/154-forum-post-manual-custom-comparison");
   await waitForHdbitsReady(page);
@@ -1044,9 +1044,9 @@ test("hdbits: forum manual custom comparison winged mode pairs columns column-ma
   await page.locator('img[src*="t.hdbits.org/manual"]').nth(0).click();
   await expect(page.locator("._scf_manual_selected")).toHaveCount(4);
 
-  // Winged: the selection is read as two contiguous per-source blocks
-  // [m1,m2] and [m3,m4], so row r pairs the r-th shot of each block.
-  await panel.locator("._scf_manual_winged").check();
+  // Grouped by source: the selection is read as two contiguous per-source
+  // blocks [m1,m2] and [m3,m4], so row r pairs the r-th shot of each block.
+  await panel.locator("._scf_manual_grouped").check();
   await panel.locator("._scf_manual_cols").fill("2");
   await panel.locator("._scf_manual_build").click();
 

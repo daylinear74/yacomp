@@ -1009,19 +1009,20 @@ function addForumManualComparisonControl(): void {
   cols.className = "_scf_manual_cols";
   colLabel.appendChild(cols);
 
-  // "Winged" layout: the poster put each source in its own contiguous block of
-  // shots (all of column A, then all of column B) instead of interleaving them
-  // row by row. When ticked, Build reads the selection column-major and
-  // transposes it; otherwise it chunks the selection into side-by-side rows.
-  const wingedLabel = document.createElement("label");
-  wingedLabel.className = "_scf_manual_winged_label";
-  wingedLabel.title =
-    "Winged: each source's shots are grouped together (all of column A, then all of column B) " +
-    "rather than interleaved row by row.";
-  const winged = document.createElement("input");
-  winged.type = "checkbox";
-  winged.className = "_scf_manual_winged";
-  wingedLabel.append(winged, " winged");
+  // Source-grouped layout: the poster put each source in its own contiguous
+  // block of shots (all of column A, then all of column B) instead of
+  // interleaving them row by row. When ticked, Build reads the selection
+  // column-major and transposes it; otherwise it chunks the selection into
+  // side-by-side rows.
+  const groupedLabel = document.createElement("label");
+  groupedLabel.className = "_scf_manual_grouped_label";
+  groupedLabel.title =
+    "Grouped by source: each source's shots are in one contiguous block (all of column A, " +
+    "then all of column B) rather than interleaved row by row.";
+  const sourceGrouped = document.createElement("input");
+  sourceGrouped.type = "checkbox";
+  sourceGrouped.className = "_scf_manual_grouped";
+  groupedLabel.append(sourceGrouped, " grouped by source");
 
   const build = document.createElement("button");
   build.type = "button";
@@ -1071,7 +1072,7 @@ function addForumManualComparisonControl(): void {
     selected.splice(0, selected.length);
     anchor = null;
     namesInput.value = "";
-    winged.checked = false;
+    sourceGrouped.checked = false;
     updateManualSelectionStyles(selected);
     setSelecting(false);
     controls.hidden = true;
@@ -1260,7 +1261,7 @@ function addForumManualComparisonControl(): void {
     }
 
     const rows: GridCell[][] = [];
-    if (winged.checked) {
+    if (sourceGrouped.checked) {
       // Column-major: the selection is `numCols` contiguous per-source blocks;
       // transpose so row r pairs the r-th shot of each block.
       const perCol = selected.length / numCols;
@@ -1287,7 +1288,7 @@ function addForumManualComparisonControl(): void {
 
   clear.addEventListener("click", reset);
 
-  controls.append(namesLabel, colLabel, wingedLabel, build, clear, status);
+  controls.append(namesLabel, colLabel, groupedLabel, build, clear, status);
   panel.append(start, controls);
   title.insertAdjacentElement("afterend", panel);
 }
