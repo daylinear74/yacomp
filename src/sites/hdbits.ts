@@ -851,8 +851,8 @@ function injectForumManualCSS(): void {
       opacity: 1;
     }
     ::highlight(_scf_manual_title) {
-      background-color: #6a4dff;
-      color: #fff;
+      background-color: #e0a32e;
+      color: #1a1205;
     }
   `;
   document.head.appendChild(style);
@@ -979,7 +979,7 @@ function forumRowWidth(group: HTMLImageElement[], clicked: HTMLImageElement): nu
 }
 
 /** The text line or label under the pointer, for column-name extraction. */
-function forumTextUnderPointer(event: MouseEvent): string | null {
+function forumTextUnderPointer(event: MouseEvent): { text: string; range: Range } | null {
   const doc = document as unknown as {
     caretRangeFromPoint?: (x: number, y: number) => Range | null;
     caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node } | null;
@@ -989,7 +989,11 @@ function forumTextUnderPointer(event: MouseEvent): string | null {
     doc.caretPositionFromPoint?.(event.clientX, event.clientY)?.offsetNode;
   if (node && node.nodeType === Node.TEXT_NODE && node.parentElement?.closest("td.comment")) {
     const t = (node.textContent ?? "").trim();
-    if (t) return t;
+    if (t) {
+      const range = document.createRange();
+      range.selectNode(node);
+      return { text: t, range };
+    }
   }
   // Fallback only to a SMALL inline label element — never a block container,
   // whose textContent would greedily span many lines ("Also here … CZE … Audio").
@@ -1001,26 +1005,33 @@ function forumTextUnderPointer(event: MouseEvent): string | null {
     /^(?:STRONG|B|SPAN|FONT|EM|U|I|A|LABEL)$/.test(el.tagName)
   ) {
     const t = (el.textContent ?? "").trim();
-    if (t && t.length <= 60) return t;
+    if (t && t.length <= 60) {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      return { text: t, range };
+    }
   }
   return null;
 }
 
 const FORUM_TITLE_HIGHLIGHT = "_scf_manual_title";
 
-/** Paint the chosen title text with the CSS Custom Highlight API so it stays
- *  marked on the page after the native selection is cleared. Returns false when
- *  the API is unavailable (older browsers keep the native selection instead). */
-function setForumTitleHighlight(range: Range): boolean {
+/** Paint the chosen title text(s) with the CSS Custom Highlight API so each
+ *  picked column stays marked on the page (in its own colour, distinct from the
+ *  image-selection outline) after the native selection is cleared. Returns false
+ *  when the API is unavailable (older browsers keep the native selection). */
+function setForumTitleHighlights(ranges: Range[]): boolean {
   const win = window as unknown as {
-    CSS?: { highlights?: { set(key: string, highlight: unknown): void } };
-    Highlight?: new (range: Range) => unknown;
+    CSS?: { highlights?: { set(key: string, highlight: unknown): void; delete(key: string): void } };
+    Highlight?: new (...ranges: Range[]) => unknown;
   };
-  if (win.CSS?.highlights && win.Highlight) {
-    win.CSS.highlights.set(FORUM_TITLE_HIGHLIGHT, new win.Highlight(range.cloneRange()));
-    return true;
+  if (!win.CSS?.highlights || !win.Highlight) return false;
+  if (ranges.length) {
+    win.CSS.highlights.set(FORUM_TITLE_HIGHLIGHT, new win.Highlight(...ranges.map((r) => r.cloneRange())));
+  } else {
+    win.CSS.highlights.delete(FORUM_TITLE_HIGHLIGHT);
   }
-  return false;
+  return true;
 }
 
 function clearForumTitleHighlight(): void {
@@ -1039,12 +1050,19 @@ function addForumManualComparisonControl(): void {
   injectColumnSelectCSS(); // the builder's column dropdown reuses the viewer's select look
 
   const selected: HTMLImageElement[] = [];
-  // Accumulated column titles. A plain click/selection of a label replaces the
-  // first column (keeping the rest); Ctrl/⌘-click appends the next column — so
-  // picking "USA", then ⌘-clicking "CZE" builds "USA | CZE", and a later plain
-  // click rotates the first column. A label that already reads as 2+ names
-  // (e.g. "Source vs Encode") replaces the whole title at once.
+  // Accumulated column titles, with the page range of each pick (for the
+  // on-page highlight). A plain click/selection of a label replaces the first
+  // column (keeping the rest); Ctrl/⌘-click adds the next column — so picking
+  // "USA", then ⌘-clicking "CZE" builds "USA | CZE", and a later plain click
+  // rotates the first column. A label that already reads as 2+ names (e.g.
+  // "Source vs Encode") replaces the whole title at once. When the column count
+  // was set MANUALLY (the dropdown), ⌘-click rotates within those fixed slots
+  // instead of growing the title; otherwise it adds columns. ⌘-clicking a name
+  // already in the title does nothing.
   const titleParts: string[] = [];
+  const titleRanges: (Range | null)[] = [];
+  let titlePointer = 0;
+  let colsManual = false;
   let anchor: HTMLImageElement | null = null;
   let selecting = false;
   let dragSelecting = false;
@@ -1112,6 +1130,9 @@ function addForumManualComparisonControl(): void {
     cols.value = String(want);
   }
   repopulateColumns(); // never leave the dropdown empty before the first selection
+  // A user pick (not a programmatic repopulate) pins the column count: from then
+  // on ⌘-click rotates the title within these columns instead of adding more.
+  cols.addEventListener("change", () => { colsManual = true; });
 
   // Source-grouped layout: the poster put each source in its own contiguous
   // block of shots (all of column A, then all of column B) instead of
@@ -1195,10 +1216,14 @@ function addForumManualComparisonControl(): void {
   const reset = () => {
     selected.splice(0, selected.length);
     titleParts.splice(0, titleParts.length);
+    titleRanges.splice(0, titleRanges.length);
+    titlePointer = 0;
+    colsManual = false;
     anchor = null;
     namesInput.value = "";
     sourceGrouped.checked = false;
     updateManualSelectionStyles(selected);
+    setForumTitleHighlights([]);
     setSelecting(false);
     controls.hidden = true;
     updateStatus();
@@ -1232,9 +1257,10 @@ function addForumManualComparisonControl(): void {
 
   const renderTitle = () => {
     namesInput.value = titleParts.join(" | ");
-    // Keep the column count in step once the title is a real multi-column pick.
-    if (titleParts.length >= 2) setColumns(titleParts.length);
+    // When the count wasn't pinned by the user, keep it in step with the title.
+    if (!colsManual && titleParts.length >= 2) setColumns(titleParts.length);
     updateStatus(titleParts.length ? `title: ${titleParts.join(" | ")}` : undefined);
+    setForumTitleHighlights(titleRanges.filter((r): r is Range => !!r));
   };
 
   // The column name(s) a clicked/selected bit of text yields: a line that reads
@@ -1258,27 +1284,50 @@ function addForumManualComparisonControl(): void {
     return [];
   };
 
-  // Apply a picked label. append (Ctrl/⌘) adds the names as new columns; a plain
-  // pick replaces the whole title when the text is itself a 2+ name comparison,
-  // else replaces just the first column (rotating, keeping later columns).
-  const addTitle = (names: string[], append: boolean): boolean => {
+  const setSlot = (i: number, name: string, range: Range | null) => {
+    titleParts[i] = name;
+    titleRanges[i] = range;
+  };
+
+  // Apply a picked label. A plain pick replaces the whole title when the text is
+  // itself a 2+ name comparison, else replaces just the first column (keeping the
+  // rest). Ctrl/⌘ adds the next column — rotating within the fixed slots when the
+  // count was pinned manually, else growing the title; a name already used is a
+  // no-op. Returns true when the title changed.
+  const addTitle = (names: string[], append: boolean, range: Range | null): boolean => {
     if (!names.length) return false;
-    if (append) {
-      titleParts.push(...names);
-    } else if (names.length >= 2) {
-      titleParts.splice(0, titleParts.length, ...names);
-    } else if (titleParts.length) {
-      titleParts[0] = names[0];
-    } else {
-      titleParts.push(names[0]);
+    if (!append) {
+      if (names.length >= 2) {
+        titleParts.splice(0, titleParts.length, ...names);
+        titleRanges.splice(0, titleRanges.length, range, ...names.slice(1).map(() => null));
+        titlePointer = names.length;
+      } else {
+        setSlot(0, names[0], range);
+        titlePointer = 1;
+      }
+      renderTitle();
+      return true;
     }
-    renderTitle();
-    return true;
+    let changed = false;
+    for (const name of names) {
+      if (titleParts.includes(name)) continue; // already a column — ⌘-click is a no-op
+      if (colsManual) {
+        const n = Number.parseInt(cols.value, 10) || titleParts.length || 2;
+        setSlot(titlePointer % n, name, range);
+        titlePointer = (titlePointer + 1) % n;
+      } else {
+        setSlot(titleParts.length, name, range);
+        titlePointer = titleParts.length;
+      }
+      changed = true;
+    }
+    if (changed) renderTitle();
+    return changed;
   };
 
   // A non-collapsed text selection inside the post is a title pick — lets you
-  // grab just part of a line as a column. Ctrl/⌘ appends; otherwise it replaces
-  // the first column. Returns true when it was used.
+  // grab just part of a line as a column. Ctrl/⌘ adds; otherwise it replaces the
+  // first column. Returns true when it was used.
   const tryTitleFromSelection = (append: boolean): boolean => {
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || sel.rangeCount === 0) return false;
@@ -1288,9 +1337,8 @@ function addForumManualComparisonControl(): void {
     if (!host?.closest("td.comment")) return false;
     const names = titleNamesFromText(text);
     if (!names.length) return false;
-    const range = sel.getRangeAt(0);
-    if (!addTitle(names, append)) return false;
-    if (setForumTitleHighlight(range)) sel.removeAllRanges();
+    if (!addTitle(names, append, sel.getRangeAt(0).cloneRange())) return false;
+    sel.removeAllRanges();
     return true;
   };
 
@@ -1387,13 +1435,13 @@ function addForumManualComparisonControl(): void {
     // A click on a text label names a column. Plain click sets the first column
     // (or the whole title if the label is itself a 2+ name line); Ctrl/⌘-click
     // appends the next column.
-    const text = forumTextUnderPointer(event);
-    if (!text) return;
-    const names = titleNamesFromText(text);
+    const picked = forumTextUnderPointer(event);
+    if (!picked) return;
+    const names = titleNamesFromText(picked.text);
     if (names.length) {
       event.preventDefault();
       event.stopPropagation();
-      addTitle(names, event.metaKey || event.ctrlKey);
+      addTitle(names, event.metaKey || event.ctrlKey, picked.range);
     }
   }
 

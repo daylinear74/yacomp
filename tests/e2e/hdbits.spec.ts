@@ -1212,6 +1212,42 @@ test("hdbits: forum manual — single labels accumulate into a title with Ctrl/C
   await expect(names).toHaveValue("Audio | CZE");
 });
 
+test("hdbits: forum manual — a manual column count rotates titles instead of adding columns", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/191-forum-post-title-chooser-accumulation");
+  await waitForHdbitsReady(page);
+
+  const panel = page.locator("._scf_manual_panel");
+  await panel.locator("._scf_manual_button").click();
+  const names = panel.locator("._scf_manual_names");
+  const cols = panel.locator("._scf_manual_cols");
+
+  // Select the 4-image gallery (so the dropdown offers 2/4), then pin columns to 2.
+  await page.locator('img[src*="t191a"]').click();
+  await cols.selectOption("2");
+
+  await page.locator(".lbl-usa").click();
+  await page.locator(".lbl-cze").click({ modifiers: ["ControlOrMeta"] });
+  await expect(names).toHaveValue("USA | CZE");
+
+  // A 3rd Ctrl/⌘-click rotates within the 2 pinned columns — does NOT grow to 3.
+  await page.locator(".lbl-audio").click({ modifiers: ["ControlOrMeta"] });
+  await expect(names).toHaveValue("Audio | CZE");
+  await expect(cols).toHaveValue("2");
+
+  // Ctrl/⌘-clicking a name already in the title is a no-op.
+  await page.locator(".lbl-cze").click({ modifiers: ["ControlOrMeta"] });
+  await expect(names).toHaveValue("Audio | CZE");
+
+  // Picked titles are highlighted on the page (distinct from image selection).
+  expect(
+    await page.evaluate(() => {
+      const reg = (window as unknown as { CSS?: { highlights?: { has(k: string): boolean } } }).CSS?.highlights;
+      return reg ? reg.has("_scf_manual_title") : null;
+    }),
+  ).toBe(true);
+});
+
 test("hdbits: forum manual — the toolbar stays floating after Build closes the viewer", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/154-forum-post-manual-custom-comparison");
