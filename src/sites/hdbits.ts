@@ -6,7 +6,7 @@ import { injectCSS, injectTriggerLinkCSS } from "../ui/css";
 import { hdbitsImageClick, hdbitsManualAllThreads } from "../config";
 import { getGrids, hdbFull } from "../grid";
 import type { Grid, GridCell } from "../grid";
-import { hasVsOrPipe, splitNames, looksLikeNames } from "../grid/names";
+import { hasVsOrPipe, splitNames, looksLikeNames, isNonSourceLabel, looksLikeProse, tidyName } from "../grid/names";
 import { buildComparison, insertLinkAfter, openOrphanSelect, openWithDummyWrapper } from "../viewer";
 import { fetchSlowPicsGridInfo, parseSlowPicsKey, slowPicsKeyFromAnchor, type SlowPicsGridInfo } from "./slowpics-source";
 import { findSlowPicsComparisons, buildRescueGrid, hasLocalLabelBetween, type SlowPicsComparison } from "./hdbits-slowpics";
@@ -991,10 +991,17 @@ function forumTextUnderPointer(event: MouseEvent): string | null {
     const t = (node.textContent ?? "").trim();
     if (t) return t;
   }
+  // Fallback only to a SMALL inline label element — never a block container,
+  // whose textContent would greedily span many lines ("Also here … CZE … Audio").
   const el = event.target;
-  if (el instanceof HTMLElement && !(el instanceof HTMLImageElement) && el.closest("td.comment")) {
+  if (
+    el instanceof HTMLElement &&
+    !(el instanceof HTMLImageElement) &&
+    el.closest("td.comment") &&
+    /^(?:STRONG|B|SPAN|FONT|EM|U|I|A|LABEL)$/.test(el.tagName)
+  ) {
     const t = (el.textContent ?? "").trim();
-    if (t && t.length <= 200) return t;
+    if (t && t.length <= 60) return t;
   }
   return null;
 }
@@ -1032,6 +1039,12 @@ function addForumManualComparisonControl(): void {
   injectColumnSelectCSS(); // the builder's column dropdown reuses the viewer's select look
 
   const selected: HTMLImageElement[] = [];
+  // Accumulated column titles. A plain click/selection of a label replaces the
+  // first column (keeping the rest); Ctrl/⌘-click appends the next column — so
+  // picking "USA", then ⌘-clicking "CZE" builds "USA | CZE", and a later plain
+  // click rotates the first column. A label that already reads as 2+ names
+  // (e.g. "Source vs Encode") replaces the whole title at once.
+  const titleParts: string[] = [];
   let anchor: HTMLImageElement | null = null;
   let selecting = false;
   let dragSelecting = false;
@@ -1145,7 +1158,8 @@ function addForumManualComparisonControl(): void {
   hint.className = "_scf_manual_hint";
   hint.setAttribute("role", "tooltip");
   hint.textContent =
-    "Click a gallery to select it · Ctrl-click toggles one · Shift-click selects a range · click a text label to name the columns.";
+    "Click a gallery to select it · Ctrl/⌘-click an image toggles it · Shift-click selects a range · " +
+    "click (or select) a label to name a column, Ctrl/⌘-click labels to add more columns.";
   helpWrap.append(help, hint);
 
   const updateStatus = (message?: string) => {
@@ -1180,6 +1194,7 @@ function addForumManualComparisonControl(): void {
 
   const reset = () => {
     selected.splice(0, selected.length);
+    titleParts.splice(0, titleParts.length);
     anchor = null;
     namesInput.value = "";
     sourceGrouped.checked = false;
@@ -1215,29 +1230,67 @@ function addForumManualComparisonControl(): void {
     if (n >= 2) repopulateColumns(n);
   };
 
-  // Fill the column names (and matching count) from a label, optionally keeping
-  // the source text highlighted on the page so the choice is visible.
-  const applyTitle = (parts: string[], range?: Range) => {
-    namesInput.value = parts.join(" | ");
-    setColumns(parts.length);
-    updateStatus(`title: ${parts.join(" | ")}`);
-    if (range && setForumTitleHighlight(range)) {
-      window.getSelection()?.removeAllRanges();
-    }
+  const renderTitle = () => {
+    namesInput.value = titleParts.join(" | ");
+    // Keep the column count in step once the title is a real multi-column pick.
+    if (titleParts.length >= 2) setColumns(titleParts.length);
+    updateStatus(titleParts.length ? `title: ${titleParts.join(" | ")}` : undefined);
   };
 
-  // A non-collapsed text selection inside the post that parses to 2+ names is a
-  // title pick — apply it and mark the text. Returns true when it was used.
-  const tryTitleFromSelection = (): boolean => {
+  // The column name(s) a clicked/selected bit of text yields: a line that reads
+  // as 2+ source names ("Source vs Encode") gives all of them; otherwise a
+  // single clean label ("USA") gives one. Prose, URLs and non-source labels
+  // (quotes, footers) give nothing.
+  const titleNamesFromText = (text: string): string[] => {
+    const multi = splitNames(text);
+    if (multi.length >= 2 && looksLikeNames(multi)) return multi.map(tidyName).filter(Boolean);
+    const single = text.trim();
+    if (
+      single &&
+      single.length <= 48 &&
+      !/https?:\/\//i.test(single) &&
+      !isNonSourceLabel(single) &&
+      !looksLikeProse([single])
+    ) {
+      const name = tidyName(single);
+      if (name) return [name];
+    }
+    return [];
+  };
+
+  // Apply a picked label. append (Ctrl/⌘) adds the names as new columns; a plain
+  // pick replaces the whole title when the text is itself a 2+ name comparison,
+  // else replaces just the first column (rotating, keeping later columns).
+  const addTitle = (names: string[], append: boolean): boolean => {
+    if (!names.length) return false;
+    if (append) {
+      titleParts.push(...names);
+    } else if (names.length >= 2) {
+      titleParts.splice(0, titleParts.length, ...names);
+    } else if (titleParts.length) {
+      titleParts[0] = names[0];
+    } else {
+      titleParts.push(names[0]);
+    }
+    renderTitle();
+    return true;
+  };
+
+  // A non-collapsed text selection inside the post is a title pick — lets you
+  // grab just part of a line as a column. Ctrl/⌘ appends; otherwise it replaces
+  // the first column. Returns true when it was used.
+  const tryTitleFromSelection = (append: boolean): boolean => {
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || sel.rangeCount === 0) return false;
     const text = sel.toString().trim();
     if (!text) return false;
     const host = sel.anchorNode instanceof Element ? sel.anchorNode : sel.anchorNode?.parentElement;
     if (!host?.closest("td.comment")) return false;
-    const parts = splitNames(text);
-    if (parts.length < 2 || !looksLikeNames(parts)) return false;
-    applyTitle(parts, sel.getRangeAt(0));
+    const names = titleNamesFromText(text);
+    if (!names.length) return false;
+    const range = sel.getRangeAt(0);
+    if (!addTitle(names, append)) return false;
+    if (setForumTitleHighlight(range)) sel.removeAllRanges();
     return true;
   };
 
@@ -1292,7 +1345,7 @@ function addForumManualComparisonControl(): void {
   function onDocumentMouseUp(event: MouseEvent): void {
     if (!dragSelecting) {
       // Not an image drag — a text selection in the post may be a title pick.
-      tryTitleFromSelection();
+      tryTitleFromSelection(event.metaKey || event.ctrlKey);
       return;
     }
     if (dragMoved) {
@@ -1331,14 +1384,16 @@ function addForumManualComparisonControl(): void {
       }
       return;
     }
-    // A click on a text label fills the column names from it.
+    // A click on a text label names a column. Plain click sets the first column
+    // (or the whole title if the label is itself a 2+ name line); Ctrl/⌘-click
+    // appends the next column.
     const text = forumTextUnderPointer(event);
     if (!text) return;
-    const parts = splitNames(text);
-    if (parts.length >= 2 && looksLikeNames(parts)) {
+    const names = titleNamesFromText(text);
+    if (names.length) {
       event.preventDefault();
       event.stopPropagation();
-      applyTitle(parts);
+      addTitle(names, event.metaKey || event.ctrlKey);
     }
   }
 
@@ -1392,7 +1447,8 @@ function addForumManualComparisonControl(): void {
       names,
       anchorEl: panel,
     };
-    setSelecting(false);
+    // Keep the floating toolbar + selection up so closing the viewer returns to
+    // the builder for another pass, rather than dropping out of selecting mode.
     updateStatus();
     openWithDummyWrapper(grid);
   });

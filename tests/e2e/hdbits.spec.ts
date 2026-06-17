@@ -1190,6 +1190,46 @@ test("hdbits: forum manual — clicking a label fills the column names and count
   expect(names).toEqual(["Source", "Encode"]);
 });
 
+test("hdbits: forum manual — single labels accumulate into a title with Ctrl/Cmd-click", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/191-forum-post-title-chooser-accumulation");
+  await waitForHdbitsReady(page);
+
+  const panel = page.locator("._scf_manual_panel");
+  await panel.locator("._scf_manual_button").click();
+  const names = panel.locator("._scf_manual_names");
+
+  // A plain click on a single label names the first column.
+  await page.locator(".lbl-usa").click();
+  await expect(names).toHaveValue("USA");
+
+  // Ctrl/⌘-click appends the next column.
+  await page.locator(".lbl-cze").click({ modifiers: ["ControlOrMeta"] });
+  await expect(names).toHaveValue("USA | CZE");
+
+  // A later plain click rotates the FIRST column, keeping the rest.
+  await page.locator(".lbl-audio").click();
+  await expect(names).toHaveValue("Audio | CZE");
+});
+
+test("hdbits: forum manual — the toolbar stays floating after Build closes the viewer", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/154-forum-post-manual-custom-comparison");
+  await waitForHdbitsReady(page);
+
+  const panel = page.locator("._scf_manual_panel");
+  await panel.locator("._scf_manual_button").click();
+  await expect(panel).toHaveClass(/_scf_manual_floating/);
+  await page.locator('img[src*="t.hdbits.org/manual"]').nth(0).click();
+  await panel.locator("._scf_manual_build").click();
+
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("._scf_comp")).not.toBeVisible();
+  // Back to the builder — still floating, ready for another pass.
+  await expect(panel).toHaveClass(/_scf_manual_floating/);
+});
+
 test("hdbits: forum manual — the toolbar floats while selecting", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/155-forum-post-grouped-manual-selection");
