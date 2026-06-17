@@ -1894,7 +1894,22 @@ function buildOddSourceGroupComparison(
   const keptGroups = keep.map((i) => groups[i]);
   const rows: GridCell[][] = [];
   for (let r = 0; r < modeCount; r++) rows.push(keptGroups.map((g) => g[r]));
-  return [{ rows, numCols: keep.length, names, anchorEl: groupLabelEls[keep[keep.length - 1]] }];
+  const result: Grid[] = [{ rows, numCols: keep.length, names, anchorEl: groupLabelEls[keep[keep.length - 1]] }];
+
+  // A dropped odd group (the "Audio" set) is its own comparison we can't shape
+  // from a single labeled column — surface it as a 1-wide viewer gallery so its
+  // shots are still clickable, rather than claimed and dead.
+  for (let i = 0; i < groups.length; i++) {
+    if (keep.includes(i) || groups[i].length < 2) continue;
+    result.push({
+      rows: groups[i].map((cell) => [cell]),
+      numCols: 1,
+      names: null,
+      anchorEl: groupLabelEls[i] ?? groups[i][0].a ?? groups[i][0].img ?? null,
+      gallery: true,
+    });
+  }
+  return result;
 }
 
 export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement> = new Set()): Grid[] | null {

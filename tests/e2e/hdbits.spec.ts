@@ -1033,6 +1033,22 @@ test("hdbits: forum manual custom comparison builds a Source N grid from selecte
   expect(names).toEqual(["Source 1", "Source 2"]);
 });
 
+test("hdbits: source-grouped comparison drops the odd group but keeps it as a clickable gallery", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/190-forum-post-source-grouped-odd-audio-group");
+  await waitForHdbitsReady(page);
+
+  // USA(10)/CZE(10) transpose into the 2-column comparison; the odd Audio(4)
+  // group is a separate comparison surfaced as a 1-wide viewer gallery.
+  await expect(comparisonLinks(page)).toHaveCount(1);
+  await expect(viewerLinks(page)).toHaveCount(1);
+
+  // Clicking an Audio shot opens the viewer (4 single-column rows).
+  await page.locator('img[src*="w190a1"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(4);
+});
+
 test("hdbits: forum manual custom comparison grouped-by-source mode pairs columns column-major", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/154-forum-post-manual-custom-comparison");
