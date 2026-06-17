@@ -1033,6 +1033,42 @@ test("hdbits: forum manual custom comparison builds a Source N grid from selecte
   expect(names).toEqual(["Source 1", "Source 2"]);
 });
 
+test("hdbits: forum manual custom comparison winged mode pairs columns column-major", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/154-forum-post-manual-custom-comparison");
+  await waitForHdbitsReady(page);
+
+  const panel = page.locator("h1 + ._scf_manual_panel");
+  await panel.locator("._scf_manual_button").click();
+  // One click grabs the 4-image gallery (document order manual01..04).
+  await page.locator('img[src*="t.hdbits.org/manual"]').nth(0).click();
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(4);
+
+  // Winged: the selection is read as two contiguous per-source blocks
+  // [m1,m2] and [m3,m4], so row r pairs the r-th shot of each block.
+  await panel.locator("._scf_manual_winged").check();
+  await panel.locator("._scf_manual_cols").fill("2");
+  await panel.locator("._scf_manual_build").click();
+
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(2);
+  const pairs = await page.locator("._scf_comp_row").evaluateAll((rows) =>
+    rows.map((row) =>
+      [...row.querySelectorAll("._scf_comp_img")].map((img) => {
+        const el = img as HTMLImageElement;
+        const src = el.src || el.dataset.src || "";
+        return (src.match(/manual\d+/) ?? [""])[0];
+      }),
+    ),
+  );
+  // Column-major: row 0 = [m1, m3], row 1 = [m2, m4] — NOT the side-by-side
+  // [m1, m2] / [m3, m4].
+  expect(pairs).toEqual([
+    ["manual01", "manual03"],
+    ["manual02", "manual04"],
+  ]);
+});
+
 test("hdbits: forum manual custom comparison clear resets selected screenshots", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/154-forum-post-manual-custom-comparison");

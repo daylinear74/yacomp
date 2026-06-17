@@ -1009,6 +1009,20 @@ function addForumManualComparisonControl(): void {
   cols.className = "_scf_manual_cols";
   colLabel.appendChild(cols);
 
+  // "Winged" layout: the poster put each source in its own contiguous block of
+  // shots (all of column A, then all of column B) instead of interleaving them
+  // row by row. When ticked, Build reads the selection column-major and
+  // transposes it; otherwise it chunks the selection into side-by-side rows.
+  const wingedLabel = document.createElement("label");
+  wingedLabel.className = "_scf_manual_winged_label";
+  wingedLabel.title =
+    "Winged: each source's shots are grouped together (all of column A, then all of column B) " +
+    "rather than interleaved row by row.";
+  const winged = document.createElement("input");
+  winged.type = "checkbox";
+  winged.className = "_scf_manual_winged";
+  wingedLabel.append(winged, " winged");
+
   const build = document.createElement("button");
   build.type = "button";
   build.className = "_scf_manual_build";
@@ -1057,6 +1071,7 @@ function addForumManualComparisonControl(): void {
     selected.splice(0, selected.length);
     anchor = null;
     namesInput.value = "";
+    winged.checked = false;
     updateManualSelectionStyles(selected);
     setSelecting(false);
     controls.hidden = true;
@@ -1245,8 +1260,19 @@ function addForumManualComparisonControl(): void {
     }
 
     const rows: GridCell[][] = [];
-    for (let i = 0; i < selected.length; i += numCols) {
-      rows.push(selected.slice(i, i + numCols).map(forumManualCell));
+    if (winged.checked) {
+      // Column-major: the selection is `numCols` contiguous per-source blocks;
+      // transpose so row r pairs the r-th shot of each block.
+      const perCol = selected.length / numCols;
+      for (let r = 0; r < perCol; r++) {
+        const row: GridCell[] = [];
+        for (let c = 0; c < numCols; c++) row.push(forumManualCell(selected[c * perCol + r]));
+        rows.push(row);
+      }
+    } else {
+      for (let i = 0; i < selected.length; i += numCols) {
+        rows.push(selected.slice(i, i + numCols).map(forumManualCell));
+      }
     }
     const grid: Grid = {
       rows,
@@ -1261,7 +1287,7 @@ function addForumManualComparisonControl(): void {
 
   clear.addEventListener("click", reset);
 
-  controls.append(namesLabel, colLabel, build, clear, status);
+  controls.append(namesLabel, colLabel, wingedLabel, build, clear, status);
   panel.append(start, controls);
   title.insertAdjacentElement("afterend", panel);
 }
