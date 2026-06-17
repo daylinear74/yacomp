@@ -1852,6 +1852,51 @@ export function reshapeGrid(groups: GridCell[][], allImages: GridCell[], names: 
   return { numCols, gridRows };
 }
 
+/** Winged per-source comparison whose groups have UNEQUAL counts. Each group is
+ *  one source's column of shots, labeled with that source's name (USA: 10 shots,
+ *  CZE: 10 shots). When an extra group of a DIFFERENT length is tacked on (an
+ *  "Audio" waveform set of 4), it is a separate comparison: keep the largest set
+ *  of equal-count groups and transpose those into the grid, dropping the odd
+ *  one(s) — rather than chunking all of them into a garbage grid. Equal-count
+ *  winged groups are the normal transpose path's job; this only rescues the
+ *  odd-group-out shape (so it needs ≥2 keepers + ≥1 dropped → ≥3 groups). */
+function buildWingedOddGroupComparison(
+  groups: GridCell[][],
+  groupLabels: (string | null)[],
+  groupLabelEls: (ChildNode | null)[],
+): Grid[] | null {
+  if (groups.length < 3 || !groupLabels.every((l) => l)) return null;
+  const labels = groupLabels as string[];
+  if (labels.some((l) => /^\d+$/.test(l)) || labels.some(isMultiSourceLabel) || labels.some(isNonSourceLabel)) {
+    return null;
+  }
+  const counts = groups.map((g) => g.length);
+  if (counts.every((c) => c === counts[0])) return null; // all equal → normal transpose
+
+  // The most common group count (≥2) is the comparison; require ≥2 such columns.
+  const freq = new Map<number, number>();
+  for (const c of counts) freq.set(c, (freq.get(c) ?? 0) + 1);
+  let modeCount = 0;
+  let modeFreq = 0;
+  for (const [c, f] of freq) {
+    if (c >= 2 && (f > modeFreq || (f === modeFreq && c > modeCount))) {
+      modeCount = c;
+      modeFreq = f;
+    }
+  }
+  if (modeFreq < 2) return null;
+
+  const keep = counts.map((c, i) => (c === modeCount ? i : -1)).filter((i) => i >= 0);
+  const names = finalizeNames(stripAsymmetricTitle(cleanPerSourceGroupLabels(keep.map((i) => labels[i]))));
+  if (!names || names.length !== keep.length || !looksLikeNames(names)) return null;
+
+  // Transpose: one column per kept group, one row per image index.
+  const keptGroups = keep.map((i) => groups[i]);
+  const rows: GridCell[][] = [];
+  for (let r = 0; r < modeCount; r++) rows.push(keptGroups.map((g) => g[r]));
+  return [{ rows, numCols: keep.length, names, anchorEl: groupLabelEls[keep[keep.length - 1]] }];
+}
+
 export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement> = new Set()): Grid[] | null {
   let collected = collectGroups(container, excludeImgs);
   if (!collected) return null;
@@ -1913,6 +1958,9 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
 
   const asd87ArrowGrid = buildAsd87ArrowComparisonGrid(collected);
   if (asd87ArrowGrid) return asd87ArrowGrid;
+
+  const wingedOdd = buildWingedOddGroupComparison(groups, groupLabels, groupLabelEls);
+  if (wingedOdd) return wingedOdd;
 
   collected = trimTrailingFooterSection(trimTrailingLabeledSectionAfterSingleGridLabel(collected));
   ({ groups, groupLabels, groupLabelEls, groupLeadingBreaks } = collected);
