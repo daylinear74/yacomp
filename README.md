@@ -60,9 +60,15 @@ install the latest release](https://github.com/daylinear74/yacomp/releases/lates
 - **Colorspace-aware luma/chroma** — BT.709 / BT.2020 handling from URL hints or
   PNG/JPEG ICC profile data when available.
 - **Custom comparison builder** (HDB forums) — when markup is too irregular for
-  safe auto-detection, click or drag across screenshots to select a group
-  (`Shift` / `Ctrl` to extend or toggle the selection), pull the column title
-  straight from highlighted text, set the column count, and build a viewer.
+  safe auto-detection, build a comparison by hand. Click or drag across
+  screenshots to select a gallery (`Shift` to extend, `Ctrl`/`⌘`-click to toggle
+  one). Name the columns by clicking a source label or selecting text;
+  `Ctrl`/`⌘`-click more labels to add columns, with each pick highlighted on the
+  page. Pick the column count from the dropdown — **lock** it to rotate names
+  within a fixed count instead of adding more — and turn on **grouped by source**
+  when the poster stacked each source's shots in its own block rather than
+  interleaving them. The toolbar floats while you select and stays up after a
+  build so you can adjust and rebuild.
 - **Customizable shortcuts** — rebind any action to a key (modifiers included) or
   a mouse button from the settings panel; each action takes a main binding plus
   an optional second one.
