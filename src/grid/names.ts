@@ -890,6 +890,13 @@ function stripTitlePrefix(text: string): string {
 
 /** Strategy 4: H1 headings (forum comparison threads) */
 export function namesFromHeadings(): string[] | null {
+  // The torrent-detail page H1 is the release name ("Movie 2022 ... Argentina
+  // vs France ... WEB-DL ..."), never a comparison title — its "vs"/"|" belongs
+  // to the film/match name, not to a pair of sources. Torrent-page comparisons
+  // are titled by local labels only, so the H1 is off-limits here; the four
+  // description thumbnails of an A-vs-B-titled torrent are a sample gallery, not
+  // a 2-column comparison. (Forum-thread breadcrumb H1s remain eligible below.)
+  if (document.querySelector("div.torrent-title, table#details")) return null;
   for (const h1 of document.querySelectorAll("h1")) {
     let text = h1.textContent!.trim();
     const gt = text.lastIndexOf(">");
