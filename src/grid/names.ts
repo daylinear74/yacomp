@@ -75,6 +75,13 @@ const TILDE_RE = /\s+~\s+/;
 const ANGLE_DASH_RE = /\s*>\s*-\s*<\s*/;
 const DASH_RE = /\s+-\s+/;
 const SLASH_RE = /\s+\/\s+/;
+// A bare "/" with no surrounding spaces is a two-source separator only when the
+// WHOLE label is exactly "tokenA/tokenB" — the common "Source/Encode" heading.
+// Anchoring to the entire string (a single slash, no spaces) keeps multi-slash
+// URLs, dates ("12/31/2024"), and 3-part section headings ("Video/Audio/
+// Subtitles") out; looksLikeNames / isNonSourceLabel still drop non-source pairs
+// such as "kb/s" or "Video/Audio".
+const BARE_SLASH_TEST = /^[^/\s]+\/[^/\s]+$/;
 const TIMES_RE = /\s+×\s+/;
 const WIDE_SPACE_RE = /\s{3,}/;
 const STRUCTURED_LABEL_SELECTOR = 'span[style*="color"], strong, b';
@@ -607,6 +614,7 @@ function plainSplit(c: string): string[] {
   if (c.includes(",")) return c.split(",");
   if (DASH_RE.test(c)) return c.split(DASH_RE);
   if (SLASH_RE.test(c)) return c.split(SLASH_RE);
+  if (BARE_SLASH_TEST.test(c)) return c.split("/");
   if (TILDE_RE.test(c)) return c.split(TILDE_RE);
   if (TIMES_RE.test(c)) return c.split(TIMES_RE);
   return [c];
@@ -675,7 +683,7 @@ export function isMultiSourceLabel(label: string): boolean {
   const masked = parensBalanced(c) ? maskParens(c) : c;
   const hasMultiSep =
     masked.includes("|") || VS_TEST.test(masked) || ANGLE_DASH_RE.test(masked) || SLASH_RE.test(masked) ||
-    TIMES_RE.test(masked) || masked.includes(",");
+    BARE_SLASH_TEST.test(masked) || TIMES_RE.test(masked) || masked.includes(",");
   if (!hasMultiSep) return false;
   const parts = splitNames(label);
   return parts.length >= 2 && looksLikeNames(parts);
@@ -683,7 +691,7 @@ export function isMultiSourceLabel(label: string): boolean {
 
 export function hasVsOrPipe(text: string): boolean {
   const candidate = cleanNameCandidate(text);
-  return candidate.includes("|") || VS_TEST.test(candidate) || ARROW_TEST.test(candidate) || ANGLE_DASH_RE.test(candidate) || TILDE_RE.test(candidate) || candidate.includes(",") || DASH_RE.test(candidate) || SLASH_RE.test(candidate) || TIMES_RE.test(candidate) || WIDE_SPACE_RE.test(candidate);
+  return candidate.includes("|") || VS_TEST.test(candidate) || ARROW_TEST.test(candidate) || ANGLE_DASH_RE.test(candidate) || TILDE_RE.test(candidate) || candidate.includes(",") || DASH_RE.test(candidate) || SLASH_RE.test(candidate) || BARE_SLASH_TEST.test(candidate) || TIMES_RE.test(candidate) || WIDE_SPACE_RE.test(candidate);
 }
 
 /** An UNAMBIGUOUS multi-source separator ("X vs Y", "X | Y", "X / Y", "X × Y").
@@ -694,7 +702,7 @@ export function hasVsOrPipe(text: string): boolean {
  *  a single transposed grid. */
 export function hasExplicitComparison(text: string): boolean {
   const candidate = cleanNameCandidate(text);
-  return candidate.includes("|") || VS_TEST.test(candidate) || ARROW_TEST.test(candidate) || ANGLE_DASH_RE.test(candidate) || TILDE_RE.test(candidate) || SLASH_RE.test(candidate) || TIMES_RE.test(candidate) || WIDE_SPACE_RE.test(candidate);
+  return candidate.includes("|") || VS_TEST.test(candidate) || ARROW_TEST.test(candidate) || ANGLE_DASH_RE.test(candidate) || TILDE_RE.test(candidate) || SLASH_RE.test(candidate) || BARE_SLASH_TEST.test(candidate) || TIMES_RE.test(candidate) || WIDE_SPACE_RE.test(candidate);
 }
 
 // ── Name-finding sub-strategies ──
