@@ -715,6 +715,61 @@ test("hdbits: every separated image group gets its own Show Viewer control", asy
   await expect(page.locator("._scf_comp_row")).toHaveCount(6);
 });
 
+test("hdbits: a lone leading poster stays out of the trailing Show Viewer gallery", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/197-torrent-desc-leading-poster-then-gallery");
+  await waitForHdbitsReady(page);
+
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerLinks(page)).toHaveCount(1);
+  // Only the 4 real screenshots are in the gallery — the poster is excluded.
+  await expect(page.locator("._scf_column_control select option")).toHaveCount(4);
+  // The control sits immediately before the first real screenshot, past the
+  // poster and the prose line.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const control = document.querySelector("._scf_column_control");
+        const firstImage = document.querySelector('img[src*="g197a"]');
+        if (!control || !firstImage) return null;
+        const range = document.createRange();
+        range.setStartAfter(control);
+        range.setEndBefore(firstImage.closest("a") ?? firstImage);
+        return range.toString().trim();
+      }),
+    )
+    .toBe("");
+  await page.locator('img[src*="g197c"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(4);
+});
+
+test("hdbits: text-separated screenshot runs get their own Show Viewer controls", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/198-torrent-desc-two-text-separated-galleries");
+  await waitForHdbitsReady(page);
+
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerLinks(page)).toHaveCount(2);
+  const optionCounts = await page
+    .locator("._scf_column_control select")
+    .evaluateAll((els) => els.map((el) => (el as HTMLSelectElement).options.length));
+  expect(optionCounts).toEqual([3, 3]);
+  await page.locator('img[src*="g198e"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(3);
+});
+
+test("hdbits: per-shot prose captions keep one merged Show Viewer gallery", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/199-torrent-desc-interleaved-prose-single-gallery");
+  await waitForHdbitsReady(page);
+
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerLinks(page)).toHaveCount(1);
+  await expect(page.locator("._scf_column_control select option")).toHaveCount(3);
+});
+
 test("hdbits: Show comparison link sits immediately before the image run", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/158-torrent-desc-comparison-note-before-images");
