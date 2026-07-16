@@ -770,6 +770,21 @@ test("hdbits: per-shot prose captions keep one merged Show Viewer gallery", asyn
   await expect(page.locator("._scf_column_control select option")).toHaveCount(3);
 });
 
+test("hdbits: a Preview block after comparisons gets a Show Viewer, not silence", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/076-torrent-desc-color-source-filtered-encode");
+  await waitForHdbitsReady(page);
+
+  // The two real comparisons keep their controls; the trailing Preview shots
+  // are a sample gallery with their own viewer instead of dead images.
+  await expect(comparisonLinks(page)).toHaveCount(2);
+  await expect(viewerLinks(page)).toHaveCount(1);
+  await expect(page.locator("._scf_column_control select option")).toHaveCount(6);
+  await page.locator('img[src*="g59"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(6);
+});
+
 test("hdbits: Show comparison link sits immediately before the image run", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/158-torrent-desc-comparison-note-before-images");

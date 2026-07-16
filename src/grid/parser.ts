@@ -2304,7 +2304,10 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     }
   }
   if (!names && siblingPreviewHeading) {
-    return null;
+    // A Preview-headed block is sample shots, never a comparison — no later
+    // strategy may title its columns. On a torrent description it still gets
+    // the 1-wide Show Viewer; everywhere else the fallback stays null.
+    return torrentViewerGalleryFallback(container, groups, groupLabelEls, groupLeadingBreaks, groupPrecededByText);
   }
   if (!names) {
     const sibling = namesFromSiblingInfo(container);
