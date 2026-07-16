@@ -1141,10 +1141,22 @@ function isTorrentPage(): boolean {
 
 /** The no-title 1-wide gallery fallback is only for the torrent description
  *  body. Torrent comments can still produce real comparisons, but plain comment
- *  screenshots must not get folded into the description viewer path. */
-function isTorrentDescriptionContainer(container: Element): boolean {
+ *  screenshots must not get folded into the description viewer path.
+ *
+ *  Offer pages (/offers/details?id=…) share the torrent-detail layout — a
+ *  `div.torrent-title` H1 over a details table — but their table carries no
+ *  `#details` id. There, the description `<td>` is recognized by its leading
+ *  `<div class="label">Description</div>`; comment bodies live in `td.text`
+ *  rows outside it, so they stay non-description, same as on torrent pages.
+ *  Shared by the parser and the HDBits site setup (hdbits.ts imports it) so
+ *  the two can never disagree on what counts as the description body. */
+export function isTorrentDescriptionContainer(container: Element): boolean {
   const details = document.querySelector("table#details");
-  return !!details?.contains(container);
+  if (details) return details.contains(container);
+  const td = container.closest("td");
+  if (!td) return false;
+  const label = td.querySelector("div.label");
+  return !!label && /^description$/i.test((label.textContent || "").trim());
 }
 
 function isTheFarmTorrentDescription(container: Element): boolean {

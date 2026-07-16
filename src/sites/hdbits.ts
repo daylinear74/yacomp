@@ -4,7 +4,7 @@
 
 import { injectCSS, injectTriggerLinkCSS } from "../ui/css";
 import { hdbitsImageClick, hdbitsManualAllThreads } from "../config";
-import { getGrids, hdbFull } from "../grid";
+import { getGrids, hdbFull, isTorrentDescriptionContainer } from "../grid";
 import type { Grid, GridCell } from "../grid";
 import { hasVsOrPipe, splitNames, looksLikeNames, isNonSourceLabel, looksLikeProse, tidyName } from "../grid/names";
 import { buildComparison, insertLinkAfter, openOrphanSelect, openWithDummyWrapper } from "../viewer";
@@ -85,11 +85,6 @@ function removeExistingComparisonLinks(): void {
 function firstGridNode(grid: Grid): Node | null {
   const first = grid.rows[0]?.[0];
   return first?.a ?? first?.img ?? null;
-}
-
-function isTorrentDescriptionContainer(container: Element): boolean {
-  const details = document.querySelector("table#details");
-  return !!details?.contains(container);
 }
 
 function previousMeaningfulSibling(node: Node): Node | null {

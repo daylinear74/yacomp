@@ -27,7 +27,7 @@ Install a userscript manager such as [Tampermonkey](https://www.tampermonkey.net
 or [Violentmonkey](https://violentmonkey.github.io/), then **[click here to
 install the latest release](https://github.com/daylinear74/yacomp/releases/latest/download/yacomp.user.js)**.
 
-- On HDB torrent pages, detected comparison grids get a **Show comparison** link.
+- On HDB torrent and offer pages, detected comparison grids get a **Show comparison** link.
   Other screenshot groups get a compact **Show Viewer** control placed directly
   above the image run, and image clicks open the same gallery viewer by default.
   If a block is ambiguous, **Show Viewer** includes a column-count dropdown:

@@ -70,9 +70,10 @@ const ptpHtml = await Bun.file(`${PTP_DIR}/basic.html`).text();
 const ptpJs = await bundleEntry(`${PTP_DIR}/ptp-entry.ts`);
 const torrentTemplate = await Bun.file(`${HDBITS_DIR}/templates/torrent.html`).text();
 const forumTemplate = await Bun.file(`${HDBITS_DIR}/templates/forum.html`).text();
+const offerTemplate = await Bun.file(`${HDBITS_DIR}/templates/offer.html`).text();
 
 interface CaseMetadata {
-  slot: "torrent.description" | "torrent.comment" | "forum.post" | "forum.reply";
+  slot: "torrent.description" | "torrent.comment" | "forum.post" | "forum.reply" | "offer.description" | "offer.comment";
   expectedGrids: number;
   expectedNames?: (string[] | null)[] | null;
   threadTitle?: string;
@@ -264,6 +265,20 @@ async function serveHdbitsCase(slug: string): Promise<Response> {
       break;
     case "torrent.comment":
       html = fillTemplate(torrentTemplate, {
+        TORRENT_TITLE: torrentTitle,
+        DESCRIPTION: "<p>Placeholder description with no comparisons.</p>",
+        COMMENTS: wrapInCommentRow(body),
+      });
+      break;
+    case "offer.description":
+      html = fillTemplate(offerTemplate, {
+        TORRENT_TITLE: torrentTitle,
+        DESCRIPTION: body,
+        COMMENTS: "",
+      });
+      break;
+    case "offer.comment":
+      html = fillTemplate(offerTemplate, {
         TORRENT_TITLE: torrentTitle,
         DESCRIPTION: "<p>Placeholder description with no comparisons.</p>",
         COMMENTS: wrapInCommentRow(body),

@@ -8,6 +8,7 @@
 // @match        https://passthepopcorn.me/torrents.php*id=*
 // @match        https://passthepopcorn.me/forums.php*action=viewthread*threadid=*
 // @match        https://hdbits.org/details.php*id=*
+// @match        https://hdbits.org/offers/details*id=*
 // @match        https://hdbits.org/forums/viewtopic*topicid=*
 // @match        https://springsunday.net/details.php*id=*
 // @match        https://springsunday.net/forums.php*action=viewtopic*topicid=*

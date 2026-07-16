@@ -19,7 +19,7 @@ const CASES_DIR = "tests/fixtures/hdbits/cases";
 const SAVED_HDBITS_FORUM_HTML = process.env.YACOMP_SAVED_HDBITS_FORUM_HTML;
 
 interface CaseMetadata {
-  slot: "torrent.description" | "torrent.comment" | "forum.post" | "forum.reply";
+  slot: "torrent.description" | "torrent.comment" | "forum.post" | "forum.reply" | "offer.description" | "offer.comment";
   expectedGrids: number;
   expectedNames?: (string[] | null)[] | null;
   threadTitle?: string;
@@ -422,6 +422,22 @@ test("hdbits: showhide log between source list and screenshots breaks false comp
   await expect(comparisonLinks(page)).toHaveCount(0);
   await expect(viewerLinks(page)).toHaveCount(1);
   await page.locator('img[src*="g177a"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(6);
+});
+
+test("hdbits: offer description gets torrent-description semantics (gallery fallback, no #details table)", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/196-offer-desc-showhide-log-before-screens-gallery");
+  await waitForHdbitsReady(page);
+
+  // Same shape as 177 but in offer-page chrome, whose details table has no
+  // id="details": the description td must still count as the description body
+  // (via its div.label), so the stale source-list labels are severed by the
+  // eac3to showhide and the untitled shots get the 1-wide Show Viewer gallery.
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerLinks(page)).toHaveCount(1);
+  await page.locator('img[src*="g196a"]').click();
   await expect(page.locator("._scf_comp")).toBeVisible();
   await expect(page.locator("._scf_comp_row")).toHaveCount(6);
 });
