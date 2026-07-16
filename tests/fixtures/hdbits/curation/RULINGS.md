@@ -33,6 +33,7 @@ fixture in `tests/fixtures/hdbits/cases/` (full DOM through `setupHDBitsCore`).
 | label divisibility / OP-H1 fall-through | — | 097 1261, 104 2625 |
 | H1 title only for the OP, not replies | — | 101 OP / 102 reply |
 | single slow.pics link defers to local title | — | 094 2503, 099 2751 |
+| vs-title severed from screenshots by a quote/log block | — | 194 845637 |
 | local per-group labels > adjacent slow.pics | — | 088 |
 | slow.pics rescue for label-less blocks (A1) | — | 087 |
 | image-less showhide ignored; per-source labels | — | 105 77086 |
@@ -189,6 +190,19 @@ comparison-thread OP + slow.pics + single-contiguous-block shape, so a
 multi-section OP with no slow.pics link (057's leftover blocks) stays suppressed,
 and the divisible spoiler case (80070) keeps its clean-divide requirement. The
 grid claims the shots, so the slow.pics rescue does not add a second button.
+
+### vs-title severed from screenshots by a quote/log block (845637)
+`Anyone But You` hybrid remux (torrent 845637). Mid-description, a
+`<strong>UHD BD vs Movies Anywhere WEB vs Sony Pictures CORE WEB</strong>`
+line captions a slow.pics link; then prose, then a large eac3to-log showhide,
+then 9 trailing sample screenshots of the encode. The vs line describes the
+EXTERNAL comparison, not the local shots — but 9 divides by 3, so
+`leadingVsLabelInfo` used to invent a 3-column grid from it. Ruling: a
+pre-image title barrier (quote/`<pre>`/`<table>`/showhide log) anywhere
+between a vs-heading and the image run severs the association, the same way
+`leadingBoldLabelInfo` already nulls out on a barrier after its candidate
+bolds. With no other title, the shots fall back to the 1-wide "Show viewer"
+gallery (838405). Iconic fixture 194.
 
 ### Ambiguous torrent gallery → 1-wide "Show viewer", not bogus columns (838405)
 `The White Dove AKA Holubice` (torrent 838405). The description ends with 10

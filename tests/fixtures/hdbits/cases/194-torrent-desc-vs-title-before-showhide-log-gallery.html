@@ -1,0 +1,73 @@
+<!--
+slot: torrent.description
+expected_grids: 0
+torrent_title: "Demo Movie 2023 Hybrid 2160p Remux DoVi HDR10+ HEVC TrueHD 7.1-DemoGroup"
+notes: Regression from a hybrid remux description (torrent 845637 shape): a "UHD BD vs Movies Anywhere WEB vs Sony Pictures CORE WEB" slow.pics caption line sits mid-description, then prose, then a large eac3to-log showhide, then 9 trailing sample screenshots of the encode. The vs line captions a slow.pics link, not the local screenshots — the showhide/log block between the title and the images breaks the association, so the screenshots are a single-source gallery, not a 3-column comparison. Sanitized (ids->999999, groups->DemoGroup, slow.pics keys stubbed, image hashes->gNN).
+-->
+
+<strong>Source #1:</strong> Sony Pictures USA UHD Blu-ray (video, audio, commentary, subtitles, chapters) - <em>thanks DemoGroup!</em><br>
+<strong>Source #2:</strong> Sony Pictures USA Blu-ray (subtitles) - <em>thanks DemoTeam!</em><br>
+<strong>Source #3:</strong> Sony Pictures NOR Blu-ray (subtitles) - <em>thanks DemoUser!</em><br>
+<strong>Source #4:</strong> Sony Pictures GER Blu-ray (subtitles) - <em>thanks DemoRip!</em><br>
+<strong>Source #5:</strong> Netflix, iTunes, HBO Max, Viaplay, Amazon WEB-DLs (subtitles)<br>
+<br>
+There was a web with hdr10+ that escaped me, this iTunes 4K HDR10+ WEB-DL matches the UHD grade so injected its HDR10+ metadata with the latest hdr10plus_tool.<br>
+<br>
+<strong>HDR10+ Plot: </strong><a href="https://i.slow.pics/stubplot.png">Slow.pics</a><br>
+<strong>Grade Check: </strong><a href="https://slow.pics/c/StubKeyA">Slow.pics</a><br>
+<br>
+Contains hardcoded forced English subtitles (4 lines). Repositioned other subtitle tracks on those lines to avoid overlap.<br>
+<br>
+<strong>UHD BD vs Movies Anywhere WEB vs Sony Pictures CORE WEB</strong>: <a href="https://slow.pics/c/StubKeyB">Slow.pics</a><br>
+<br>
+UHD is lowpassed, CORE is denoised, MA struggles with compression on grainier scenes (<a href="https://slow.pics/c/StubKeyC">#12</a>), pick your poison...<br>
+<br>
+<div><label class="label_showhide" onclick="showHideBB(this);">eac3to logs <span>[show]</span></label><div class="div_showhide" style="display: none;"><div style="text-align: left;"><strong>Source #1 - Sony Pictures USA UHD Blu-ray (2026)</strong><br>
+<br>
+<pre>eac3to v3.52
+command line: eac3to Demo.Movie.2023.2160p.USA.UHD.Blu-ray.DV.HDR.HEVC.TrueHD.7.1.Atmos-DemoGroup -check
+------------------------------------------------------------------------------
+M2TS, 2 video tracks, 6 audio tracks, 6 subtitle tracks, 1:43:33
+1: Chapters, 17 chapters
+2: h265/HEVC, 2160p24/1.001 (16:9), 10 bits
+4: TrueHD/AC3 (Atmos), English, 7.1 channels, 48kHz, dialnorm: -31dB
+Video track 2 contains 148936 frames.
+eac3to processing took 5 minutes, 49 seconds.
+Done.</pre><br>
+<br>
+<strong>Source #2 - Sony Pictures USA Blu-ray (2024)</strong><br>
+<br>
+<pre>eac3to v3.52
+command line: eac3to Demo.Movie.2023.BluRay.1080p.AVC.DTS-HD.MA5.1-DemoTeam -check
+------------------------------------------------------------------------------
+M2TS, 1 video track, 5 audio tracks, 10 subtitle tracks, 1:43:34
+2: h264/AVC, 1080p24/1.001 (16:9)
+3: DTS Master Audio, English, 5.1 channels, 16 bits, 48kHz, dialnorm: 0dB
+Video track 2 contains 148992 frames.
+eac3to processing took 2 minutes, 5 seconds.
+Done.</pre><br>
+<br>
+<strong>Source #3 - Sony Pictures NOR Blu-ray (2024)</strong><br>
+<br>
+<pre>eac3to v3.52
+command line: eac3to Demo.Movie.2023.1080p.NOR.Blu-ray.AVC.DTS-HD MA 5.1-DemoUser -check
+------------------------------------------------------------------------------
+M2TS, 1 video track, 2 audio tracks, 10 subtitle tracks, 1:43:34
+2: h264/AVC, 1080p24/1.001 (16:9)
+3: DTS Master Audio, English, 5.1 channels, 16 bits, 48kHz, dialnorm: 0dB
+Video track 2 contains 148992 frames.
+eac3to processing took 1 minute, 52 seconds.
+Done.</pre><br>
+<br>
+<strong>Source #4 - Sony Pictures GER Blu-ray (2024)</strong><br>
+<br>
+<pre>eac3to v3.52
+command line: eac3to Demo.Movie.2023.MULTi.COMPLETE.BLURAY-DemoRip -check
+------------------------------------------------------------------------------
+M2TS, 1 video track, 5 audio tracks, 6 subtitle tracks, 1:43:34
+2: h264/AVC, 1080p24/1.001 (16:9)
+4: DTS Master Audio, German, 5.1 channels, 16 bits, 48kHz, dialnorm: 0dB
+Video track 2 contains 148992 frames.
+eac3to processing took exactly 2 minutes.
+Done.</pre></div></div></div><br>
+<br><a href="https://img.hdbits.org/g01"><img src="https://t.hdbits.org/g01.jpg"></a> <a href="https://img.hdbits.org/g02"><img src="https://t.hdbits.org/g02.jpg"></a> <a href="https://img.hdbits.org/g03"><img src="https://t.hdbits.org/g03.jpg"></a> <a href="https://img.hdbits.org/g04"><img src="https://t.hdbits.org/g04.jpg"></a> <a href="https://img.hdbits.org/g05"><img src="https://t.hdbits.org/g05.jpg"></a> <a href="https://img.hdbits.org/g06"><img src="https://t.hdbits.org/g06.jpg"></a> <a href="https://img.hdbits.org/g07"><img src="https://t.hdbits.org/g07.jpg"></a> <a href="https://img.hdbits.org/g08"><img src="https://t.hdbits.org/g08.jpg"></a> <a href="https://img.hdbits.org/g09"><img src="https://t.hdbits.org/g09.jpg"></a>

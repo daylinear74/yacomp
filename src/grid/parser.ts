@@ -779,12 +779,20 @@ function leadingBoldLabelInfo(container: Element): { names: string[]; anchorEl: 
  *  not just a bare <strong>, so font/span-wrapped headings are still caught. */
 const VS_LABEL_WRAPPER = new Set(["STRONG", "B", "FONT", "SPAN", "U", "I", "EM"]);
 function leadingVsLabelInfo(container: Element): { names: string[]; anchorEl: Element } | null {
+  let found: { names: string[]; anchorEl: Element } | null = null;
   for (const node of container.childNodes) {
     if (node.nodeName === "A" && (node as Element).querySelector("img")) break;
     if (node.nodeType !== 1) continue;
     const el = node as Element;
     if (el.querySelector("img")) break;
+    // A quote/log/showhide block anywhere before the screenshots severs the
+    // title-image association: a vs-heading above such a block captions its own
+    // (often external) comparison, not the trailing screenshots — the shots
+    // after an eac3to-log showhide are a sample gallery (845637). Same
+    // semantics as leadingBoldLabelInfo, which also keeps scanning to the
+    // image run and nulls out on a barrier found after its candidate bolds.
     if (isPreImageTitleBarrier(el)) return null;
+    if (found) continue;
     // Only a bold-ish inline heading qualifies — never a TABLE/P/DIV block
     // (e.g. a comma-laden BDInfo table would otherwise split into junk).
     if (!VS_LABEL_WRAPPER.has(el.nodeName)) continue;
@@ -799,9 +807,9 @@ function leadingVsLabelInfo(container: Element): { names: string[]; anchorEl: El
     const text = el.textContent!.trim();
     if (isStructuralReleaseTitleLabel(text)) continue;
     const names = asColumnTitles(text);
-    if (names) return { names, anchorEl: el };
+    if (names) found = { names, anchorEl: el };
   }
-  return null;
+  return found;
 }
 
 function leadingDetailsLinkLabelInfo(
