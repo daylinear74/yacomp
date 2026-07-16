@@ -113,8 +113,17 @@ function insertLinkBeforeGridImages(grid: Grid, link: HTMLAnchorElement): boolea
     return true;
   }
 
-  const previous = first.previousSibling;
-  if (previous && previous.nodeName !== "BR") {
+  // Normalize the gap the page happened to carry: exactly ONE blank line
+  // between the preceding line (usually the section title) and the link, and
+  // NO blank line between the link and the first image.
+  let cursor = first.previousSibling;
+  while (cursor && (isBreakNode(cursor) || isBlankTextNode(cursor))) {
+    const previous = cursor.previousSibling;
+    parent.removeChild(cursor);
+    cursor = previous;
+  }
+  if (previousMeaningful && previousMeaningful.parentNode === parent) {
+    parent.insertBefore(document.createElement("br"), first);
     parent.insertBefore(document.createElement("br"), first);
   }
   parent.insertBefore(link, first);

@@ -781,6 +781,29 @@ test("hdbits: a Comparisons heading after a sample block still forms a titled co
   await expect(comparisonLinks(page)).toHaveCount(1);
   await expect(viewerLinks(page)).toHaveCount(1);
   await expect(page.locator("._scf_column_control select option")).toHaveCount(6);
+  // Fixed spacing contract: ONE blank line between the section title and the
+  // link (2 <br>s), NO blank line between the link and the first image (1 <br>).
+  const spacing = await page.evaluate(() => {
+    const link = [...document.querySelectorAll("._scf_comp_link")]
+      .find((l) => l.textContent === "Show comparison")!;
+    const heading = [...document.querySelectorAll("span")]
+      .find((s) => /^Comparisons \(/.test(s.textContent || ""))!;
+    const firstImg = document.querySelector('img[src*="c200a"]')!.closest("a")!;
+    const countBreaks = (from: Element, stopAt: Node): number => {
+      let brs = 0;
+      for (let n: Node | null = from.nextSibling; n; n = n.nextSibling) {
+        if (n === stopAt) return brs;
+        if (n.nodeName === "BR") brs++;
+        else if (!(n.nodeType === 3 && !(n.textContent || "").trim())) return -1;
+      }
+      return -2;
+    };
+    return {
+      titleToLink: countBreaks(heading, link),
+      linkToImages: countBreaks(link, firstImg),
+    };
+  });
+  expect(spacing).toEqual({ titleToLink: 2, linkToImages: 1 });
   expect(await readGridNames(page, 0)).toEqual(["Encode", "Scene", "Source"]);
 });
 
