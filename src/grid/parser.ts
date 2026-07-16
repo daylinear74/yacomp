@@ -1291,11 +1291,15 @@ function isGenericSourceNames(names: string[] | null): boolean {
   return !!names?.length && names.every((name, index) => name === `Source ${index + 1}`);
 }
 
-function isUploaderTechnicalSizeNames(names: string[]): boolean {
-  if (!hasUntitledGenericFallbackUploader()) return false;
+function isTechnicalSizeNames(names: string[]): boolean {
   return names.length >= 2 && names.every((name) =>
     /^(?:encode|remux|source|filtered)?\s*size\s*:\s*\d+(?:\.\d+)?\s*[KMGT]i?B\b.*\b(?:kb\/s|mb\/s|kbps|mbps)\b/i
       .test(name.trim()));
+}
+
+function isUploaderTechnicalSizeNames(names: string[]): boolean {
+  if (!hasUntitledGenericFallbackUploader()) return false;
+  return isTechnicalSizeNames(names);
 }
 
 function logicalTextLinesBeforeFirstScreenshot(container: Element): string[] {
@@ -1504,19 +1508,16 @@ function hasTorrentLogPollutedNames(names: string[]): boolean {
 
 function torrentAmbiguousGalleryFallback(
   container: Element,
-  groups: GridCell[][],
-  groupLabelEls: (ChildNode | null)[],
-  groupLeadingBreaks: number[],
-  groupPrecededByText: boolean[],
+  collected: GroupsResult,
   total: number,
   ambiguousTitle: boolean,
   excludeImgs: Set<HTMLImageElement>,
 ): Grid[] | null {
   if (!ambiguousTitle || !isTorrentPage() || total < 2) return null;
   const hasClaimedImageInContainer = screenshotImagesIn(container).some((img) => excludeImgs.has(img));
-  const adjacentSlowPics = hasAdjacentSlowPicsLinkBeforeImage(container, groups[0]?.[0]?.img);
+  const adjacentSlowPics = hasAdjacentSlowPicsLinkBeforeImage(container, collected.groups[0]?.[0]?.img);
   if (hasClaimedImageInContainer || adjacentSlowPics) return null;
-  return torrentViewerGalleryFallback(container, groups, groupLabelEls, groupLeadingBreaks, groupPrecededByText);
+  return torrentViewerGalleryFallback(container, collected);
 }
 
 function galleryAnchorBeforeImages(groups: GridCell[][], groupLabelEls: (ChildNode | null)[]): Node | null {
@@ -1543,33 +1544,76 @@ function galleryAnchorBeforeImages(groups: GridCell[][], groupLabelEls: (ChildNo
  *  "large gap". */
 const SECTION_GAP_BREAKS = 3;
 
-function splitGallerySections(
-  groups: GridCell[][],
-  groupLabelEls: (ChildNode | null)[],
-  groupLeadingBreaks: number[],
-  groupPrecededByText: boolean[],
-): { groups: GridCell[][]; groupLabelEls: (ChildNode | null)[] }[] {
-  const sections: { groups: GridCell[][]; groupLabelEls: (ChildNode | null)[] }[] = [];
-  for (let i = 0; i < groups.length; i++) {
+interface GallerySection {
+  groups: GridCell[][];
+  groupLabels: (string | null)[];
+  groupLabelEls: (ChildNode | null)[];
+}
+
+function splitGallerySections(collected: GroupsResult): GallerySection[] {
+  const sections: GallerySection[] = [];
+  for (let i = 0; i < collected.groups.length; i++) {
     const startsSection =
       !sections.length ||
-      groupPrecededByText[i] ||
-      (groupLeadingBreaks[i] ?? 0) >= SECTION_GAP_BREAKS;
-    if (startsSection) sections.push({ groups: [], groupLabelEls: [] });
+      collected.groupPrecededByText[i] ||
+      (collected.groupLeadingBreaks[i] ?? 0) >= SECTION_GAP_BREAKS;
+    if (startsSection) sections.push({ groups: [], groupLabels: [], groupLabelEls: [] });
     const current = sections[sections.length - 1];
-    current.groups.push(groups[i]);
-    current.groupLabelEls.push(groupLabelEls[i]);
+    current.groups.push(collected.groups[i]);
+    current.groupLabels.push(collected.groupLabels[i]);
+    current.groupLabelEls.push(collected.groupLabelEls[i]);
   }
   return sections;
 }
 
+/** Column titles from a section's own heading line. Accepts a plain vs/| line
+ *  ("Encode vs Scene vs Source") and a structural word wrapping one in parens
+ *  ("Comparisons (Encode vs Scene vs Source)") — the parens otherwise mask the
+ *  separators from the top-level split. Only an UNAMBIGUOUS separator
+ *  qualifies: a stray prose line before the section ("Grainy source, no
+ *  explicit comparison title.") splits on its comma in the permissive
+ *  asColumnTitles parse and must not title columns. */
+function sectionLabelColumnTitles(label: string | null): string[] | null {
+  if (!label) return null;
+  const wrapped = label.trim().match(
+    /^(?:screenshot\s+comparisons?|comparisons?|screenshots?)\s*[:\-]?\s*\(([^()]+)\)$/i,
+  );
+  const candidate = wrapped ? wrapped[1] : label;
+  if (!hasExplicitComparison(candidate)) return null;
+  return asColumnTitles(candidate);
+}
+
+/** A section whose OWN heading is a comparison title that divides its shots is
+ *  a real comparison, wherever it sits in the description — a sample gallery
+ *  above it must not demote it to a 1-wide viewer. */
+function sectionComparisonGrid(container: Element, section: GallerySection): Grid | null {
+  const names = sectionLabelColumnTitles(section.groupLabels[0]);
+  if (!names) return null;
+  // A size line ("Encode Size: 7.61 GiB (13.4 Mb/s) vs Remux Size: …") is
+  // release metadata, never a column heading.
+  if (isTechnicalSizeNames(names)) return null;
+  const cells = section.groups.flat();
+  if (cells.length % names.length !== 0) return null;
+  // A vs-heading captioning an adjacent slow.pics link describes THAT
+  // comparison (845637) — leave the local mirror shots to the gallery.
+  if (hasAdjacentSlowPicsLinkBeforeImage(container, section.groups[0]?.[0]?.img)) return null;
+  const shaped = reshapeGrid(section.groups, cells, names);
+  if (!shaped) return null;
+  const finalNames = finalizeNames(names);
+  if (!finalNames) return null;
+  return {
+    rows: shaped.gridRows,
+    numCols: shaped.numCols,
+    names: finalNames,
+    anchorEl: (section.groupLabelEls[0] as Element | null) ?? null,
+  };
+}
+
 function torrentViewerGalleryFallback(
   container: Element,
-  groups: GridCell[][],
-  groupLabelEls: (ChildNode | null)[],
-  groupLeadingBreaks: number[],
-  groupPrecededByText: boolean[],
+  collected: GroupsResult,
 ): Grid[] | null {
+  const { groups, groupLabelEls } = collected;
   if (!isTorrentPage() || !isTorrentDescriptionContainer(container)) return null;
   const total = groups.flat().length;
   if (total < 2) return null;
@@ -1580,21 +1624,23 @@ function torrentViewerGalleryFallback(
   ) {
     return null;
   }
-  // One 1-wide viewer PER SECTION, so a lone separated shot (a leading poster)
-  // stays out of the gallery and each separated screenshot run gets its own
-  // control right before it. When no section keeps two shots (per-shot
+  // One grid PER SECTION, so a lone separated shot (a leading poster) stays
+  // out, each separated screenshot run gets its own control right before it,
+  // and a section titled by its own heading surfaces as a real comparison
+  // regardless of where it sits. When no section keeps two shots (per-shot
   // captions), fall back to the single merged gallery so the screenshots never
   // go dead.
-  const galleries = splitGallerySections(groups, groupLabelEls, groupLeadingBreaks, groupPrecededByText)
+  const grids = splitGallerySections(collected)
     .filter((s) => s.groups.flat().length >= 2)
-    .map((s) => ({
-      rows: s.groups.flat().map((c) => [c]),
-      numCols: 1,
-      names: null,
-      anchorEl: galleryAnchorBeforeImages(s.groups, s.groupLabelEls),
-      gallery: true,
-    }));
-  if (galleries.length) return galleries;
+    .map((s) =>
+      sectionComparisonGrid(container, s) ?? {
+        rows: s.groups.flat().map((c) => [c]),
+        numCols: 1,
+        names: null,
+        anchorEl: galleryAnchorBeforeImages(s.groups, s.groupLabelEls),
+        gallery: true,
+      });
+  if (grids.length) return grids;
   return [{
     rows: groups.flat().map((c) => [c]),
     numCols: 1,
@@ -2014,7 +2060,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   if (!collected) return null;
   let { groups, groupLabels, groupLabelEls, groupLeadingBreaks, groupPrecededByText } = collected;
   if (isTheFarmTorrentDescription(container)) {
-    return torrentViewerGalleryFallback(container, groups, groupLabelEls, groupLeadingBreaks, groupPrecededByText);
+    return torrentViewerGalleryFallback(container, { groups, groupLabels, groupLabelEls, groupLeadingBreaks, groupPrecededByText });
   }
   const trailingGalleries: Grid[] = [];
 
@@ -2082,10 +2128,10 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     return null;
   }
   if (isTorrentScreensGalleryOnly(container, groups, groupLabels)) {
-    return torrentViewerGalleryFallback(container, groups, groupLabelEls, groupLeadingBreaks, groupPrecededByText);
+    return torrentViewerGalleryFallback(container, { groups, groupLabels, groupLabelEls, groupLeadingBreaks, groupPrecededByText });
   }
   if (hasImmediatePriorTitleBarrier(container, groups)) {
-    return torrentViewerGalleryFallback(container, groups, groupLabelEls, groupLeadingBreaks, groupPrecededByText);
+    return torrentViewerGalleryFallback(container, { groups, groupLabels, groupLabelEls, groupLeadingBreaks, groupPrecededByText });
   }
 
   // Prefer per-group text labels over page-level headings.
@@ -2297,9 +2343,9 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
           groups.length === 1 &&
           total >= 2
         ) {
-          return torrentViewerGalleryFallback(container, groups, groupLabelEls, groupLeadingBreaks, groupPrecededByText);
+          return torrentViewerGalleryFallback(container, { groups, groupLabels, groupLabelEls, groupLeadingBreaks, groupPrecededByText });
         }
-        return torrentViewerGalleryFallback(container, groups, groupLabelEls, groupLeadingBreaks, groupPrecededByText) ?? cmpThreadLargestBlock(container, groups);
+        return torrentViewerGalleryFallback(container, { groups, groupLabels, groupLabelEls, groupLeadingBreaks, groupPrecededByText }) ?? cmpThreadLargestBlock(container, groups);
       }
     }
   }
@@ -2307,7 +2353,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     // A Preview-headed block is sample shots, never a comparison — no later
     // strategy may title its columns. On a torrent description it still gets
     // the 1-wide Show Viewer; everywhere else the fallback stays null.
-    return torrentViewerGalleryFallback(container, groups, groupLabelEls, groupLeadingBreaks, groupPrecededByText);
+    return torrentViewerGalleryFallback(container, { groups, groupLabels, groupLabelEls, groupLeadingBreaks, groupPrecededByText });
   }
   if (!names) {
     const sibling = namesFromSiblingInfo(container);
@@ -2330,7 +2376,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
       // tailed siblings (hasLocalNonNameHeading / the !shaped fallback), there is
       // no fork here: both the slow.pics-single-block case and the general case
       // resolve to the same torrentViewerGalleryFallback, so it is unconditional.
-      return torrentViewerGalleryFallback(container, groups, groupLabelEls, groupLeadingBreaks, groupPrecededByText);
+      return torrentViewerGalleryFallback(container, { groups, groupLabels, groupLabelEls, groupLeadingBreaks, groupPrecededByText });
     }
   }
   if (names && hasTorrentLogPollutedNames(names)) {
@@ -2402,7 +2448,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     groups.length === 1 &&
     total >= 2
   ) {
-    return withTrailing(torrentViewerGalleryFallback(container, groups, groupLabelEls, groupLeadingBreaks, groupPrecededByText));
+    return withTrailing(torrentViewerGalleryFallback(container, { groups, groupLabels, groupLabelEls, groupLeadingBreaks, groupPrecededByText }));
   }
   if (
     !names &&
@@ -2412,7 +2458,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     groups.length === 1 &&
     total >= 2
   ) {
-    return withTrailing(torrentViewerGalleryFallback(container, groups, groupLabelEls, groupLeadingBreaks, groupPrecededByText));
+    return withTrailing(torrentViewerGalleryFallback(container, { groups, groupLabels, groupLabelEls, groupLeadingBreaks, groupPrecededByText }));
   }
   if (!names && isTorrentPage() && hasAdjacentSlowPicsLinkBeforeImage(container, groups[0]?.[0]?.img)) {
     return withTrailing(null);
@@ -2420,10 +2466,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
 
   const ambiguousGallery = torrentAmbiguousGalleryFallback(
     container,
-    groups,
-    groupLabelEls,
-    groupLeadingBreaks,
-    groupPrecededByText,
+    { groups, groupLabels, groupLabelEls, groupLeadingBreaks, groupPrecededByText },
     total,
     ambiguousTitle,
     excludeImgs,
@@ -2441,9 +2484,9 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     const adjacentSlowPics = hasAdjacentSlowPicsLinkBeforeImage(container, groups[0]?.[0]?.img);
     if (ambiguousGallery) return withTrailing(ambiguousGallery);
     if (isTorrentPage() && hasSlowPicsLink(container) && !adjacentSlowPics && groups.length === 1 && total >= 2) {
-      return withTrailing(torrentViewerGalleryFallback(container, groups, groupLabelEls, groupLeadingBreaks, groupPrecededByText));
+      return withTrailing(torrentViewerGalleryFallback(container, { groups, groupLabels, groupLabelEls, groupLeadingBreaks, groupPrecededByText }));
     }
-    return withTrailing(torrentViewerGalleryFallback(container, groups, groupLabelEls, groupLeadingBreaks, groupPrecededByText) ?? cmpThreadLargestBlock(container, groups));
+    return withTrailing(torrentViewerGalleryFallback(container, { groups, groupLabels, groupLabelEls, groupLeadingBreaks, groupPrecededByText }) ?? cmpThreadLargestBlock(container, groups));
   }
 
   // Fallback: match strong count to numCols
@@ -2475,17 +2518,17 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   // the viewer never surface a blank source list for a recognized comparison.
   let finalNames = finalizeNames(names);
   if (forceGenericNames && isTorrentPage()) {
-    return withTrailing(torrentViewerGalleryFallback(container, groups, groupLabelEls, groupLeadingBreaks, groupPrecededByText));
+    return withTrailing(torrentViewerGalleryFallback(container, { groups, groupLabels, groupLabelEls, groupLeadingBreaks, groupPrecededByText }));
   }
   if (!finalNames) {
     if (isTorrentPage()) {
-      return withTrailing(torrentViewerGalleryFallback(container, groups, groupLabelEls, groupLeadingBreaks, groupPrecededByText));
+      return withTrailing(torrentViewerGalleryFallback(container, { groups, groupLabels, groupLabelEls, groupLeadingBreaks, groupPrecededByText }));
     }
     if (
       !forceGenericNames &&
       !allowGenericNamesForUntitledTorrentGrid(container, groups, groupLabels, detailsLinkComparisonOnly, ambiguousTitle)
     ) {
-      return withTrailing(torrentViewerGalleryFallback(container, groups, groupLabelEls, groupLeadingBreaks, groupPrecededByText));
+      return withTrailing(torrentViewerGalleryFallback(container, { groups, groupLabels, groupLabelEls, groupLeadingBreaks, groupPrecededByText }));
     }
     finalNames = Array.from({ length: shaped.numCols }, (_, i) => `Source ${i + 1}`);
   }

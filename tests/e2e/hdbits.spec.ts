@@ -770,6 +770,20 @@ test("hdbits: per-shot prose captions keep one merged Show Viewer gallery", asyn
   await expect(page.locator("._scf_column_control select option")).toHaveCount(3);
 });
 
+test("hdbits: a Comparisons heading after a sample block still forms a titled comparison", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/200-torrent-desc-trailing-comparisons-heading-after-samples");
+  await waitForHdbitsReady(page);
+
+  // The 6 leading sample shots get a viewer; the 12 shots under the
+  // "Comparisons (Encode vs Scene vs Source)" heading are a real 3-column
+  // comparison even though the sample gallery comes first.
+  await expect(comparisonLinks(page)).toHaveCount(1);
+  await expect(viewerLinks(page)).toHaveCount(1);
+  await expect(page.locator("._scf_column_control select option")).toHaveCount(6);
+  expect(await readGridNames(page, 0)).toEqual(["Encode", "Scene", "Source"]);
+});
+
 test("hdbits: a Preview block after comparisons gets a Show Viewer, not silence", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/076-torrent-desc-color-source-filtered-encode");
