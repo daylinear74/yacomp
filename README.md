@@ -86,7 +86,10 @@ install the latest release](https://github.com/daylinear74/yacomp/releases/lates
 
 ## Shortcuts
 
-Every shortcut is rebindable in **yacomp Settings**; the defaults are:
+Every registered action is rebindable in **yacomp Settings**. `V` and the
+unmodified `1`–`9` source jumps are fixed viewer controls and are reserved;
+modified variants such as `Shift+V` or `Shift+1` remain available for custom
+bindings. The defaults are:
 
 | Key | Action |
 | --- | --- |

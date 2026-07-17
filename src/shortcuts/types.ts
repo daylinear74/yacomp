@@ -29,6 +29,15 @@ export interface ShortcutPair {
 
 export const MOUSE_GESTURES = ["click", "dblclick", "middle", "back", "forward"] as const;
 
+/** Fixed viewer controls that are handled outside the customizable action
+ * registry. Modified variants remain available for user bindings. */
+export function isReservedShortcut(sc: Shortcut): boolean {
+  if (
+    sc.t !== "key" || sc.shift || sc.ctrl || sc.alt || sc.meta
+  ) return false;
+  return sc.code === "KeyV" || /^Digit[1-9]$/.test(sc.code);
+}
+
 export function keyEventToShortcut(e: KeyboardEvent): KeyShortcut {
   const sc: KeyShortcut = { t: "key", code: e.code };
   if (e.shiftKey) sc.shift = true;

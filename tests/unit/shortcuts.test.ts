@@ -1,7 +1,8 @@
 import { describe, test, expect } from "bun:test";
 import {
   keyEventToShortcut, keyShortcutMatchesEvent, mouseShortcutMatches,
-  shortcutsEqual, isValidShortcut, formatShortcut, type Shortcut,
+  shortcutsEqual, isReservedShortcut, isValidShortcut, formatShortcut,
+  type Shortcut,
 } from "../../src/shortcuts/types";
 import { ACTIONS, defaultPair, isActionId } from "../../src/shortcuts/registry";
 
@@ -63,6 +64,18 @@ describe("mouse / equality / validity", () => {
     expect(isValidShortcut({ t: "mouse", g: "scroll" })).toBe(false);
     expect(isValidShortcut(null)).toBe(false);
     expect(isValidShortcut("KeyO")).toBe(false);
+  });
+});
+
+describe("fixed viewer controls", () => {
+  test("reserves only unmodified V and source-number keys", () => {
+    expect(isReservedShortcut({ t: "key", code: "KeyV" })).toBe(true);
+    expect(isReservedShortcut({ t: "key", code: "Digit1" })).toBe(true);
+    expect(isReservedShortcut({ t: "key", code: "Digit9" })).toBe(true);
+    expect(isReservedShortcut({ t: "key", code: "Digit0" })).toBe(false);
+    expect(isReservedShortcut({ t: "key", code: "KeyV", shift: true })).toBe(false);
+    expect(isReservedShortcut({ t: "key", code: "Digit2", shift: true })).toBe(false);
+    expect(isReservedShortcut({ t: "key", code: "Digit2", ctrl: true })).toBe(false);
   });
 });
 

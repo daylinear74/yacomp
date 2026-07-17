@@ -3,7 +3,7 @@
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
 import {
-  isValidShortcut, mouseShortcutMatches, shortcutsEqual,
+  isReservedShortcut, isValidShortcut, mouseShortcutMatches, shortcutsEqual,
   type Shortcut, type ShortcutPair,
 } from "./shortcuts/types";
 import { ACTIONS, defaultPair, isActionId, type ActionId } from "./shortcuts/registry";
@@ -174,8 +174,10 @@ function validateShortcuts(raw: unknown): Partial<Record<ActionId, ShortcutPair>
     if (typeof val !== "object" || val === null) continue;
     const v = val as Record<string, unknown>;
     // A binding must have a valid `main`; `extra` is optional.
-    if (!isValidShortcut(v.main)) continue;
-    const extra = isValidShortcut(v.extra) ? (v.extra as Shortcut) : null;
+    if (!isValidShortcut(v.main) || isReservedShortcut(v.main)) continue;
+    const extra = isValidShortcut(v.extra) && !isReservedShortcut(v.extra)
+      ? (v.extra as Shortcut)
+      : null;
     out[id] = { main: v.main as Shortcut, extra };
   }
   return out;

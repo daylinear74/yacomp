@@ -126,13 +126,14 @@ export async function applyFilterToImg(
   options: FilterApplyOptions = {},
 ): Promise<void> {
   const shouldApply = options.shouldApply ?? currentFilterSyncGuard();
+  const source = img.src;
   const filter = buildFilter(
-    await resolveFilter(img.src),
+    await resolveFilter(source),
     options.brightness,
     options.contrast,
     options.gammaCheck ?? null,
   );
-  if (!shouldApply() || img.isConnected === false) return;
+  if (!shouldApply() || img.isConnected === false || img.src !== source) return;
   img.style.filter = filter;
 }
 

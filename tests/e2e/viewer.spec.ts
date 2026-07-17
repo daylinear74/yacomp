@@ -1075,6 +1075,29 @@ test("settings: a duplicate binding is rejected (hard-locked)", async ({ page })
   await expect(zoomIn).toHaveText("="); // unchanged
 });
 
+test("settings: fixed viewer keys are reserved but modified digits remain bindable", async ({ page }) => {
+  await openViewer(page, { config: { defaultZoomMode: "fit" } });
+  const comp = page.locator("._scf_comp");
+  const firstRow = page.locator("._scf_comp_row").first();
+  await openSettingsModal(page);
+  const zoomIn = page
+    .locator("._scf_shortcut_row", { hasText: "Zoom in" })
+    .locator("._scf_shortcut_btn").first();
+
+  await zoomIn.click();
+  await page.keyboard.press("KeyV");
+  await expect(zoomIn).toHaveText("=");
+
+  await zoomIn.click();
+  await page.keyboard.press("Shift+Digit2");
+  await expect(zoomIn).toHaveText("Shift + 2");
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+
+  await page.keyboard.press("Shift+Digit2");
+  await expect(comp).toHaveClass(/_scf_zoomed/);
+  await expect(firstRow).toHaveAttribute("data-col", "0");
+});
+
 test("settings: clearing an extra binding removes it", async ({ page }) => {
   await openViewer(page);
   await openSettingsModal(page);

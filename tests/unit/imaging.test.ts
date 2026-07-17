@@ -1,5 +1,6 @@
-import { describe, test, expect } from "bun:test";
+import { afterEach, describe, test, expect } from "bun:test";
 import {
+  applyFilterToImg,
   orderedRowsAroundAnchor,
   orderedColumnsAroundAnchor,
   orderedCompImageTargetsByAnchor,
@@ -9,11 +10,44 @@ import {
   yieldToBrowserPaint,
   type CompImageFilterTarget,
 } from "../../src/filters/imaging";
+import { setModeIndex } from "../../src/filters/modes";
 import type { Comp, RowData } from "../../src/viewer/types";
 
 // Tests are organized by the user-facing contract each block protects,
 // not by the function name, so a regression on a contract (e.g. "active
 // image filters first") points at the right tests immediately.
+
+afterEach(() => setModeIndex(0));
+
+describe("async image-source filtering", () => {
+  test("does not commit a colorspace result after the image source changes", async () => {
+    setModeIndex(4); // luma
+    const img = {
+      src: "https://example.com/old-bt2020.webp",
+      isConnected: true,
+      style: { filter: "" },
+    } as unknown as HTMLImageElement;
+
+    const pending = applyFilterToImg(img);
+    img.src = "https://example.com/new-709.webp";
+    await pending;
+
+    expect(img.style.filter).toBe("");
+  });
+
+  test("commits the result while the source remains current", async () => {
+    setModeIndex(4); // luma
+    const img = {
+      src: "https://example.com/stable-bt2020.webp",
+      isConnected: true,
+      style: { filter: "" },
+    } as unknown as HTMLImageElement;
+
+    await applyFilterToImg(img);
+
+    expect(img.style.filter).toBe("url(#scf-luma2020)");
+  });
+});
 
 // ─── contract: column ordering biases toward the anchor ──────────────────────
 

@@ -164,6 +164,25 @@ describe("validate — shortcuts", () => {
     }).shortcuts;
     expect(r["zoom.in"]).toEqual({ main: { t: "key", code: "KeyZ" }, extra: null });
   });
+  test("drops fixed viewer controls but keeps their modified variants", () => {
+    const shortcuts = validate({
+      shortcuts: {
+        "zoom.in": { main: { t: "key", code: "KeyV" } },
+        "zoom.out": {
+          main: { t: "key", code: "KeyQ" },
+          extra: { t: "key", code: "Digit2" },
+        },
+        "zoom.fit": { main: { t: "key", code: "Digit2", shift: true } },
+      } as unknown as Record<string, unknown>,
+    }).shortcuts;
+    expect(shortcuts).not.toHaveProperty("zoom.in");
+    expect(shortcuts["zoom.out"]).toEqual({
+      main: { t: "key", code: "KeyQ" }, extra: null,
+    });
+    expect(shortcuts["zoom.fit"]).toEqual({
+      main: { t: "key", code: "Digit2", shift: true }, extra: null,
+    });
+  });
   test("defaults to no overrides", () => {
     expect(validate({}).shortcuts).toEqual({});
   });

@@ -16,7 +16,9 @@ import { getShadowRoot } from "./shadow";
 import { showToast } from "./toast";
 import { activeComps, zoomToast, refit1to1 } from "../filters/zoom";
 import { refreshPTPGridToggles } from "../sites/ptp";
-import { formatShortcut, keyEventToShortcut, type Shortcut } from "../shortcuts/types";
+import {
+  formatShortcut, isReservedShortcut, keyEventToShortcut, type Shortcut,
+} from "../shortcuts/types";
 import { ACTIONS, actionMeta, type ActionId } from "../shortcuts/registry";
 import { setShortcutCapturing } from "../shortcuts/capture-state";
 
@@ -700,6 +702,12 @@ function startShortcutCapture(
   wrap.appendChild(chips);
 
   function commit(sc: Shortcut): void {
+    if (isReservedShortcut(sc)) {
+      cleanup();
+      showToast("Reserved for viewer open / source number jump");
+      refreshAll();
+      return;
+    }
     const conflict = findShortcutConflict(sc, id, slot);
     cleanup();
     if (conflict) {

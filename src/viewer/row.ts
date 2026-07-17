@@ -2,7 +2,8 @@
 // ║  Row building & lazy loading                                              ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
-import { applyFilterToImg } from "../filters/imaging";
+import { applyFilterToImg, syncAll } from "../filters/imaging";
+import { hasAdjustments } from "../filters/brightness";
 import { sizeRowOnLoad } from "../filters/zoom";
 import { mouseSwitch } from "../config";
 import type { DragState } from "./drag";
@@ -57,6 +58,10 @@ function installHdbImageFallback(img: HTMLImageElement, onGiveUp?: () => void): 
     }
     img.dataset.hdbFallbackTried = [...tried, fallback].join(",");
     img.src = fallback;
+    // A colorspace lookup for the failed URL may still be in flight. Invalidate
+    // that generation and resolve the filter again for the fallback URL,
+    // preserving the comparison's current per-column adjustments.
+    if (img.classList.contains("_scf_comp_img") && hasAdjustments()) syncAll();
   });
 }
 

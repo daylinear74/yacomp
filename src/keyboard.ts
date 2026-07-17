@@ -314,7 +314,10 @@ export function setupKeyboard(hostname?: string): void {
       }
 
       // V: open viewer on slow.pics / comp.pics (no viewer open yet).
-      if (e.code === "KeyV" && !hasComp && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      if (
+        e.code === "KeyV" && !hasComp &&
+        !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey
+      ) {
         const btn = document.querySelector<HTMLElement>("[data-yacomp-comppics]");
         if (btn) {
           e.preventDefault();
@@ -330,7 +333,10 @@ export function setupKeyboard(hostname?: string): void {
       }
 
       // Fixed digit jumps 1–9 → that source (not customizable).
-      if (hasComp && /^Digit[1-9]$/.test(e.code) && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      if (
+        hasComp && /^Digit[1-9]$/.test(e.code) &&
+        !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey
+      ) {
         const comp = lastComp();
         const idx = parseInt(e.code.charAt(5), 10) - 1;
         if (comp && idx < comp.visibleCols.length) {
