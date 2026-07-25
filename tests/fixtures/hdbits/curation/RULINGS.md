@@ -34,6 +34,7 @@ fixture in `tests/fixtures/hdbits/cases/` (full DOM through `setupHDBitsCore`).
 | H1 title only for the OP, not replies | — | 101 OP / 102 reply |
 | single slow.pics link defers to local title | — | 094 2503, 099 2751 |
 | vs-title severed from screenshots by a quote/log block | — | 194 845637 |
+| barrier span covers a WRAPPED image block | — | 201 847412 |
 | local per-group labels > adjacent slow.pics | — | 088 |
 | slow.pics rescue for label-less blocks (A1) | — | 087 |
 | image-less showhide ignored; per-source labels | — | 105 77086 |
@@ -203,6 +204,23 @@ between a vs-heading and the image run severs the association, the same way
 `leadingBoldLabelInfo` already nulls out on a barrier after its candidate
 bolds. With no other title, the shots fall back to the 1-wide "Show viewer"
 gallery (838405). Iconic fixture 194.
+
+### The barrier span must cover a WRAPPED image block too (847412)
+`Tabi to hibi` remux (torrent 847412). The description opens with the release
+title in a centered `<div>`, then Sources / Notes prose, then BDInfo and eac3to
+showhide logs, then a "Screenshots" heading and the shots inside their OWN
+`<div align="center">`. Two log barriers sit between the title and the images,
+yet the shots were still titled — split on the release title's comma into
+"Tabi to hibi 2025 AKA Two Seasons" | "Two Strangers 1080p Blu-ray Remux …",
+which divides 8 shots into a bogus 2-column grid. Cause: the barrier gate
+scanned only `container.childNodes`, and the wrapper's children are nothing but
+images, so it broke on the first shot and saw no barrier — while the
+ancestor-scanning fallback (`findComparisonNames` → `namesFromAncestors`)
+happily climbed into the description `<td>` and read a bold from ABOVE the
+logs. Ruling: a wrapped image block gets the SAME barrier span as a flat one —
+when the container itself is clean, walk out to the description `<td>` and
+check each ancestor's preceding nodes as well. With the title severed the shots
+fall back to the 1-wide "Show viewer" gallery. Iconic fixture 201.
 
 ### Ambiguous torrent gallery → 1-wide "Show viewer", not bogus columns (838405)
 `The White Dove AKA Holubice` (torrent 838405). The description ends with 10

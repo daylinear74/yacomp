@@ -1,0 +1,55 @@
+<!--
+slot: torrent.description
+expected_grids: 0
+torrent_title: "Demo Movie 2025 1080p Remux AVC DTS-HD MA 5.1-DemoGrp"
+notes: Regression from a remux description (torrent 847412 shape). The release title sits at the very top of the description, then Sources/Notes prose, then two BDInfo/eac3to showhide logs, then a "Screenshots" heading and the shots inside their own centered <div>. Because the shots are WRAPPED, the showhide barriers are the wrapper's preceding siblings rather than the container's own children, and the ancestor-scanning name fallback used to reach past them and split the release title on its comma into a bogus 2-column comparison. The barrier span must be the same for a wrapped image block as for a flat one, so this is a gallery. Sanitized (ids->999999, group->DemoGrp, image hashes->gNN).
+-->
+
+<div align="center" width="100%"><strong><span style="color: #24abf2">Demo Movie 2025 AKA Two Seasons, Two Strangers 1080p Blu-ray Remux AVC DTS-HD MA 5.1-DemoGrp</span></strong></div><br>
+<strong><span style="color: #24abf2">Sources</span></strong><br>
+<strong>Source #1</strong>: <a href="https://example.invalid/product/TCBD-1952">Demo Entertainment 2025 JPN Blu-ray</a>: Used everything (<em>Thanks DemoStudio!</em>)<br>
+<strong>Source #2</strong>: DemoStream WEB-DL: Subtitle (<em>Thanks!</em>)<br>
+<br>
+<strong><span style="color: #24abf2">Notes</span></strong><br>
+ - Film contains hardcoded Japanese subtitles for Korean dialogue. English translation is the same as the previous subs from the screener, but with better formatting so was OCRed. Additional web subtitle synced. Appropriate positional tags were applied to prevent overlap with hardsubs.<br>
+<br>
+ - Named chapters translated to English (thanks to my anonymous friend!) End Credits chapter added.<br>
+<br>
+<strong><span style="color: #24abf2">Logs</span></strong><br>
+<div><label class="label_showhide" onclick="showHideBB(this);">BDInfo <span>[show]</span></label><div class="div_showhide" style="display: none;"><div style="text-align: left;"><br>
+[code]<br>
+Disc Label: Demo.Movie.2025.JPN.1080p.BluRay.AVC.DTS-HD.MA.5.1-DemoSrc<br>
+Disc Size: 47,454,520,943 bytes<br>
+Protection: AACS<br>
+Playlist: 00001.MPLS<br>
+Size: 30,046,525,440 bytes<br>
+Length: 1:29:12.847<br>
+Total Bitrate: 44.91 Mbps<br>
+Video: MPEG-4 AVC Video / 36565 kbps / 1080p / 23.976 fps / 16:9 / High Profile 4.1<br>
+Audio: Japanese / DTS-HD Master Audio / 5.1 / 48 kHz / 3619 kbps / 24-bit (DTS Core: 5.1 / 48 kHz / 1509 kbps / 24-bit)<br>
+Subtitle: Japanese / 150.544 kbps<br>
+Subtitle: English / 114.030 kbps<br>
+[/code]<br>
+</div></div></div><br>
+<div><label class="label_showhide" onclick="showHideBB(this);">eac3to <span>[show]</span></label><div class="div_showhide" style="display: none;"><div style="text-align: left;"><br>
+[code]<br>
+eac3to v3.52<br>
+command line: eac3to &nbsp;Demo.Movie.2025.JPN.1080p.BluRay.AVC.DTS-HD.MA.5.1-DemoSrc 1) -log=jpn.log -check 1:jpn.chapters.txt 2:jpn.* 3:jpn.* 5:jpn.ja.sdh.* 6:jpn.en.*<br>
+------------------------------------------------------------------------------<br>
+Running in fast mode<br>
+Keeping dialnorm<br>
+M2TS, 1 video track, 2 audio tracks, 2 subtitle tracks, 1:29:13<br>
+1: Chapters, 13 chapters<br>
+2: h264/AVC, 1080p24/1.001 (16:9)<br>
+3: DTS Master Audio, Japanese, 5.1 channels, 24 bits, 48kHz, dialnorm: 0dB<br>
+4: DTS Master Audio, Japanese, 2.0 channels, 24 bits, 48kHz, dialnorm: 0dB<br>
+5: Subtitle (PGS), Japanese<br>
+6: Subtitle (PGS), English<br>
+Video track 2 contains 128340 frames.<br>
+eac3to processing took 2 minutes, 25 seconds.<br>
+Done.<br>
+[/code]<br>
+</div></div></div><br>
+<br>
+<strong><span style="color: #24abf2">Screenshots</span></strong><br>
+<div align="center" width="100%"><a href="https://img.hdbits.org/g201a"><img src="https://t.hdbits.org/g201a.jpg"></a> <a href="https://img.hdbits.org/g201b"><img src="https://t.hdbits.org/g201b.jpg"></a> <a href="https://img.hdbits.org/g201c"><img src="https://t.hdbits.org/g201c.jpg"></a> <a href="https://img.hdbits.org/g201d"><img src="https://t.hdbits.org/g201d.jpg"></a> <a href="https://img.hdbits.org/g201e"><img src="https://t.hdbits.org/g201e.jpg"></a> <a href="https://img.hdbits.org/g201f"><img src="https://t.hdbits.org/g201f.jpg"></a> <a href="https://img.hdbits.org/g201g"><img src="https://t.hdbits.org/g201g.jpg"></a> <a href="https://img.hdbits.org/g201h"><img src="https://t.hdbits.org/g201h.jpg"></a></div>

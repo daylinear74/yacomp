@@ -352,9 +352,9 @@ function hasBlockedComparisonSignalBeforeImages(container: Element): boolean {
   return false;
 }
 
-function hasPreImageTitleBarrierBeforeFirstScreenshot(container: Element): boolean {
-  if (!enforcesTorrentTitleDistance(container)) return false;
-  for (const node of container.childNodes) {
+function hasBarrierBeforeScreenshots(nodes: Iterable<ChildNode>, stopAt: Node | null): boolean {
+  for (const node of nodes) {
+    if (node === stopAt) break;
     if (node.nodeType === 8) continue;
     if (node.nodeName === "IMG") {
       const img = node as HTMLImageElement;
@@ -364,6 +364,24 @@ function hasPreImageTitleBarrierBeforeFirstScreenshot(container: Element): boole
     if (node.nodeName === "A" && hasHDBitsScreenshotImage(node as Element)) break;
     if (node.nodeType === 1 && hasHDBitsScreenshotImage(node as Element)) break;
     if (isPreImageTitleBarrier(node)) return true;
+  }
+  return false;
+}
+
+/** A quote/log block between a title and the screenshots severs them. The
+ *  screenshots may sit in their own wrapper (a centered `<div>`) rather than
+ *  flat in the description body, and then the barriers are the WRAPPER's
+ *  preceding siblings, not the container's own children — a title far above
+ *  two eac3to/BDInfo showhides would otherwise still reach the shots through
+ *  the ancestor-scanning name strategies (847412). Walk out to the description
+ *  body so a wrapped image block sees the same barrier span as a flat one. */
+function hasPreImageTitleBarrierBeforeFirstScreenshot(container: Element): boolean {
+  if (!enforcesTorrentTitleDistance(container)) return false;
+  if (hasBarrierBeforeScreenshots(container.childNodes, null)) return true;
+  const body = container.closest("td");
+  if (!body) return false;
+  for (let el = container; el !== body && el.parentElement; el = el.parentElement) {
+    if (hasBarrierBeforeScreenshots(el.parentElement.childNodes, el)) return true;
   }
   return false;
 }
