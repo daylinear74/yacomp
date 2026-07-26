@@ -90,7 +90,9 @@ function navColumn(delta: number): void {
 
 function navRow(delta: number): void {
   const c = lastComp();
-  if (c) c.setRow(c.currentRow + delta);
+  // Step from the in-flight navigation target when there is one, so rapid
+  // presses accumulate instead of re-deriving from a mid-scroll currentRow.
+  if (c) c.setRow((c.navTargetRow ?? c.currentRow) + delta);
 }
 
 function adjustBracket(code: "BracketLeft" | "BracketRight", shiftKey: boolean): void {

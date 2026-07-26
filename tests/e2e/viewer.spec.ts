@@ -1328,3 +1328,18 @@ test("settings: PTP custom-label inputs appear only under the Custom button styl
   await styleRow.getByRole("button", { name: "Text", exact: true }).click();
   await expect(customRow).toBeHidden();
 });
+
+// ─── lifecycle & input regressions ──────────────────────────────────────────
+
+test("rapid row-nav presses accumulate instead of fighting the scroll sync", async ({ page }) => {
+  await openViewer(page);
+
+  // Three quick presses land three rows down. Before the fix, the scroll
+  // handler rewrote comp.currentRow from mid-flight smooth-scroll geometry,
+  // so back-to-back presses re-navigated to the same row.
+  for (let i = 0; i < 3; i++) {
+    await page.keyboard.press("ArrowDown");
+    await page.waitForTimeout(60);
+  }
+  await expect(page.locator("._scf_row_nav_item._scf_active")).toContainText("4");
+});

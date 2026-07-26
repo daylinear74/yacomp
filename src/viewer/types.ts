@@ -23,6 +23,11 @@ export interface Comp {
   currentCol: number;
   suppressRowSync?: boolean;
   rowSyncSuppressToken?: number;
+  // The row a deliberate navigation (keys / row-nav click) is smooth-scrolling
+  // toward. While set, the scroll sync neither rewrites currentRow from
+  // mid-flight geometry nor bounces the highlight; rapid presses accumulate on
+  // this target. Cleared on arrival or on a manual scroll gesture.
+  navTargetRow?: number | null;
   allRowData: RowData[];
   colBrightness: number[];
   colGammaCheck: (GammaMismatchCheckId | null)[];

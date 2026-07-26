@@ -85,6 +85,12 @@ export function syncCurrentRowFromScroll(
       closest = i;
     }
   }
+  if (comp.navTargetRow != null) {
+    // A deliberate navigation is in flight: ignore mid-scroll geometry until
+    // the target row wins the closest-row race, then resume normal syncing.
+    if (closest !== comp.navTargetRow) return;
+    comp.navTargetRow = null;
+  }
   if (closest !== comp.currentRow) {
     comp.currentRow = closest;
     updateRowNav(closest);
@@ -138,12 +144,21 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   const wheelZoomGesture: WheelZoomGestureState = { anchor: null, resetTimer: null };
 
   const { drag, onDragMove, onDragEnd } = setupDragHandlers(compDiv);
+  // Grabbing the canvas (drag pan or scrollbar) is a manual scroll gesture too.
+  compDiv.addEventListener("mousedown", () => {
+    comp.navTargetRow = null;
+  });
   // Canvas mouse-gesture shortcuts (e.g. click / double-click to close).
   setupCompMouseShortcuts(compDiv, drag);
 
   // Ctrl+Wheel zoom (centered on cursor)
   compDiv.addEventListener("wheel", (e) => {
-    if (!e.ctrlKey) return;
+    if (!e.ctrlKey) {
+      // A plain wheel is a manual scroll: it takes over from any in-flight
+      // deliberate row navigation.
+      comp.navTargetRow = null;
+      return;
+    }
     e.preventDefault();
     const oldW = zoomStepBaseWidth();
     const anchor = getWheelZoomGestureAnchor(wheelZoomGesture, comp, e);
@@ -429,6 +444,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   comp.setRow = (rowIdx: number) => {
     if (rowIdx < 0 || rowIdx >= comp.numRows) return;
     comp.currentRow = rowIdx;
+    comp.navTargetRow = rowIdx;
     allRowData[rowIdx].rowDiv.scrollIntoView({ behavior: "smooth", block: "center" });
     rowNav.updateRowNav(rowIdx);
     comp.revealRowNav?.();
