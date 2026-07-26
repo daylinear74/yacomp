@@ -50,6 +50,10 @@ install the latest release](https://github.com/daylinear74/yacomp/releases/lates
   galleries do not fall back to tiny native previews.
 - **Fast source & row navigation** — hover to switch sources by horizontal
   position, plus arrow / vim / number keys for sources and rows.
+- **Per-row source names (slow.pics)** — collections that name each row's shots
+  differently — e.g. the `(B)` / `(P)` frame-type markers that vspreview and
+  vsview write into shot titles, or any other per-row titles — show the current
+  row's names in the source banner, following row navigation.
 - **Zoom & pan** — fit, 1:1, incremental zoom, `Ctrl` + wheel cursor-centered
   zoom, drag panning, a minimap, and a row-navigation sidebar.
 - **Visual filters** — Solar ×1 / ×2, Residual, Luma, and Chroma modes for
