@@ -1388,3 +1388,11 @@ test("HUD and toast do not outlive the viewer", async ({ page }) => {
   await expect(hud).toHaveCSS("opacity", "0");
   await expect(toast).toHaveCSS("opacity", "0");
 });
+
+test("source label is populated at open before any interaction", async ({ page }) => {
+  await openViewer(page, { config: { uiChromeMode: "always" } });
+
+  const label = page.locator("._scf_comp_label");
+  await expect(label.locator("span")).toHaveCount(3);
+  await expect(label.locator("span", { hasText: "1." })).toHaveCSS("opacity", "1");
+});

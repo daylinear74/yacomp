@@ -448,7 +448,10 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   comp.syncFillCanvasVisibility = autoHide.syncFillCanvasVisibility;
   comp.syncAutoHide = autoHide.resync;
 
-  if (initialPosition.col !== 0) switchColumn(initialPosition.col);
+  // Populate the source-name label (and menu/HUD state) for the initial
+  // column too — before this ran only for col != 0, so a viewer opened on the
+  // default column showed an empty label until the first switch.
+  switchColumn(initialPosition.col);
 
   comp.setRow = (rowIdx: number) => {
     if (rowIdx < 0 || rowIdx >= comp.numRows) return;
