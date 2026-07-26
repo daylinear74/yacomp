@@ -1343,3 +1343,31 @@ test("rapid row-nav presses accumulate instead of fighting the scroll sync", asy
   }
   await expect(page.locator("._scf_row_nav_item._scf_active")).toContainText("4");
 });
+
+test("closing the viewer cancels the pending background-load kickoff", async ({ page }) => {
+  // Slow the image responses down so nothing has loaded by the time the
+  // viewer is closed — the bg-load kickoff timers must die with the viewer.
+  await page.route(/i\.slow\.pics/, async (route) => {
+    await new Promise((r) => setTimeout(r, 400));
+    return route.fulfill({ contentType: "image/svg+xml", body: fixtureSvg(DEFAULT_IMAGE_SIZE) });
+  });
+  await openViewer(page, { config: { bgLoadDefault: true, defaultZoomMode: "fit" } });
+
+  // Keep handles to the viewer cells, then close before any image lands.
+  await page.evaluate(() => {
+    const root = (document.getElementById("_scf_root_") as HTMLElement).shadowRoot!;
+    (window as unknown as { __cells: HTMLImageElement[] }).__cells =
+      Array.from(root.querySelectorAll("._scf_comp_img"));
+  });
+  const promotedCount = () =>
+    page.evaluate(
+      () => (window as unknown as { __cells: HTMLImageElement[] }).__cells.filter((i) => i.src).length,
+    );
+  const before = await promotedCount();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("._scf_comp")).not.toBeVisible();
+
+  // Outlive both kickoff timers (200 ms post-sizer-load and the 3 s net).
+  await page.waitForTimeout(3600);
+  expect(await promotedCount()).toBe(before);
+});

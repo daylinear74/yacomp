@@ -293,8 +293,12 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     rowObserver.observe(allRowData[i].rowDiv);
   }
 
+  let closed = false;
+
   function triggerBgLoad() {
-    if (!bgLoadAll) return;
+    // The kickoff timers below can fire after an early close; a closed viewer
+    // must not promote deferred cells into detached rows.
+    if (closed || !bgLoadAll) return;
     for (let i = 0; i < allRowData.length; i++) {
       const rd = allRowData[i];
       if (!rd.loaded) rowObserver.unobserve(rd.rowDiv);
@@ -305,12 +309,17 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     }
   }
 
+  const bgLoadTimers: ReturnType<typeof setTimeout>[] = [];
   const row0Sizer = allRowData[0].sizer;
   if (row0Sizer.complete) {
-    setTimeout(triggerBgLoad, 200);
+    bgLoadTimers.push(setTimeout(triggerBgLoad, 200));
   } else {
-    row0Sizer.addEventListener("load", () => setTimeout(triggerBgLoad, 200), { once: true });
-    setTimeout(triggerBgLoad, 3000);
+    row0Sizer.addEventListener(
+      "load",
+      () => bgLoadTimers.push(setTimeout(triggerBgLoad, 200)),
+      { once: true },
+    );
+    bgLoadTimers.push(setTimeout(triggerBgLoad, 3000));
   }
 
   const origContainerDisplay = container.style.display;
@@ -486,6 +495,8 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   let openCenterRO: ResizeObserver | null = null;
 
   function closeThis() {
+    closed = true;
+    for (const timer of bgLoadTimers) clearTimeout(timer);
     window.removeEventListener("mousemove", onDragMove);
     window.removeEventListener("mouseup", onDragEnd);
     window.removeEventListener("resize", onWindowResize);
