@@ -1371,3 +1371,20 @@ test("closing the viewer cancels the pending background-load kickoff", async ({ 
   await page.waitForTimeout(3600);
   expect(await promotedCount()).toBe(before);
 });
+
+test("HUD and toast do not outlive the viewer", async ({ page }) => {
+  await openViewer(page, { config: { toastDuration: 8000, uiChromeMode: "always" } });
+
+  await page.keyboard.press("BracketRight");
+  const hud = page.locator("#_scf_hud_");
+  const toast = page.locator("#_scf_toast_");
+  await expect(hud).toHaveCSS("opacity", "1");
+  await expect(toast).toHaveCSS("opacity", "1");
+
+  // Close via the button: the Escape path resets adjustments first, which
+  // would clear the HUD before the close and mask the leak.
+  await page.locator("._scf_close_btn").click();
+  await expect(page.locator("._scf_comp")).not.toBeVisible();
+  await expect(hud).toHaveCSS("opacity", "0");
+  await expect(toast).toHaveCSS("opacity", "0");
+});

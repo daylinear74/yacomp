@@ -75,3 +75,10 @@ export function showToast(msg: string | ToastLine[]): void {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (el!.style.opacity = "0"), toastDur());
 }
+
+/** Dismiss the current toast immediately (viewer close). */
+export function hideToast(): void {
+  clearTimeout(toastTimer);
+  const el = getShadowRoot().getElementById("_scf_toast_");
+  if (el) el.style.opacity = "0";
+}

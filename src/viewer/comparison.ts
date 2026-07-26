@@ -5,7 +5,7 @@
 import { injectCSS } from "../ui/css";
 import { getShadowRoot } from "../ui/shadow";
 import { injectFilters } from "../filters/svg";
-import { showToast } from "../ui/toast";
+import { showToast, hideToast } from "../ui/toast";
 import { updateHUD } from "../ui/hud";
 import {
   defaultZoomMode as cfgZoomMode,
@@ -528,6 +528,11 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     setZoomWidth(0);
 
     removeComp(comp);
+    // The HUD and toast are fixed overlays on the shared shadow root — clear
+    // them so per-column readouts don't float over the host page. The HUD
+    // re-renders from the remaining comps (or the page-level filter mode).
+    hideToast();
+    updateHUD();
   }
 
   comp.close = closeThis;
