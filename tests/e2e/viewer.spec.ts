@@ -1396,3 +1396,24 @@ test("source label is populated at open before any interaction", async ({ page }
   await expect(label.locator("span")).toHaveCount(3);
   await expect(label.locator("span", { hasText: "1." })).toHaveCSS("opacity", "1");
 });
+
+test("shortcut capture swallows the trailing keyup of the captured key", async ({ page }) => {
+  await openViewer(page, { config: { defaultZoomMode: "fit" } });
+  await page.evaluate(() => {
+    (window as unknown as { __yacomp: YacompTestHooks }).__yacomp.openSettings();
+  });
+  await expect(page.locator("._scf_settings_overlay")).toBeVisible();
+
+  // Capture into the "Actual size" main slot and press F. The keydown is
+  // consumed by the recorder; its keyup must NOT reach the dispatcher, where
+  // F's keyup-phase binding would cycle the page filter mode.
+  const mainBtn = page
+    .locator("._scf_shortcut_row", { hasText: "Actual size" })
+    .locator("._scf_shortcut_btn").first();
+  await mainBtn.click();
+  await expect(mainBtn).toHaveText("Press a key\u2026");
+  await page.keyboard.press("KeyF");
+
+  await page.waitForTimeout(200);
+  expect(await readFirstPageImageFilter(page)).toBe("");
+});

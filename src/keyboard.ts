@@ -291,10 +291,19 @@ export function setupCompMouseShortcuts(compDiv: HTMLElement, drag: DragState): 
 }
 
 export function setupKeyboard(hostname?: string): void {
+  // Keys whose keydown was consumed by the shortcut recorder: their keyup
+  // arrives after the capture flag has already cleared and must not fire a
+  // keyup-phase action (e.g. recording F would cycle the filter mode).
+  const capturedKeyUps = new Set<string>();
+
   window.addEventListener(
     "keydown",
     (e) => {
-      if (isShortcutCapturing() || isEditing()) return;
+      if (isShortcutCapturing()) {
+        capturedKeyUps.add(e.code);
+        return;
+      }
+      if (isEditing()) return;
       const hasComp = activeComps.length > 0;
       if (!hasComp && !siteBehaviorEnabled(hostname)) return;
 
@@ -356,6 +365,7 @@ export function setupKeyboard(hostname?: string): void {
   window.addEventListener(
     "keyup",
     (e) => {
+      if (capturedKeyUps.delete(e.code)) return;
       if (isShortcutCapturing() || isEditing()) return;
       const hasComp = activeComps.length > 0;
       if (!hasComp && !siteBehaviorEnabled(hostname)) return;
