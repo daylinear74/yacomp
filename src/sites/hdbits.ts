@@ -8,7 +8,7 @@ import { getGrids, hdbFull, isTorrentDescriptionContainer } from "../grid";
 import type { Grid, GridCell } from "../grid";
 import { hasVsOrPipe, splitNames, looksLikeNames, isNonSourceLabel, looksLikeProse, tidyName } from "../grid/names";
 import { buildComparison, insertLinkAfter, openOrphanSelect, openWithDummyWrapper } from "../viewer";
-import { fetchSlowPicsGridInfo, parseSlowPicsKey, slowPicsKeyFromAnchor, type SlowPicsGridInfo } from "./slowpics-source";
+import { fetchSlowPicsGridInfo, slowPicsKeyFromAnchor, type SlowPicsGridInfo } from "./slowpics-source";
 import { findSlowPicsComparisons, buildRescueGrid, hasLocalLabelBetween, type SlowPicsComparison } from "./hdbits-slowpics";
 import { genericSourceNames } from "../util";
 
@@ -353,7 +353,9 @@ function slowPicsKeyBefore(node: Node | null | undefined): string | null {
   if (!node) return null;
   let owner: { key: string; link: HTMLAnchorElement } | null = null;
   for (const a of document.querySelectorAll<HTMLAnchorElement>("a[href]")) {
-    const key = parseSlowPicsKey(a.href);
+    // HDBits wraps external links as /redir.php?url=<base64> with the real
+    // URL in the link text — read both, like every other slow.pics probe.
+    const key = slowPicsKeyFromAnchor(a.href, a.textContent || "");
     if (!key) continue;
     if (a.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING) owner = { key, link: a };
     else break;

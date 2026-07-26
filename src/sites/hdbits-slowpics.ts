@@ -27,13 +27,26 @@ function isBefore(a: Node, b: Node): boolean {
 /** True when a local text label (e.g. "GER:") sits between a slow.pics link and
  *  a screenshot. Such a screenshot carries its own DOM label, so it belongs to
  *  the DOM parser, not to the slow.pics link — per the title-inference order a
- *  local label outranks the adjacent slow.pics collection. */
+ *  local label outranks the adjacent slow.pics collection.
+ *
+ *  Text inside yacomp's own injected controls ("Show comparison" triggers,
+ *  "Show Viewer" column controls) is NOT a poster label: click-time probes run
+ *  after setup has inserted those between the link and its screenshots. */
 export function hasLocalLabelBetween(link: Node, img: Node): boolean {
   try {
     const range = document.createRange();
     range.setStartAfter(link);
     range.setEndBefore(img);
-    return /[A-Za-z]/.test(range.toString());
+    // Walk text nodes instead of range.toString() so injected chrome can be
+    // skipped; boundaries sit between nodes, so intersecting nodes are whole.
+    const walker = document.createTreeWalker(range.commonAncestorContainer, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (!/[A-Za-z]/.test(n.textContent || "")) continue;
+      if (!range.intersectsNode(n)) continue;
+      if (n.parentElement?.closest("._scf_comp_link, ._scf_column_control")) continue;
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
