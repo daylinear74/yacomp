@@ -2715,6 +2715,10 @@ export function getGrids(preClaimed?: Set<HTMLImageElement>): { grid: Grid; cont
   if (_grids) return _grids;
   _grids = [];
   const seen = new Set<Element>();
+  // Bare-row runs that already failed to build (or whose members were consumed
+  // as parse containers). Without this, every remaining image of an N-row run
+  // re-walks the whole run — O(N²) on big unlabeled galleries.
+  const galleryRunSkip = new Set<Element>();
   // Images already emitted in a grid. Containers are visited in image-document
   // order, so an inner wrapper (a <strong>/showhide block of screenshots) is
   // parsed before the enclosing block; the enclosing parse then EXCLUDES those
@@ -2733,15 +2737,21 @@ export function getGrids(preClaimed?: Set<HTMLImageElement>): { grid: Grid; cont
     // A single comparison whose rows are each wrapped in their own bare <div>
     // (separated only by <br>) is ONE grid, not one grid per row. Gather the
     // adjacent bare-row run and title it from the nearest preceding label.
-    const run = splitGalleryRun(c);
-    if (run && !run.some((d) => seen.has(d))) {
-      const grid = buildSplitGalleryGrid(run, claimed);
-      if (grid) {
-        for (const d of run) seen.add(d);
-        for (const cell of grid.rows.flat()) if (cell.img) claimed.add(cell.img);
-        _grids.push({ grid, container: c });
-        continue;
+    const run = galleryRunSkip.has(c) ? null : splitGalleryRun(c);
+    if (run) {
+      if (!run.some((d) => seen.has(d))) {
+        const grid = buildSplitGalleryGrid(run, claimed);
+        if (grid) {
+          for (const d of run) seen.add(d);
+          for (const cell of grid.rows.flat()) if (cell.img) claimed.add(cell.img);
+          _grids.push({ grid, container: c });
+          continue;
+        }
       }
+      // The run can never build now (the attempt failed, or a member was
+      // already consumed) — its outcome is decided per row below, so spare
+      // the remaining images the full-run walk.
+      for (const d of run) galleryRunSkip.add(d);
     }
     const parseContainer = hdbGridParseContainer(c);
     if (seen.has(parseContainer)) continue;
