@@ -343,7 +343,6 @@ function hasBlockedComparisonSignalBeforeImages(container: Element): boolean {
       if (isHDBitsScreenshotImage(img)) break;
       continue;
     }
-    if (node.nodeName === "A" && hasHDBitsScreenshotImage(node as Element)) break;
     if (node.nodeType === 1 && hasHDBitsScreenshotImage(node as Element)) break;
     if (!isPreImageTitleBarrier(node)) continue;
     const text = node.textContent || "";
@@ -361,7 +360,6 @@ function hasBarrierBeforeScreenshots(nodes: Iterable<ChildNode>, stopAt: Node | 
       if (isHDBitsScreenshotImage(img)) break;
       continue;
     }
-    if (node.nodeName === "A" && hasHDBitsScreenshotImage(node as Element)) break;
     if (node.nodeType === 1 && hasHDBitsScreenshotImage(node as Element)) break;
     if (isPreImageTitleBarrier(node)) return true;
   }
@@ -885,7 +883,6 @@ function leadingDetailsLinkLabelInfo(
     }
     if (node.nodeType === 1) {
       const el = node as Element;
-      if (el.matches("a") && hasHDBitsScreenshotImage(el)) break;
       if (hasHDBitsScreenshotImage(el)) break;
       addDetailsAnchors(el);
       current().text += el.textContent || "";
@@ -926,12 +923,6 @@ const VS_BAR_RE = /\bvs?\.\s|\bvs\s|\||[<>]{2,}|\s~\s/i;
 // A continuation line of a multi-line vs-list, e.g. "DE (…) vs. KR (…)<br>vs. US (…)".
 const VS_CONTINUATION_RE = /^\s*(?:vs?\.|\|)\s/i;
 
-/** True when a split "name" is really prose — a paragraph that merely MENTIONS a
- *  comparison ("UK vs. DE: There are lots of parts of the film… on DE. For
- *  reference…"), not a title. A real source name is short and tokenised; a
- *  sentence boundary (".", "!", "?" then a capitalised word) or an absurd length
- *  marks prose. Long release names ("…7.1 (33454 kbps) (with NGU Sharp)") have
- *  no sentence boundary, so they pass. */
 /** Highest-precedence label source: a leading line (before the first screenshot)
  *  that carries an explicit "vs"/"v."/"|" separator. Per project ruling, such a
  *  line always wins over per-group comma labels and NOTE:/nb: preamble prose. It
@@ -952,7 +943,6 @@ function leadingComparisonNames(container: Element): { names: string[]; anchorEl
       if (isHDBitsScreenshotImage(img)) break;
       continue;
     }
-    if (node.nodeName === "A" && hasHDBitsScreenshotImage(node as Element)) break;
     if (node.nodeType === 1 && hasHDBitsScreenshotImage(node as Element)) break;
     const cur = raw[raw.length - 1];
     if (node.nodeName === "A") {
@@ -1330,7 +1320,6 @@ function logicalTextLinesBeforeFirstScreenshot(container: Element): string[] {
       continue;
     }
     if (node.nodeName === "IMG" && isHDBitsScreenshotImage(node as HTMLImageElement)) break;
-    if (node.nodeName === "A" && hasHDBitsScreenshotImage(node as Element)) break;
     if (node.nodeType === 1 && hasHDBitsScreenshotImage(node as Element)) break;
     lines[lines.length - 1] += node.textContent || "";
     if (node.nodeType === 1 && /^(?:DIV|P|PRE|TABLE|BLOCKQUOTE|UL|OL)$/.test(node.nodeName)) {

@@ -6,8 +6,10 @@
 // grid parser (parser.ts — grid building) and the name strategies (names.ts —
 // color-span column grouping) decide which <img>s are real screenshots, and they
 // MUST agree on the host set: a host added to only one copy would silently desync
-// grid detection from title grouping. Keeping the regexes here, imported by both,
-// makes that impossible.
+// grid detection from title grouping. Keeping the regexes here keeps the HOST
+// SET in one place; note the gates still differ by design — parser.ts accepts
+// external hosts only on torrent pages (isExternalScreenshotImagePageUrl),
+// while names.ts' color-span grouping applies them unconditionally.
 //
 // Dependency-free on purpose — parser.ts already imports names.ts, so a shared
 // helper either of them imports must pull in neither to stay acyclic.

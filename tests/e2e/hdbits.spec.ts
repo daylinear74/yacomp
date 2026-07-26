@@ -40,14 +40,22 @@ function parseCaseMetadata(content: string, file: string): CaseMetadata {
     const value = line.slice(colon + 1).trim();
     if (key === "slot") meta.slot = value;
     else if (key === "expected_grids") meta.expectedGrids = parseInt(value, 10);
-    else if (key === "expected_names") meta.expectedNames = JSON.parse(value);
+    else if (key === "expected_names") {
+      // A malformed value would otherwise abort the whole suite at collection
+      // time with a bare SyntaxError and no offending filename.
+      try {
+        meta.expectedNames = JSON.parse(value);
+      } catch {
+        throw new Error(`${file}: expected_names is not valid one-line JSON (${value})`);
+      }
+    }
     else if (key === "torrent_title") meta.torrentTitle = value.replace(/^"|"$/g, "");
     else if (key === "thread_title") meta.threadTitle = value.replace(/^"|"$/g, "");
     else if (key === "notes") meta.notes = value;
   }
   if (typeof meta.slot !== "string") throw new Error(`${file}: metadata missing 'slot'`);
-  if (typeof meta.expectedGrids !== "number") {
-    throw new Error(`${file}: metadata missing 'expected_grids'`);
+  if (typeof meta.expectedGrids !== "number" || !Number.isFinite(meta.expectedGrids)) {
+    throw new Error(`${file}: metadata missing or invalid 'expected_grids'`);
   }
   return meta as unknown as CaseMetadata;
 }
@@ -126,10 +134,8 @@ async function readGridNames(page: Page, linkIndex: number): Promise<string[]> {
   const comp = page.locator("._scf_comp");
   await expect(comp).toBeVisible();
 
-  // The label is created empty and stays empty until switchColumn fires
-  // (comparison.ts line 346 only calls switchColumn when initialPosition.col
-  // != 0, and the default is 0). Press "1" to switch to the first source,
-  // which always fires switchColumn and populates the label spans.
+  // The label is populated at open; pressing "1" additionally pins the first
+  // source active so the assertions below read a deterministic state.
   await page.keyboard.press("Digit1");
   const spans = page.locator("._scf_comp_label span");
   await expect(spans.first()).toBeVisible();

@@ -51,9 +51,7 @@ function stubSlowPicsHtml(url: string): string {
 
 function run(): void {
   // Keyboard hooks let the e2e suite press number/arrow keys to drive
-  // the viewer once a "Show comparison" link has been clicked. The
-  // initial source label is empty until switchColumn fires, so the
-  // test presses a digit to populate it before reading source names.
+  // the viewer once a "Show comparison" link has been clicked.
   setupKeyboard();
   setupHDBitsCore();
   (window as unknown as { __yacomp: unknown }).__yacomp = { saveConfig, getConfig, resetConfig };

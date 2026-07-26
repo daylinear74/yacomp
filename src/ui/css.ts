@@ -138,7 +138,6 @@ export function injectCSS(): void {
       padding: 5px 7px 5px 9px;
       z-index: 2147483647;
       pointer-events: none;
-      transition: opacity .3s ease;
     }
     ._scf_row_nav::-webkit-scrollbar { display: none; }
     ._scf_row_nav_item {
@@ -380,10 +379,6 @@ export function injectCSS(): void {
     ._scf_source_menu_btn:focus-visible,
     ._scf_source_menu._scf_open ._scf_source_menu_btn {
       opacity: 1;
-    }
-    ._scf_source_menu:hover ._scf_source_menu_btn,
-    ._scf_source_menu_btn:focus-visible,
-    ._scf_source_menu._scf_open ._scf_source_menu_btn {
       width: 94px;
     }
     ._scf_source_menu_btn:hover,

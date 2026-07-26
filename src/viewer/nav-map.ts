@@ -2,7 +2,7 @@
 // ║  Thumbnail navigation minimap                                             ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
-import { navMapEnabled, fillCanvasEnabled } from "../filters/zoom";
+import { navMapEnabled, fillCanvasEnabled, suppressRowSync } from "../filters/zoom";
 import { getShadowRoot } from "../ui/shadow";
 import { clamp } from "../util";
 import type { RowData, Comp } from "./types";
@@ -57,21 +57,6 @@ export function calcNavMapJumpScroll(
     ),
     scrollTop: clamp(scrollTop, 0, contentMaxTop),
   };
-}
-
-function suppressRowSync(comp: Comp): void {
-  const token = (comp.rowSyncSuppressToken || 0) + 1;
-  comp.rowSyncSuppressToken = token;
-  comp.suppressRowSync = true;
-  const clear = () => {
-    if (comp.rowSyncSuppressToken !== token) return;
-    comp.suppressRowSync = false;
-  };
-  if (typeof window.requestAnimationFrame === "function") {
-    window.requestAnimationFrame(() => window.requestAnimationFrame(clear));
-  } else {
-    setTimeout(clear, 0);
-  }
 }
 
 export function createNavMap(

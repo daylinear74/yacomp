@@ -56,7 +56,9 @@ export interface CapturedZoomAnchor extends RowZoomAnchor {
   currentRowIdx: number;
 }
 
-function suppressRowSync(comp: Comp): void {
+/** Briefly ignore scroll-driven row syncing while a programmatic scroll lands
+ *  (also used by the minimap's drag-to-jump). */
+export function suppressRowSync(comp: Comp): void {
   const token = (comp.rowSyncSuppressToken || 0) + 1;
   comp.rowSyncSuppressToken = token;
   comp.suppressRowSync = true;

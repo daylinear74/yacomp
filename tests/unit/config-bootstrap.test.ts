@@ -4,7 +4,7 @@ import { join } from "node:path";
 // The config bootstrap runs at module import, so these tests spawn a fresh
 // bun process with GM_getValue/GM_setValue stubbed BEFORE the import — the
 // in-process suite already has src/config.ts cached with GM_* undefined.
-function runBootstrap(gmSetup: string, probe: string): string {
+function runBootstrap(gmSetup: string, probe: string): unknown {
   const script = `
     ${gmSetup}
     const cfg = await import(${JSON.stringify(join(import.meta.dir, "../../src/config.ts"))});

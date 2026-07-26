@@ -949,7 +949,6 @@ function forumManualCell(img: HTMLImageElement): GridCell {
 function updateManualSelectionStyles(selected: HTMLImageElement[]): void {
   for (const img of document.querySelectorAll<HTMLImageElement>(`img.${FORUM_MANUAL_SELECTED_CLASS}`)) {
     img.classList.remove(FORUM_MANUAL_SELECTED_CLASS);
-    img.removeAttribute("data-scf-manual-order");
     if (img.dataset.scfManualTitle !== undefined) {
       const original = img.dataset.scfManualTitle;
       if (original) img.title = original;
@@ -961,7 +960,6 @@ function updateManualSelectionStyles(selected: HTMLImageElement[]): void {
   selected.forEach((img, idx) => {
     if (img.dataset.scfManualTitle === undefined) img.dataset.scfManualTitle = img.title || "";
     img.classList.add(FORUM_MANUAL_SELECTED_CLASS);
-    img.dataset.scfManualOrder = String(idx + 1);
     img.title = `Custom comparison #${idx + 1}`;
   });
 }
