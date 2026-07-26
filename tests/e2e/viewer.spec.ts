@@ -1430,3 +1430,45 @@ test("keyboard shortcuts survive clicking an already-selected dropdown option", 
   await page.keyboard.press("Equal");
   await expect(page.locator("._scf_comp")).toHaveClass(/_scf_zoomed/);
 });
+
+test("hiding the minimap mid-drag does not jump the viewport", async ({ page }) => {
+  await openViewer(page);
+
+  const comp = page.locator("._scf_comp");
+  await expect(comp).toHaveClass(/_scf_zoomed/);
+  const scrollLeft = () => comp.evaluate((el) => el.scrollLeft);
+  await expect.poll(scrollLeft).toBeGreaterThan(0);
+
+  const navMap = page.locator("._scf_nav_map");
+  await expect(navMap).toBeVisible();
+  const box = (await navMap.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  const anchored = await scrollLeft();
+  await page.keyboard.press("KeyM");
+  await expect(navMap).toBeHidden();
+  // With the minimap collapsed its rect is all zeros; a drag sample must not
+  // remap against that degenerate box and fling the viewport to a corner.
+  await page.mouse.move(box.x - 60, box.y - 60);
+
+  expect(Math.abs((await scrollLeft()) - anchored)).toBeLessThanOrEqual(1);
+  await page.mouse.up();
+});
+
+test("a buttons-less mousemove ends a drag instead of latching it", async ({ page }) => {
+  await openViewer(page);
+
+  const comp = page.locator("._scf_comp");
+  const box = (await comp.boundingBox())!;
+  await page.mouse.move(box.x + 300, box.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 340, box.y + 340);
+  await expect(comp).toHaveClass(/_scf_dragging/);
+
+  // Simulate the release happening outside the window: the next move arrives
+  // with no buttons pressed and must end the drag.
+  await page.evaluate(() => {
+    window.dispatchEvent(new MouseEvent("mousemove", { buttons: 0, clientX: 400, clientY: 400, bubbles: true }));
+  });
+  await expect(comp).not.toHaveClass(/_scf_dragging/);
+});

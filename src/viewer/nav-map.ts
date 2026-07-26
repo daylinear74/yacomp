@@ -130,6 +130,9 @@ export function createNavMap(
   let navDragRow: number | null = null;
   function navJumpTo(e: MouseEvent) {
     const b = navMapEl.getBoundingClientRect();
+    // A collapsed minimap (hidden mid-drag via the M toggle) measures 0×0;
+    // mapping against that box would fling the viewport to a corner.
+    if (!b.width || !b.height) return;
     const fx = Math.max(0, Math.min(1, (e.clientX - b.left) / b.width));
     const fy = Math.max(0, Math.min(1, (e.clientY - b.top) / b.height));
     const rowIdx = navDragRow ?? comp.currentRow;
