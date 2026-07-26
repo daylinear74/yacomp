@@ -35,6 +35,13 @@ export function setupDragHandlers(compDiv: HTMLDivElement): DragHandlers {
 
   function onDragMove(e: MouseEvent) {
     if (!isPotentialDrag) return;
+    // The button can be released outside the window (another monitor, the OS
+    // taskbar) — no mouseup ever arrives, so a buttons-less move ends the pan
+    // instead of latching it on.
+    if (e.buttons === 0) {
+      onDragEnd();
+      return;
+    }
     const dx = e.clientX - dStartX;
     const dy = e.clientY - dStartY;
     if (!drag.active) {
