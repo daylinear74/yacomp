@@ -176,13 +176,17 @@ export function loadRow(rd: RowData, comp: Comp): void {
   if (rd.loaded) return;
   rd.loaded = true;
   const { sizer, rowDiv, imgs, adjustRowAR } = rd;
+  const activeCol = comp.currentCol || 0;
   if (sizer.dataset.src) {
-    const src = sizer.dataset.src;
+    // The sizer gives the row a real resolution early. Point it at the ACTIVE
+    // column's URL so it shares that cell's download and decode — with its
+    // original column-0 URL, browsing any other column paid two full-res
+    // images per lazily-loaded row. Falls back to column 0 for a short row.
+    const src = imgs[activeCol]?.dataset.src || imgs[activeCol]?.src || sizer.dataset.src;
     delete sizer.dataset.src;
     sizer.addEventListener("load", () => rowDiv.classList.remove("_scf_loading"), { once: true });
     sizer.src = src;
   }
-  const activeCol = comp.currentCol || 0;
   if (imgs[activeCol]) loadCellSrc(imgs[activeCol], activeCol, comp, adjustRowAR);
   // When zoomed, a row scrolling in must take its OWN native width × the
   // current scale (it may be a different resolution than rows already on
