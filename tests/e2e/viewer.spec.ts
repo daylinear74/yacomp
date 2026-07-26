@@ -1472,3 +1472,19 @@ test("a buttons-less mousemove ends a drag instead of latching it", async ({ pag
   });
   await expect(comp).not.toHaveClass(/_scf_dragging/);
 });
+
+test("settings changes preserve the close button's auto-hide state", async ({ page }) => {
+  await openViewer(page, { config: { uiChromeMode: "autohide" } });
+
+  const closeButton = page.locator("._scf_close_btn");
+  await expect(closeButton).toHaveClass(/_scf_ui_autohidden/);
+
+  await page.evaluate(() => {
+    (window as unknown as { __yacomp: YacompTestHooks }).__yacomp.openSettings();
+  });
+  await page.getByRole("button", { name: "Reset Defaults", exact: true }).click();
+
+  // Repositioning the button must not wipe the auto-hide class and leave it
+  // permanently visible.
+  await expect(closeButton).toHaveClass(/_scf_ui_autohidden/);
+});

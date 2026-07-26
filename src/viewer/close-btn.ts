@@ -47,8 +47,13 @@ export function createCloseBtn(onClose: () => void): CloseBtn {
 
   function updatePosition() {
     const pos = resolvePosition();
-    const sideClass = pos === "left" ? " _scf_left" : " _scf_right";
-    closeBtnEl.className = "_scf_close_btn" + sideClass + (pos === "hide" ? " _scf_hidden" : "");
+    // Toggle only the position classes: the auto-hide controller owns other
+    // state classes on this element and a wholesale className write would
+    // wipe them (leaving a hidden button permanently visible).
+    closeBtnEl.classList.add("_scf_close_btn");
+    closeBtnEl.classList.toggle("_scf_left", pos === "left");
+    closeBtnEl.classList.toggle("_scf_right", pos !== "left");
+    closeBtnEl.classList.toggle("_scf_hidden", pos === "hide");
   }
 
   updatePosition();
