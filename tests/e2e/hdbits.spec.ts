@@ -1483,3 +1483,29 @@ for (const { file, meta } of cases) {
     }
   });
 }
+
+test("hdbits: a manual-builder drag released off-image does not swallow the next click", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/154-forum-post-manual-custom-comparison");
+  await waitForHdbitsReady(page);
+
+  const panel = page.locator("h1 + ._scf_manual_panel");
+  await panel.locator("._scf_manual_button").click();
+
+  // Sweep across the first two shots, releasing over whitespace to the right
+  // of the gallery — a natural end to a drag selection.
+  const shots = page.locator('img[src*="t.hdbits.org/manual"]');
+  const first = (await shots.nth(0).boundingBox())!;
+  const second = (await shots.nth(1).boundingBox())!;
+  await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(second.x + second.width / 2, second.y + second.height / 2, { steps: 4 });
+  await page.mouse.move(second.x + second.width + 300, second.y + second.height / 2, { steps: 4 });
+  await page.mouse.up();
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(2);
+
+  // The next Ctrl+click must toggle its shot on — a stale drag-suppress flag
+  // used to eat this click entirely.
+  await shots.nth(2).click({ modifiers: ["Control"] });
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(3);
+});
