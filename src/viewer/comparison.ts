@@ -225,16 +225,20 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     }
     const names = grid.names || [];
     labelEl!.replaceChildren();
-    for (let i = 0; i < comp.visibleCols.length; i++) {
-      const visibleCol = comp.visibleCols[i];
-      const n = names[visibleCol] ?? "Source " + (visibleCol + 1);
-      const label = (i + 1) + ". " + n;
-      const part = document.createElement("span");
-      part.textContent = label;
-      if (visibleCol !== col) part.style.opacity = ".4";
-      labelEl!.appendChild(part);
-      if (i < comp.visibleCols.length - 1) {
-        labelEl!.appendChild(document.createTextNode("\u00a0 "));
+    // Column titles are a comparison affordance. A single-column grid is a
+    // gallery viewer \u2014 plain images, no source-name banner.
+    if (grid.numCols > 1) {
+      for (let i = 0; i < comp.visibleCols.length; i++) {
+        const visibleCol = comp.visibleCols[i];
+        const n = names[visibleCol] ?? "Source " + (visibleCol + 1);
+        const label = (i + 1) + ". " + n;
+        const part = document.createElement("span");
+        part.textContent = label;
+        if (visibleCol !== col) part.style.opacity = ".4";
+        labelEl!.appendChild(part);
+        if (i < comp.visibleCols.length - 1) {
+          labelEl!.appendChild(document.createTextNode("\u00a0 "));
+        }
       }
     }
     comp.revealColumnNav?.();

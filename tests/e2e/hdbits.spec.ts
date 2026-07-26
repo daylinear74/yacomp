@@ -1530,3 +1530,20 @@ test("hdbits: double-clicking Show comparison during the slow.pics fetch opens o
   await page.waitForTimeout(500);
   await expect(page.locator("._scf_comp")).toHaveCount(1);
 });
+
+test("hdbits: a single-column gallery viewer shows no source-title banner", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/176-torrent-desc-slowpics-mismatch-manual-viewer");
+  await waitForHdbitsReady(page);
+
+  const select = page.locator("select._scf_column_select");
+  await expect(select).toHaveValue("1");
+  await select.press("Enter");
+  await expect(page.locator("._scf_comp")).toBeVisible();
+
+  // Column titles are a comparison affordance — a gallery is plain images.
+  // Neither opening nor a digit press may populate the banner.
+  await expect(page.locator("._scf_comp_label span")).toHaveCount(0);
+  await page.keyboard.press("Digit1");
+  await expect(page.locator("._scf_comp_label span")).toHaveCount(0);
+});
