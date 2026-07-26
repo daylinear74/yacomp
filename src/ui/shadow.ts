@@ -20,17 +20,24 @@ export function getShadowRoot(): ShadowRoot {
   return root!;
 }
 
-/** True when the focused element is a text field, including one nested inside
- *  an open shadow root (our settings UI lives in a shadow tree). */
+// Input types whose focus must not disable the keyboard shortcuts: they take
+// no text, and a click can leave them focused indefinitely (e.g. re-clicking
+// the already-selected canvas radio fires no change event to move focus).
+// Range stays "editing" so arrow keys keep driving a focused slider.
+const NON_EDITING_INPUT_TYPES = new Set([
+  "checkbox", "radio", "button", "submit", "reset", "file",
+]);
+
+/** True when the focused element takes text/arrow-key input, including one
+ *  nested inside an open shadow root (our settings UI lives in a shadow tree). */
 export function isEditing(): boolean {
   let el: Element | null = document.activeElement;
   while (el?.shadowRoot?.activeElement) {
     el = el.shadowRoot.activeElement;
   }
-  const tag = el?.tagName;
-  return (
-    tag === "INPUT" ||
-    tag === "TEXTAREA" ||
-    !!(el as HTMLElement | null)?.isContentEditable
-  );
+  if (!el) return false;
+  if ((el as HTMLElement).isContentEditable) return true;
+  if (el.tagName === "TEXTAREA") return true;
+  if (el.tagName !== "INPUT") return false;
+  return !NON_EDITING_INPUT_TYPES.has((el as HTMLInputElement).type);
 }

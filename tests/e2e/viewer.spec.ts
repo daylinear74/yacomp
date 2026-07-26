@@ -1417,3 +1417,16 @@ test("shortcut capture swallows the trailing keyup of the captured key", async (
   await page.waitForTimeout(200);
   expect(await readFirstPageImageFilter(page)).toBe("");
 });
+
+test("keyboard shortcuts survive clicking an already-selected dropdown option", async ({ page }) => {
+  await openViewer(page, { config: { uiChromeMode: "always", defaultZoomMode: "fit" } });
+
+  // Open the canvas dropdown and click the option that is already selected —
+  // no change event fires, so the radio keeps focus inside the shadow root.
+  await page.locator("._scf_fill_canvas_btn").click();
+  const checked = page.locator("._scf_fill_canvas_panel input[type=radio]:checked");
+  await checked.click({ force: true });
+
+  await page.keyboard.press("Equal");
+  await expect(page.locator("._scf_comp")).toHaveClass(/_scf_zoomed/);
+});
