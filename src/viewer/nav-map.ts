@@ -140,6 +140,7 @@ export function createNavMap(
     compDiv.scrollLeft = next.scrollLeft;
     compDiv.scrollTop = next.scrollTop;
     if (comp.updateRowNav) comp.updateRowNav(rowIdx);
+    comp.updateLabel?.();
   }
   navMapEl.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return;

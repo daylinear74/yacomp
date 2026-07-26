@@ -94,6 +94,7 @@ export function syncCurrentRowFromScroll(
   if (closest !== comp.currentRow) {
     comp.currentRow = closest;
     updateRowNav(closest);
+    comp.updateLabel?.();
   }
 }
 
@@ -185,6 +186,38 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     return pointerVisibleColumn(e.clientX, window.innerWidth, comp.visibleCols);
   }
 
+  // The source-title banner. With per-row names (grid.rowNames — slow.pics)
+  // the current row's names win; every other grid renders grid.names exactly
+  // as before. Rebuilt on column switches, and on row changes when (and only
+  // when) per-row names exist.
+  let lastLabelText: string | null = null;
+  function buildLabel(col: number): void {
+    const names = grid.rowNames?.[comp.currentRow] ?? grid.names ?? [];
+    labelEl!.replaceChildren();
+    // Column titles are a comparison affordance. A single-column grid is a
+    // gallery viewer — plain images, no source-name banner.
+    if (grid.numCols > 1) {
+      for (let i = 0; i < comp.visibleCols.length; i++) {
+        const visibleCol = comp.visibleCols[i];
+        const n = names[visibleCol] ?? "Source " + (visibleCol + 1);
+        const label = (i + 1) + ". " + n;
+        const part = document.createElement("span");
+        part.textContent = label;
+        if (visibleCol !== col) part.style.opacity = ".4";
+        labelEl!.appendChild(part);
+        if (i < comp.visibleCols.length - 1) {
+          labelEl!.appendChild(document.createTextNode("\u00a0 "));
+        }
+      }
+    }
+    // Row navigation can change the names themselves — surface the banner so
+    // the change is visible even in auto-hidden chrome. (Column switches only
+    // move the active-entry highlight; their reveal stays in switchColumn.)
+    const text = labelEl!.textContent || "";
+    if (lastLabelText !== null && text !== lastLabelText) comp.revealColumnNav?.();
+    lastLabelText = text;
+  }
+
   function switchColumn(col: number) {
     if (!comp.visibleCols.includes(col)) return;
     comp.currentCol = col;
@@ -223,24 +256,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
       }
       rowDiv.dataset.col = String(col);
     }
-    const names = grid.names || [];
-    labelEl!.replaceChildren();
-    // Column titles are a comparison affordance. A single-column grid is a
-    // gallery viewer \u2014 plain images, no source-name banner.
-    if (grid.numCols > 1) {
-      for (let i = 0; i < comp.visibleCols.length; i++) {
-        const visibleCol = comp.visibleCols[i];
-        const n = names[visibleCol] ?? "Source " + (visibleCol + 1);
-        const label = (i + 1) + ". " + n;
-        const part = document.createElement("span");
-        part.textContent = label;
-        if (visibleCol !== col) part.style.opacity = ".4";
-        labelEl!.appendChild(part);
-        if (i < comp.visibleCols.length - 1) {
-          labelEl!.appendChild(document.createTextNode("\u00a0 "));
-        }
-      }
-    }
+    buildLabel(col);
     comp.revealColumnNav?.();
     // Update nav map thumbnail for new column (only when zoomed)
     if (compDiv.classList.contains("_scf_zoomed")) {
@@ -402,6 +418,13 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   const rowNav = createRowNav(allRowData, comp);
   comp.updateRowNav = rowNav.updateRowNav;
 
+  // Row changes re-render the banner ONLY for grids with per-row names
+  // (slow.pics). Left unset otherwise, so every other site's row navigation
+  // stays a label no-op exactly as before.
+  if (grid.rowNames) {
+    comp.updateLabel = () => buildLabel(comp.currentCol);
+  }
+
   // Thumbnail navigation minimap
   const navMap = createNavMap(compDiv, allRowData, comp);
   comp.updateNavMap = navMap.updateNavMap;
@@ -461,6 +484,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     if (rowIdx < 0 || rowIdx >= comp.numRows) return;
     comp.currentRow = rowIdx;
     comp.navTargetRow = rowIdx;
+    comp.updateLabel?.();
     allRowData[rowIdx].rowDiv.scrollIntoView({ behavior: "smooth", block: "center" });
     rowNav.updateRowNav(rowIdx);
     comp.revealRowNav?.();

@@ -136,12 +136,28 @@ export function readSlowPicsCurrentPosition(
   });
 }
 
+/** Display name for one shot: slow.pics dots read as spaces; the frame-type
+ *  marker ("(B) …") is kept — with per-row labels it is real information about
+ *  THIS row's shot, not noise inherited from row 0. */
+function rowDisplayName(name: string): string {
+  return name.replaceAll(".", " ");
+}
+
+/** Per-row column names. slow.pics comparisons label their images per row
+ *  (e.g. frame-type markers), so the viewer banner must follow the current
+ *  row instead of freezing row 0's names. */
+export function slowPicsRowNames(comps: SlowPicsComparison[]): string[][] {
+  return comps.map((c) => c.images.map((im) => rowDisplayName(im.name)));
+}
+
 export function openSlowPicsViewer(): boolean {
   const col = (window.unsafeWindow || window).collection;
   if (!col || !col.comparisons || !col.comparisons.length) return false;
   const comps = col.comparisons;
+  // Stable per-column identities (source menu, adjustment toasts): row 0's
+  // names without the per-shot frame-type marker.
   const names = comps[0].images.map((im) =>
-    im.name.replace(/^\([BIP]\) /, "").replaceAll(".", " ")
+    rowDisplayName(im.name.replace(/^\([BIP]\) /, ""))
   );
   const numCols = names.length;
   const rows: GridCell[][] = comps.map((c) =>
@@ -156,6 +172,7 @@ export function openSlowPicsViewer(): boolean {
     rows,
     numCols,
     names,
+    rowNames: slowPicsRowNames(comps),
     initialRow: currentPosition?.row,
     initialCol: currentPosition?.col,
     initialZoom: { mode: "fit" },

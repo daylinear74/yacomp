@@ -19,6 +19,11 @@ export interface Grid {
   rows: GridCell[][];
   numCols: number;
   names: string[] | null;
+  // Per-row column names (slow.pics lets every row label its shots — e.g.
+  // frame-type markers "(B) Source" / "(P) Source"). When present, the viewer
+  // label shows rowNames[currentRow] and refreshes on row navigation; `names`
+  // stays the stable per-column identity used by the source menu and toasts.
+  rowNames?: (string[] | null)[];
   anchorEl?: Node | null;
   initialRow?: number;
   initialCol?: number;

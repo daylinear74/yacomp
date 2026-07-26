@@ -1488,3 +1488,80 @@ test("settings changes preserve the close button's auto-hide state", async ({ pa
   // permanently visible.
   await expect(closeButton).toHaveClass(/_scf_ui_autohidden/);
 });
+
+// ─── slow.pics per-row column names ─────────────────────────────────────────
+
+async function openPerRowNamesViewer(page: Page): Promise<void> {
+  await page.goto("/");
+  await page.evaluate(() => {
+    (window as unknown as { __yacomp: YacompTestHooks }).__yacomp.saveConfig({
+      uiChromeMode: "always",
+    });
+    (window as unknown as { collection: unknown }).collection = {
+      comparisons: [
+        {
+          key: "rowB",
+          images: [
+            { name: "(B) Source.A", publicFileName: "prn-a1.webp" },
+            { name: "(B) Encode.X", publicFileName: "prn-a2.webp" },
+          ],
+        },
+        {
+          key: "rowP",
+          images: [
+            { name: "(P) Source.A", publicFileName: "prn-b1.webp" },
+            { name: "(P) Encode.X", publicFileName: "prn-b2.webp" },
+          ],
+        },
+        {
+          key: "rowI",
+          images: [
+            { name: "(I) Source.A", publicFileName: "prn-c1.webp" },
+            { name: "(I) Encode.X", publicFileName: "prn-c2.webp" },
+          ],
+        },
+      ],
+    };
+  });
+  await page.keyboard.press("KeyV");
+  await expect(page.locator("._scf_comp")).toBeVisible();
+}
+
+test("slow.pics: the banner shows the current row's names and follows key navigation", async ({ page }) => {
+  await openPerRowNamesViewer(page);
+
+  const spans = page.locator("._scf_comp_label span");
+  await expect(spans.first()).toHaveText("1. (B) Source A");
+  await expect(spans.nth(1)).toHaveText("2. (B) Encode X");
+
+  await page.keyboard.press("ArrowDown");
+  await expect(spans.first()).toHaveText("1. (P) Source A");
+  await expect(spans.nth(1)).toHaveText("2. (P) Encode X");
+
+  // Column switching keeps the row's names, only the highlight moves.
+  await page.keyboard.press("2");
+  await expect(spans.first()).toHaveText("1. (P) Source A");
+  await expect(spans.nth(1)).toHaveCSS("opacity", "1");
+});
+
+test("slow.pics: scroll-driven row changes update the banner too", async ({ page }) => {
+  await openPerRowNamesViewer(page);
+
+  const spans = page.locator("._scf_comp_label span");
+  await expect(spans.first()).toHaveText("1. (B) Source A");
+
+  // Plain-wheel to the bottom: the scroll sync lands on the last row.
+  const comp = page.locator("._scf_comp");
+  await comp.hover();
+  for (let i = 0; i < 8; i++) await page.mouse.wheel(0, 800);
+  await expect(spans.first()).toHaveText("1. (I) Source A");
+});
+
+test("slow.pics: the source menu keeps stable names without frame markers", async ({ page }) => {
+  await openPerRowNamesViewer(page);
+
+  await page.locator("._scf_source_menu").getByRole("button", { name: "Choose visible sources" }).click();
+  const options = page.locator("._scf_source_option");
+  await expect(options.first()).toContainText("Source A");
+  await expect(options.first()).not.toContainText("(B)");
+});

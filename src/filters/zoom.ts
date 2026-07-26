@@ -188,6 +188,7 @@ function restoreZoomAnchor(anchor: CapturedZoomAnchor): void {
   anchor.comp.compDiv.scrollTop = next.scrollTop;
   anchor.comp.currentRow = anchor.currentRowIdx;
   if (anchor.comp.updateRowNav) anchor.comp.updateRowNav(anchor.currentRowIdx);
+  anchor.comp.updateLabel?.();
 }
 
 /** Center the viewport on the active row's active cell — horizontally and
