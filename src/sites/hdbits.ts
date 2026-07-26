@@ -331,14 +331,23 @@ function onImageClickOpen(
  *  whole grid; this just adds a per-image entry point at the right row/col.
  *  Read live, so toggling the setting takes effect without a reload. */
 function attachGridImageClicks(grid: Grid, container: HTMLElement, link: HTMLAnchorElement): void {
+  // One in-flight guard per grid: the enrichment fetch can take ~1s, and a
+  // second click during it would stack a second full-screen viewer.
+  let opening = false;
   for (let r = 0; r < grid.rows.length; r++) {
     const row = grid.rows[r];
     for (let c = 0; c < row.length; c++) {
       onImageClickOpen(row[c].img, row[c].a, () => {
-        void maybeEnrichNames(grid).then(() => {
-          if (grid.partial) openOrphanSelect(grid, container, link);
-          else buildComparison({ ...grid, initialRow: r, initialCol: c }, container, link);
-        });
+        if (opening) return;
+        opening = true;
+        void maybeEnrichNames(grid)
+          .then(() => {
+            if (grid.partial) openOrphanSelect(grid, container, link);
+            else buildComparison({ ...grid, initialRow: r, initialCol: c }, container, link);
+          })
+          .finally(() => {
+            opening = false;
+          });
       });
     }
   }
@@ -505,14 +514,23 @@ export function setupHDBitsCore(): void {
     const link = grid.gallery
       ? addManualColumnControlFromCells(cells, grid.anchorEl ?? firstGridNode(grid) ?? container, container as HTMLElement, images)
       : makeShowComparisonLink();
+    let opening = false;
     const open = async (e: Event): Promise<void> => {
       e.preventDefault();
-      await maybeEnrichNames(grid);
-      // An indivisible set (a comparison-thread OP that dropped a shot, 80402)
-      // can't pair up cleanly and the gap may be anywhere, so let the user pick
-      // the odd shot(s) to drop first, then build the comparison from the rest.
-      if (grid.partial) openOrphanSelect(grid, container as HTMLElement, link);
-      else buildComparison(grid, container as HTMLElement, link);
+      // A second click while the enrichment fetch is in flight would stack a
+      // second viewer over the first.
+      if (opening) return;
+      opening = true;
+      try {
+        await maybeEnrichNames(grid);
+        // An indivisible set (a comparison-thread OP that dropped a shot, 80402)
+        // can't pair up cleanly and the gap may be anywhere, so let the user pick
+        // the odd shot(s) to drop first, then build the comparison from the rest.
+        if (grid.partial) openOrphanSelect(grid, container as HTMLElement, link);
+        else buildComparison(grid, container as HTMLElement, link);
+      } finally {
+        opening = false;
+      }
     };
     if (!grid.gallery) link.addEventListener("click", (e) => { void open(e); });
 
@@ -657,7 +675,6 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
         // / missing titles fall back to the viewer manual-column control below.
         const grid = buildRescueGrid(images, resolved, spLink);
         if (grid) {
-          link.textContent = original;
           buildComparison(grid, container, link);
           return;
         }
@@ -665,6 +682,9 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
       link.remove();
       addManualColumnControl(images, spLink, container);
     } finally {
+      // Restore the label even when resolving threw, so a transient failure
+      // doesn't leave a link stuck on "Loading comparison…".
+      link.textContent = original;
       resolving = false;
     }
   });
@@ -672,8 +692,11 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
   // Click any of this comparison's images to open the viewer at that shot.
   // Rescued comparisons aren't in getGrids, so the column shape is only known
   // after the slow.pics fetch — reshape then, mapping the flat index to row/col.
+  let openingImage = false;
   images.forEach((img, idx) => {
     onImageClickOpen(img, (img.closest("a") as HTMLAnchorElement | null) ?? undefined, () => {
+      if (openingImage) return;
+      openingImage = true;
       void fetchSlowPicsGridInfo(key).then((info) => {
         const resolved = resolveSlowPicsInfo(info, images, spLink, container);
         if (resolved) {
@@ -688,6 +711,8 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
           }
         }
         openImageViewer(images.map(forumManualCell), spLink, idx);
+      }).finally(() => {
+        openingImage = false;
       });
     });
   });

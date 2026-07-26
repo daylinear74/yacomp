@@ -36,7 +36,14 @@ function stubSlowPicsHtml(url: string): string {
       details.onerror?.(new Error("blocked"));
       return;
     }
-    details.onload?.({ status: 200, responseText: stubSlowPicsHtml(details.url) });
+    const respond = (): void => {
+      details.onload?.({ status: 200, responseText: stubSlowPicsHtml(details.url) });
+    };
+    // SlowFetchKey simulates the real ~1s collection fetch so tests can race
+    // user input against an in-flight request; every other key resolves
+    // synchronously to keep the rest of the suite instant.
+    if (/SlowFetchKey/i.test(details.url)) setTimeout(respond, 300);
+    else respond();
   } else {
     details.onerror?.(new Error("blocked"));
   }

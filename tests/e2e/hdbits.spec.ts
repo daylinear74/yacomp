@@ -1509,3 +1509,18 @@ test("hdbits: a manual-builder drag released off-image does not swallow the next
   await shots.nth(2).click({ modifiers: ["Control"] });
   await expect(page.locator("._scf_manual_selected")).toHaveCount(3);
 });
+
+test("hdbits: double-clicking Show comparison during the slow.pics fetch opens one viewer", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/202-torrent-desc-slowpics-delayed-fetch-double-click");
+  await waitForHdbitsReady(page);
+
+  // Both clicks land while the 300ms-delayed collection fetch is in flight.
+  const link = comparisonLinks(page).first();
+  await link.click();
+  await link.click();
+
+  await expect(page.locator("._scf_comp").first()).toBeVisible();
+  await page.waitForTimeout(500);
+  await expect(page.locator("._scf_comp")).toHaveCount(1);
+});

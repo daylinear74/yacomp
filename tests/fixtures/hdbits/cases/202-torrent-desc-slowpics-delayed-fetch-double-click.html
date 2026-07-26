@@ -1,0 +1,16 @@
+<!--
+slot: torrent.description
+expected_grids: 1
+expected_names: [["Source", "Encode"]]
+torrent_title: "Delayed Fetch 2026 1080p BluRay x264-Demo"
+notes: generic-named grid next to a slow.pics link whose stub responds after 300ms (SlowFetchKey), so a second click can land while the first open's enrichment fetch is still in flight. Guards the double-open race.
+-->
+
+<div align="center">
+  <strong>Source vs Encode</strong><br>
+  <a href="https://slow.pics/c/SlowFetchKey">https://slow.pics/c/SlowFetchKey</a><br>
+  <a href="https://img.hdbits.org/g202a"><img src="https://t.hdbits.org/g202a.jpg"></a>
+  <a href="https://img.hdbits.org/g202b"><img src="https://t.hdbits.org/g202b.jpg"></a><br>
+  <a href="https://img.hdbits.org/g202c"><img src="https://t.hdbits.org/g202c.jpg"></a>
+  <a href="https://img.hdbits.org/g202d"><img src="https://t.hdbits.org/g202d.jpg"></a><br>
+</div>
