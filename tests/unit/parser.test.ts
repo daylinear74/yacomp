@@ -56,6 +56,11 @@ describe("reshapeGrid", () => {
     const groups = [[cell("a")], [cell("b"), cell("c")]];
     expect(reshapeGrid(groups, groups.flat(), null)).toBeNull();
   });
+
+  test("returns null for an empty group list instead of throwing", () => {
+    expect(reshapeGrid([], [], ["A", "B"])).toBeNull();
+    expect(reshapeGrid([], [], null)).toBeNull();
+  });
 });
 
 describe("externalImageFullUrl", () => {

@@ -1209,6 +1209,7 @@ function isTheFarmTorrentDescription(container: Element): boolean {
  *  cleanly, so a reply/discussion post's 1-per-line samples (3 imgs / 2 cols)
  *  stay suppressed. Off comparison threads / non-OP posts → null. */
 function cmpThreadLargestBlock(container: Element, groups: GridCell[][]): Grid[] | null {
+  if (!groups.length) return null;
   if (!isComparisonThread() || !isOriginalPost(container)) return null;
   // Only for the scattered-spoiler shape: example frames live in a generic
   // "Hidden text" showhide, with the real grid outside it (80070). This keeps
@@ -1961,6 +1962,7 @@ function hasPriorScreenshotOutsideGroups(groups: GridCell[][], scope: Element): 
 
 /** Reshape groups into a grid based on name count */
 export function reshapeGrid(groups: GridCell[][], allImages: GridCell[], names: string[] | null): { numCols: number; gridRows: GridCell[][] } | null {
+  if (!groups.length) return null;
   const firstLen = groups[0].length;
   const isProperGrid =
     groups.length >= 2 &&
@@ -2744,7 +2746,14 @@ export function getGrids(preClaimed?: Set<HTMLImageElement>): { grid: Grid; cont
     const parseContainer = hdbGridParseContainer(c);
     if (seen.has(parseContainer)) continue;
     seen.add(parseContainer);
-    const parsed = parseGrid(parseContainer, claimed);
+    // Isolate per-container failures: one malformed post must cost its own
+    // grid, not every control on the page (nothing above this loop retries).
+    let parsed: Grid[] | null = null;
+    try {
+      parsed = parseGrid(parseContainer, claimed);
+    } catch (err) {
+      console.error("[yacomp] grid parse failed for a container:", err);
+    }
     if (parsed) {
       // A successfully-parsed inner container owns its local screenshots, even
       // if one auxiliary group was suppressed. Otherwise those leftovers can
