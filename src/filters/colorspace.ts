@@ -67,16 +67,13 @@ function extractICC(bytes: Uint8Array): Uint8Array | ICCPResult | null {
   return null;
 }
 
-function iccIs2020(buf: Uint8Array): boolean {
-  for (let i = 0; i < buf.length - 3; i++)
-    if (
-      buf[i] === 50 &&
-      buf[i + 1] === 48 &&
-      buf[i + 2] === 50 &&
-      buf[i + 3] === 48
-    )
-      return true;
-  return false;
+// "2020" must appear in a colorimetry context (BT.2020 / Rec. 2020 / ITU-R
+// BT.2020): profile copyright/description strings routinely carry bare years
+// ("Copyright (c) 2020 …"), which must not flip an sRGB shot to Rec.2020.
+const ICC_2020_RE = /(?:bt|rec|itu-?r(?:\s+bt)?)[\s._-]*2020/i;
+
+export function iccIs2020(buf: Uint8Array): boolean {
+  return ICC_2020_RE.test(new TextDecoder("latin1").decode(buf));
 }
 
 async function decompressICC(compressed: Uint8Array): Promise<Uint8Array | null> {
@@ -124,7 +121,11 @@ export async function detectCS(src: string): Promise<string> {
           }
         }
       }
-    } catch (_) {}
+    } catch (_) {
+      // A transient failure (offline, CORS blip) must not pin this URL to 709
+      // for the rest of the session — drop the entry so a later sync retries.
+      csCache.delete(src);
+    }
     return cs;
   })();
   csCache.set(src, promise);
