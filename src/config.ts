@@ -277,15 +277,26 @@ export function migrate(raw: Record<string, unknown>): Record<string, unknown> {
 
 let config: YacompConfig;
 
+// Read and persist in separate try blocks: a failing GM_setValue (missing
+// grant, storage quota, private profile) must not throw the already-loaded,
+// already-validated user config away.
+let stored: unknown = null;
 try {
-  const stored = GM_getValue(STORAGE_KEY, DEFAULTS as unknown) as Record<string, unknown>;
-  const raw = typeof stored === "object" && stored !== null ? stored : {};
-  config = validate(migrate(raw));
-  if ((stored as { v?: number })?.v !== CURRENT_VERSION) {
-    GM_setValue(STORAGE_KEY, config);
-  }
+  stored = GM_getValue(STORAGE_KEY, DEFAULTS as unknown);
 } catch {
-  config = { ...DEFAULTS };
+  stored = null;
+}
+{
+  const raw =
+    typeof stored === "object" && stored !== null ? (stored as Record<string, unknown>) : {};
+  config = validate(migrate(raw));
+}
+if ((stored as { v?: number } | null)?.v !== CURRENT_VERSION) {
+  try {
+    GM_setValue(STORAGE_KEY, config);
+  } catch {
+    // Persisting the migrated payload can wait; in-memory config is intact.
+  }
 }
 
 // Typed getters
