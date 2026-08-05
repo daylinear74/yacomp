@@ -141,7 +141,8 @@ sweep live in `.scratch/` (gitignored): `all-cands.json` (every dump body),
 4. **Get ground-truth names** by running the real viewer-driving oracle on the
    sanitized body: `oracle.ts <cands.json> <out.json>`. Use *this* (not the
    fast `getGrids()` oracle) for `expected_names`, because e2e reads names off
-   the viewer label `._scf_comp_label span`, which is what `oracle.ts` reads.
+   the viewer label `._scf_comp_label > ._scf_comp_label_item`, which is what
+   `oracle.ts` reads.
 5. **Write the case** under `cases/NNN-<slot>-<strategy>-<hint>.html` with the
    metadata header (`slot`, `expected_grids`, optional `expected_names`,
    `thread_title`/`torrent_title`, `notes`). Mirror the header format produced

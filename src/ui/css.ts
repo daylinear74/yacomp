@@ -229,9 +229,41 @@ export function injectCSS(): void {
       padding: 10px 0;
       pointer-events: none;
       white-space: nowrap;
+      width: max-content;
       transform: translateX(-50%);
       text-shadow: 0 1px 4px rgba(0,0,0,.7);
       transition: opacity .15s ease;
+    }
+    ._scf_comp_label_item:not(:last-child) {
+      margin-right: .5em;
+    }
+    ._scf_comp_label_columns {
+      left: 0;
+      width: 100vw;
+      display: grid;
+      align-items: start;
+      white-space: normal;
+      transform: none;
+    }
+    ._scf_comp_label_columns ._scf_comp_label_item {
+      box-sizing: border-box;
+      min-width: 0;
+      max-width: 100%;
+      padding: 0 6px;
+      width: fit-content;
+      justify-self: center;
+      text-align: left;
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    ._scf_comp_label_index {
+      white-space: nowrap;
+    }
+    ._scf_comp_label_columns ._scf_comp_label_name {
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
     /* ① Auto-hide chrome: fade these out after a spell of no activity. */
     ._scf_row_nav,

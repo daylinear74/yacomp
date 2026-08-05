@@ -80,7 +80,7 @@ async function readNames(page: Page, idx: number): Promise<string[]> {
   const comp = page.locator("._scf_comp");
   await comp.waitFor({ state: "visible", timeout: 5000 });
   await page.keyboard.press("Digit1");
-  const spans = page.locator("._scf_comp_label span");
+  const spans = page.locator("._scf_comp_label > ._scf_comp_label_item");
   try {
     await spans.first().waitFor({ state: "visible", timeout: 2000 });
   } catch {

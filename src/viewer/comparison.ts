@@ -191,24 +191,101 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   // as before. Rebuilt on column switches, and on row changes when (and only
   // when) per-row names exist.
   let lastLabelText: string | null = null;
+
+  function wrappedLineInfo(el: HTMLElement): { lines: number; charsInLastLine: number } {
+    const textNode = el.firstChild;
+    const text = textNode?.textContent || "";
+    if (!textNode || textNode.nodeType !== Node.TEXT_NODE || !text) {
+      return { lines: 0, charsInLastLine: 0 };
+    }
+
+    const range = document.createRange();
+    let lines = 0;
+    let lastTop: number | null = null;
+    let charsInLastLine = 0;
+    for (let start = 0; start < text.length;) {
+      const codePoint = text.codePointAt(start)!;
+      const char = String.fromCodePoint(codePoint);
+      const end = start + char.length;
+      range.setStart(textNode, start);
+      range.setEnd(textNode, end);
+      const rect = range.getClientRects()[0];
+      if (rect && rect.width) {
+        if (lastTop === null || Math.abs(rect.top - lastTop) > 0.5) {
+          lines++;
+          lastTop = rect.top;
+          charsInLastLine = 0;
+        }
+        if (!/\s/u.test(char)) charsInLastLine++;
+      }
+      start = end;
+    }
+    return { lines, charsInLastLine };
+  }
+
+  function unwrappedTextWidth(text: string): number {
+    const measure = document.createElement("span");
+    measure.textContent = text;
+    measure.style.cssText = "position:fixed;visibility:hidden;white-space:nowrap;width:max-content;max-width:none";
+    labelEl!.appendChild(measure);
+    const width = measure.getBoundingClientRect().width;
+    measure.remove();
+    return width;
+  }
+
+  /** Avoid a one- or two-character orphaned second line without shrinking
+   * genuinely long names that benefit from the column-layout wrap. */
+  function compactNearOrphanedColumnLabels(): void {
+    const items = [...labelEl!.querySelectorAll<HTMLElement>("._scf_comp_label_item")];
+    for (const item of items) item.style.fontSize = "";
+
+    for (const item of items) {
+      const index = item.querySelector<HTMLElement>("._scf_comp_label_index");
+      const name = item.querySelector<HTMLElement>("._scf_comp_label_name");
+      if (!index || !name) continue;
+      const { lines, charsInLastLine } = wrappedLineInfo(name);
+      if (lines !== 2 || charsInLastLine > 2) continue;
+
+      const style = getComputedStyle(item);
+      const contentWidth = item.clientWidth -
+        parseFloat(style.paddingLeft) -
+        parseFloat(style.paddingRight);
+      const requiredWidth = index.getBoundingClientRect().width + unwrappedTextWidth(name.textContent || "");
+      if (contentWidth <= 0 || requiredWidth <= contentWidth) continue;
+      const baseFontSize = parseFloat(style.fontSize);
+      item.style.fontSize = `${baseFontSize * Math.max(0, contentWidth - 0.5) / requiredWidth}px`;
+    }
+  }
+
   function buildLabel(col: number): void {
     const names = grid.rowNames?.[comp.currentRow] ?? grid.names ?? [];
     labelEl!.replaceChildren();
+    labelEl!.classList.remove("_scf_comp_label_columns");
+    labelEl!.style.gridTemplateColumns = "";
     // Column titles are a comparison affordance. A single-column grid is a
     // gallery viewer — plain images, no source-name banner.
     if (grid.numCols > 1) {
       for (let i = 0; i < comp.visibleCols.length; i++) {
         const visibleCol = comp.visibleCols[i];
         const n = names[visibleCol] ?? "Source " + (visibleCol + 1);
-        const label = (i + 1) + ". " + n;
         const part = document.createElement("span");
-        part.textContent = label;
+        part.className = "_scf_comp_label_item";
+        const index = document.createElement("span");
+        index.className = "_scf_comp_label_index";
+        index.textContent = (i + 1) + ". ";
+        const name = document.createElement("span");
+        name.className = "_scf_comp_label_name";
+        name.textContent = n;
+        part.append(index, name);
         if (visibleCol !== col) part.style.opacity = ".4";
         labelEl!.appendChild(part);
-        if (i < comp.visibleCols.length - 1) {
-          labelEl!.appendChild(document.createTextNode("\u00a0 "));
-        }
       }
+    }
+    const viewportWidth = Math.min(window.innerWidth, document.documentElement.clientWidth);
+    if (labelEl!.getBoundingClientRect().width > viewportWidth - 16) {
+      labelEl!.classList.add("_scf_comp_label_columns");
+      labelEl!.style.gridTemplateColumns = `repeat(${comp.visibleCols.length}, minmax(0, 1fr))`;
+      compactNearOrphanedColumnLabels();
     }
     // Row navigation can change the names themselves — surface the banner so
     // the change is visible even in auto-hidden chrome. (Column switches only

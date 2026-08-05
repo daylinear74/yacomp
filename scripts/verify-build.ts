@@ -2,7 +2,8 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 const root = join(import.meta.dir, "..");
-const outPath = join(root, "dist", "yacomp.user.js");
+const outputArg = process.argv.find((arg) => arg.startsWith("--file="));
+const outPath = join(root, outputArg?.slice("--file=".length) || "dist/yacomp.user.js");
 
 let content: string;
 try {

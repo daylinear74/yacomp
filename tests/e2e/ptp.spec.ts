@@ -155,8 +155,8 @@ test("ptp: clicking a grid image opens the viewer at that shot (default)", async
   await imgs.nth(1).click();
   await expect(page.locator("._scf_comp")).toBeVisible();
   const label = page.locator("._scf_comp_label");
-  await expect(label.locator("span", { hasText: "Source B" })).toHaveCSS("opacity", "1");
-  await expect(label.locator("span", { hasText: "Source A" })).toHaveCSS("opacity", "0.4");
+  await expect(label.locator("._scf_comp_label_item", { hasText: "Source B" })).toHaveCSS("opacity", "1");
+  await expect(label.locator("._scf_comp_label_item", { hasText: "Source A" })).toHaveCSS("opacity", "0.4");
 });
 
 test("ptp: with 'New tab', clicking a grid image opens the full image in a tab (no viewer)", async ({ page }) => {

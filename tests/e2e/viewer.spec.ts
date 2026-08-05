@@ -166,12 +166,12 @@ test("column switching with number keys", async ({ page }) => {
   // Assert the active entry moves: a "contains text" check would pass even if
   // switching were broken, since every source is always listed in the label.
   await page.keyboard.press("3");
-  await expect(label.locator("span", { hasText: "3." })).toHaveCSS("opacity", "1");
-  await expect(label.locator("span", { hasText: "1." })).toHaveCSS("opacity", "0.4");
+  await expect(label.locator("._scf_comp_label_item", { hasText: "3." })).toHaveCSS("opacity", "1");
+  await expect(label.locator("._scf_comp_label_item", { hasText: "1." })).toHaveCSS("opacity", "0.4");
 
   await page.keyboard.press("1");
-  await expect(label.locator("span", { hasText: "1." })).toHaveCSS("opacity", "1");
-  await expect(label.locator("span", { hasText: "3." })).toHaveCSS("opacity", "0.4");
+  await expect(label.locator("._scf_comp_label_item", { hasText: "1." })).toHaveCSS("opacity", "1");
+  await expect(label.locator("._scf_comp_label_item", { hasText: "3." })).toHaveCSS("opacity", "0.4");
 });
 
 test("source navigation wraps with arrow keys", async ({ page }) => {
@@ -180,16 +180,16 @@ test("source navigation wraps with arrow keys", async ({ page }) => {
   const label = page.locator("._scf_comp_label");
 
   await page.keyboard.press("ArrowRight");
-  await expect(label.locator("span", { hasText: "2." })).toHaveCSS("opacity", "1");
-  await expect(label.locator("span", { hasText: "1." })).toHaveCSS("opacity", "0.4");
+  await expect(label.locator("._scf_comp_label_item", { hasText: "2." })).toHaveCSS("opacity", "1");
+  await expect(label.locator("._scf_comp_label_item", { hasText: "1." })).toHaveCSS("opacity", "0.4");
 
   await page.keyboard.press("ArrowLeft");
-  await expect(label.locator("span", { hasText: "1." })).toHaveCSS("opacity", "1");
-  await expect(label.locator("span", { hasText: "2." })).toHaveCSS("opacity", "0.4");
+  await expect(label.locator("._scf_comp_label_item", { hasText: "1." })).toHaveCSS("opacity", "1");
+  await expect(label.locator("._scf_comp_label_item", { hasText: "2." })).toHaveCSS("opacity", "0.4");
 
   await page.keyboard.press("ArrowLeft");
-  await expect(label.locator("span", { hasText: "3." })).toHaveCSS("opacity", "1");
-  await expect(label.locator("span", { hasText: "1." })).toHaveCSS("opacity", "0.4");
+  await expect(label.locator("._scf_comp_label_item", { hasText: "3." })).toHaveCSS("opacity", "1");
+  await expect(label.locator("._scf_comp_label_item", { hasText: "1." })).toHaveCSS("opacity", "0.4");
 });
 
 test("row navigation with arrow keys", async ({ page }) => {
@@ -222,8 +222,8 @@ test("source menu hides sources and protects the last visible source", async ({ 
   await page.keyboard.press("2");
 
   const label = page.locator("._scf_comp_label");
-  await expect(label.locator("span")).toHaveCount(2);
-  await expect(label.locator("span", { hasText: "2." })).toHaveCSS("opacity", "1");
+  await expect(label.locator("._scf_comp_label_item")).toHaveCount(2);
+  await expect(label.locator("._scf_comp_label_item", { hasText: "2." })).toHaveCSS("opacity", "1");
 
   await sourceButton.click();
   await options.nth(0).locator("input").uncheck();
@@ -908,11 +908,11 @@ test("settings: mouseSwitch=false suppresses pointer-driven column switching", a
   const rightX = rowBox.x + (rowBox.width * 5) / 6;
   const midY = rowBox.y + rowBox.height / 2;
   await page.mouse.move(rightX, midY);
-  await expect(label.locator("span", { hasText: "3." })).toHaveCSS("opacity", "1");
+  await expect(label.locator("._scf_comp_label_item", { hasText: "3." })).toHaveCSS("opacity", "1");
 
   // Move back to col 1, then disable mouseSwitch and try the same motion.
   await page.keyboard.press("1");
-  await expect(label.locator("span", { hasText: "1." })).toHaveCSS("opacity", "1");
+  await expect(label.locator("._scf_comp_label_item", { hasText: "1." })).toHaveCSS("opacity", "1");
 
   await setConfig(page, { mouseSwitch: false });
   // Wiggle the pointer (browsers ignore mousemove with identical coords).
@@ -921,7 +921,7 @@ test("settings: mouseSwitch=false suppresses pointer-driven column switching", a
 
   // Give any spurious switch a chance to fire; col 1 must still be active.
   await page.waitForTimeout(150);
-  await expect(label.locator("span", { hasText: "1." })).toHaveCSS("opacity", "1");
+  await expect(label.locator("._scf_comp_label_item", { hasText: "1." })).toHaveCSS("opacity", "1");
 
   // Cleanup: restore default for any subsequent test that might share this page.
   await setConfig(page, { mouseSwitch: true });
@@ -1393,8 +1393,8 @@ test("source label is populated at open before any interaction", async ({ page }
   await openViewer(page, { config: { uiChromeMode: "always" } });
 
   const label = page.locator("._scf_comp_label");
-  await expect(label.locator("span")).toHaveCount(3);
-  await expect(label.locator("span", { hasText: "1." })).toHaveCSS("opacity", "1");
+  await expect(label.locator("._scf_comp_label_item")).toHaveCount(3);
+  await expect(label.locator("._scf_comp_label_item", { hasText: "1." })).toHaveCSS("opacity", "1");
 });
 
 test("shortcut capture swallows the trailing keyup of the captured key", async ({ page }) => {
@@ -1530,7 +1530,8 @@ async function openPerRowNamesViewer(page: Page): Promise<void> {
 test("slow.pics: the banner shows the current row's names and follows key navigation", async ({ page }) => {
   await openPerRowNamesViewer(page);
 
-  const spans = page.locator("._scf_comp_label span");
+  await expect(page.locator("._scf_comp_label")).not.toHaveClass(/_scf_comp_label_columns/);
+  const spans = page.locator("._scf_comp_label > ._scf_comp_label_item");
   await expect(spans.first()).toHaveText("1. (B) Source A");
   await expect(spans.nth(1)).toHaveText("2. (B) Encode X");
 
@@ -1544,10 +1545,98 @@ test("slow.pics: the banner shows the current row's names and follows key naviga
   await expect(spans.nth(1)).toHaveCSS("opacity", "1");
 });
 
+test("source banner centers each title block and indents wrapped names after its number", async ({ page }) => {
+  await page.setViewportSize({ width: 400, height: 720 });
+  await page.goto("/");
+  await page.evaluate(() => {
+    (window as unknown as { __yacomp: YacompTestHooks }).__yacomp.saveConfig({
+      uiChromeMode: "always",
+    });
+    (window as unknown as { collection: unknown }).collection = {
+      comparisons: [
+        {
+          key: "long-names",
+          images: Array.from({ length: 12 }, (_, i) => ({
+            name: `(B) An exceptionally long source label that must wrap to fit ${i + 1}`,
+            publicFileName: `long-name-${i + 1}.webp`,
+          })),
+        },
+        {
+          key: "short-names",
+          images: Array.from({ length: 12 }, (_, i) => ({
+            name: `(P) S${i + 1}`,
+            publicFileName: `short-name-${i + 1}.webp`,
+          })),
+        },
+      ],
+    };
+  });
+  await page.keyboard.press("KeyV");
+
+  const label = page.locator("._scf_comp_label");
+  await expect(label).toBeVisible();
+  await expect(label).toHaveCSS("font-size", "16px");
+  const items = label.locator(":scope > ._scf_comp_label_item");
+  await expect(items).toHaveCount(12);
+  const firstItem = items.first();
+  await expect(firstItem).toHaveCSS("justify-self", "center");
+  await expect(firstItem).toHaveCSS("text-align", "left");
+  await expect(firstItem.locator("._scf_comp_label_index")).toHaveText("1.");
+  const firstName = firstItem.locator("._scf_comp_label_name");
+  await expect(firstName).toHaveText("(B) An exceptionally long source label that must wrap to fit 1");
+  await expect(firstName).toHaveCSS("overflow-wrap", "anywhere");
+  expect(await firstName.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThan(16);
+
+  await page.keyboard.press("ArrowDown");
+  await expect(label.locator("._scf_comp_label_item").first()).toHaveText("1. (P) S1");
+  await expect(label).toHaveCSS("font-size", "16px");
+});
+
+test("source banner compacts a one- or two-character orphan but keeps a longer second line", async ({ page }) => {
+  await page.setViewportSize({ width: 400, height: 720 });
+  await page.goto("/");
+  await page.evaluate(() => {
+    (window as unknown as { __yacomp: YacompTestHooks }).__yacomp.saveConfig({
+      uiChromeMode: "always",
+    });
+    (window as unknown as { collection: unknown }).collection = {
+      comparisons: [
+        {
+          key: "near-orphan",
+          images: Array.from({ length: 4 }, (_, i) => ({
+            name: "12345678",
+            publicFileName: `near-orphan-${i + 1}.webp`,
+          })),
+        },
+        {
+          key: "long-tail",
+          images: Array.from({ length: 4 }, (_, i) => ({
+            name: "123456789",
+            publicFileName: `long-tail-${i + 1}.webp`,
+          })),
+        },
+      ],
+    };
+  });
+  await page.keyboard.press("KeyV");
+
+  const label = page.locator("._scf_comp_label");
+  const firstItem = label.locator("._scf_comp_label_item").first();
+  const firstName = firstItem.locator("._scf_comp_label_name");
+  await expect(label).toHaveClass(/_scf_comp_label_columns/);
+  await expect(firstItem).not.toHaveCSS("font-size", "16px");
+  expect(await firstName.evaluate((el) => el.getBoundingClientRect().height)).toBeLessThan(16);
+
+  await page.keyboard.press("ArrowDown");
+  await expect(firstName).toHaveText("123456789");
+  await expect(firstItem).toHaveCSS("font-size", "16px");
+  expect(await firstName.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThan(16);
+});
+
 test("slow.pics: scroll-driven row changes update the banner too", async ({ page }) => {
   await openPerRowNamesViewer(page);
 
-  const spans = page.locator("._scf_comp_label span");
+  const spans = page.locator("._scf_comp_label > ._scf_comp_label_item");
   await expect(spans.first()).toHaveText("1. (B) Source A");
 
   // Plain-wheel to the bottom: the scroll sync lands on the last row.

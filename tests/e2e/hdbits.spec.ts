@@ -137,7 +137,7 @@ async function readGridNames(page: Page, linkIndex: number): Promise<string[]> {
   // The label is populated at open; pressing "1" additionally pins the first
   // source active so the assertions below read a deterministic state.
   await page.keyboard.press("Digit1");
-  const spans = page.locator("._scf_comp_label span");
+  const spans = page.locator("._scf_comp_label > ._scf_comp_label_item");
   await expect(spans.first()).toBeVisible();
   const raw = await spans.allTextContents();
   const names = raw
@@ -565,7 +565,7 @@ test("hdbits: manual slow.pics columns=2 still builds a comparison", async ({ pa
   await expect(page.locator("._scf_comp")).toBeVisible();
   await expect(page.locator("._scf_comp_row")).toHaveCount(4);
   await page.keyboard.press("Digit1");
-  const names = (await page.locator("._scf_comp_label span").allTextContents())
+  const names = (await page.locator("._scf_comp_label > ._scf_comp_label_item").allTextContents())
     .map((t) => t.replace(/^\d+\.\s*/, "").trim())
     .filter(Boolean);
   expect(names).toEqual(["Source 1", "Source 2"]);
@@ -1028,7 +1028,7 @@ test("hdbits: clicking a comparison image opens the viewer at that shot", async 
   await page.locator('img[src*="cB0"]').click();
   await expect(page.locator("._scf_comp")).toBeVisible();
   const label = page.locator("._scf_comp_label");
-  await expect(label.locator("span", { hasText: "Encode" })).toHaveCSS("opacity", "1");
+  await expect(label.locator("._scf_comp_label_item", { hasText: "Encode" })).toHaveCSS("opacity", "1");
 });
 
 test("hdbits: the opened row reserves its aspect from the loaded thumbnail (no 16/9 reflow)", async ({ page }) => {
@@ -1095,7 +1095,7 @@ test("hdbits: clicking an image in a slow.pics-rescued comparison opens the view
   await page.locator('img[src*="/g02.jpg"]').click();
   await expect(page.locator("._scf_comp")).toBeVisible();
   const label = page.locator("._scf_comp_label");
-  await expect(label.locator("span", { hasText: "Geek" }).first()).toHaveCSS("opacity", "1");
+  await expect(label.locator("._scf_comp_label_item", { hasText: "Geek" }).first()).toHaveCSS("opacity", "1");
 });
 
 test("hdbits: closing the viewer restores the page scroll position", async ({ page }) => {
@@ -1156,7 +1156,7 @@ test("hdbits: forum manual custom comparison builds a Source N grid from selecte
   await expect.poll(() => [...requested].some((url) => url.includes("https://i.hdbits.org/manual01.png"))).toBe(true);
   expect([...requested].some((url) => url.includes("https://img.hdbits.org/manual01"))).toBe(false);
   await page.keyboard.press("Digit1");
-  const names = (await page.locator("._scf_comp_label span").allTextContents())
+  const names = (await page.locator("._scf_comp_label > ._scf_comp_label_item").allTextContents())
     .map((t) => t.replace(/^\d+\.\s*/, "").trim())
     .filter(Boolean);
   expect(names).toEqual(["Source 1", "Source 2"]);
@@ -1313,7 +1313,7 @@ test("hdbits: forum manual — clicking a label fills the column names and count
 
   await expect(page.locator("._scf_comp")).toBeVisible();
   await page.keyboard.press("Digit1");
-  const names = (await page.locator("._scf_comp_label span").allTextContents())
+  const names = (await page.locator("._scf_comp_label > ._scf_comp_label_item").allTextContents())
     .map((t) => t.replace(/^\d+\.\s*/, "").trim())
     .filter(Boolean);
   expect(names).toEqual(["Source", "Encode"]);
@@ -1454,7 +1454,7 @@ test("hdbits: saved Over the Garden Wall forum page uses the current manual fall
   await panel.locator("._scf_manual_build").click();
   await expect(page.locator("._scf_comp")).toBeVisible();
   await page.keyboard.press("Digit1");
-  const names = (await page.locator("._scf_comp_label span").allTextContents())
+  const names = (await page.locator("._scf_comp_label > ._scf_comp_label_item").allTextContents())
     .map((t) => t.replace(/^\d+\.\s*/, "").trim())
     .filter(Boolean);
   expect(names).toEqual(["Source 1", "Source 2", "Source 3", "Source 4", "Source 5", "Source 6"]);
@@ -1543,7 +1543,7 @@ test("hdbits: a single-column gallery viewer shows no source-title banner", asyn
 
   // Column titles are a comparison affordance — a gallery is plain images.
   // Neither opening nor a digit press may populate the banner.
-  await expect(page.locator("._scf_comp_label span")).toHaveCount(0);
+  await expect(page.locator("._scf_comp_label > ._scf_comp_label_item")).toHaveCount(0);
   await page.keyboard.press("Digit1");
-  await expect(page.locator("._scf_comp_label span")).toHaveCount(0);
+  await expect(page.locator("._scf_comp_label > ._scf_comp_label_item")).toHaveCount(0);
 });
