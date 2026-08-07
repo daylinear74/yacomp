@@ -182,8 +182,19 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   bottomSpacer.className = "_scf_scroll_spacer";
   compDiv.appendChild(topSpacer);
 
+  /** The scroll container's content box ends before a classic scrollbar.
+   * `clientWidth` is in CSS pixels, so it already reflects the browser's
+   * scrollbar width at the current DPI and zoom level. */
+  function comparisonViewportWidth(): number {
+    return Math.max(1, compDiv.clientWidth || document.documentElement.clientWidth || window.innerWidth);
+  }
+
   function pointerColumnForEvent(e: MouseEvent): number {
-    return pointerVisibleColumn(e.clientX, window.innerWidth, comp.visibleCols);
+    return pointerVisibleColumn(
+      e.clientX - compDiv.getBoundingClientRect().left,
+      comparisonViewportWidth(),
+      comp.visibleCols,
+    );
   }
 
   // The source-title banner. With per-row names (grid.rowNames — slow.pics)
@@ -191,6 +202,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   // as before. Rebuilt on column switches, and on row changes when (and only
   // when) per-row names exist.
   let lastLabelText: string | null = null;
+  let labelViewportWidth = 0;
 
   function wrappedLineInfo(el: HTMLElement): { lines: number; charsInLastLine: number } {
     const textNode = el.firstChild;
@@ -262,6 +274,9 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     labelEl!.replaceChildren();
     labelEl!.classList.remove("_scf_comp_label_columns");
     labelEl!.style.gridTemplateColumns = "";
+    const viewportWidth = comparisonViewportWidth();
+    labelViewportWidth = viewportWidth;
+    labelEl!.style.setProperty("--_scf_comp_viewport_width", `${viewportWidth}px`);
     // Column titles are a comparison affordance. A single-column grid is a
     // gallery viewer — plain images, no source-name banner.
     if (grid.numCols > 1) {
@@ -281,7 +296,6 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
         labelEl!.appendChild(part);
       }
     }
-    const viewportWidth = Math.min(window.innerWidth, document.documentElement.clientWidth);
     if (labelEl!.getBoundingClientRect().width > viewportWidth - 16) {
       labelEl!.classList.add("_scf_comp_label_columns");
       labelEl!.style.gridTemplateColumns = `repeat(${comp.visibleCols.length}, minmax(0, 1fr))`;
@@ -576,7 +590,10 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     navMap.updateNavMap();
   });
 
-  const onResize = () => comp.updateScrollSpacers?.();
+  const onResize = () => {
+    comp.updateScrollSpacers?.();
+    if (comparisonViewportWidth() !== labelViewportWidth) buildLabel(comp.currentCol);
+  };
   let spacerResizeObserver: ResizeObserver | null = null;
   if (typeof ResizeObserver !== "undefined") {
     spacerResizeObserver = new ResizeObserver(onResize);
@@ -591,6 +608,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   // observer's handler to avoid a resize→refit→resize loop.
   const onWindowResize = () => {
     comp.updateScrollSpacers?.();
+    buildLabel(comp.currentCol);
     refit1to1();
   };
   window.addEventListener("resize", onWindowResize);
@@ -650,6 +668,10 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   document.body.style.overflow = "hidden";
   shadowRoot.appendChild(compDiv);
   comp.updateScrollSpacers();
+  // The initial label is built before the viewer attaches so it can render
+  // immediately. Rebuild after attachment to pick up this container's actual
+  // content width, including any reserved scrollbar gutter.
+  buildLabel(comp.currentCol);
 
   addComp(comp);
   if (fillCanvasEnabled) applyFillCanvas();

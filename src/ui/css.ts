@@ -239,7 +239,7 @@ export function injectCSS(): void {
     }
     ._scf_comp_label_columns {
       left: 0;
-      width: 100vw;
+      width: var(--_scf_comp_viewport_width, 100vw);
       display: grid;
       align-items: start;
       white-space: normal;

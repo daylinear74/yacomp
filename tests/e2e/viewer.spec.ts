@@ -1633,6 +1633,60 @@ test("source banner compacts a one- or two-character orphan but keeps a longer s
   expect(await firstName.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThan(16);
 });
 
+test("source banner and hover columns end before the comparison scrollbar gutter", async ({ page }) => {
+  await page.setViewportSize({ width: 400, height: 720 });
+  await page.goto("/");
+  await page.evaluate(() => {
+    (window as unknown as { __yacomp: YacompTestHooks }).__yacomp.saveConfig({
+      uiChromeMode: "always",
+    });
+    (window as unknown as { collection: unknown }).collection = {
+      comparisons: [{
+        key: "scrollbar-gutter",
+        images: Array.from({ length: 12 }, (_, i) => ({
+          name: `(B) A long label that needs its own source column ${i + 1}`,
+          publicFileName: `scrollbar-gutter-${i + 1}.webp`,
+        })),
+      }],
+    };
+  });
+  await page.keyboard.press("KeyV");
+
+  const label = page.locator("._scf_comp_label");
+  const comp = page.locator("._scf_comp");
+  await expect(label).toHaveClass(/_scf_comp_label_columns/);
+  // A border-box border is a deterministic stand-in for a browser-reserved
+  // scrollbar gutter: it reduces the scroll container's actual content width.
+  await comp.evaluate((el) => {
+    el.style.boxSizing = "border-box";
+    el.style.borderRight = "23px solid transparent";
+    window.dispatchEvent(new Event("resize"));
+  });
+
+  await expect.poll(() => label.evaluate((labelEl) => {
+    const root = labelEl.getRootNode() as ShadowRoot;
+    const compEl = root.querySelector<HTMLElement>("._scf_comp")!;
+    const labelRect = labelEl.getBoundingClientRect();
+    const compRect = compEl.getBoundingClientRect();
+    return {
+      gutter: compEl.offsetWidth - compEl.clientWidth,
+      labelRight: labelRect.right,
+      contentRight: compRect.left + compEl.clientWidth,
+      contentWidth: compEl.clientWidth,
+      labelWidth: labelRect.width,
+    };
+  })).toEqual(expect.objectContaining({ gutter: 23, labelWidth: 377, labelRight: 377, contentRight: 377 }));
+
+  const metrics = await label.evaluate((labelEl) => {
+    const root = labelEl.getRootNode() as ShadowRoot;
+    const compEl = root.querySelector<HTMLElement>("._scf_comp")!;
+    return { contentWidth: compEl.clientWidth };
+  });
+  const hoverX = metrics.contentWidth * 11 / 12 + 1;
+  await page.mouse.move(hoverX, 200);
+  await expect(label.locator("._scf_comp_label_item").last()).toHaveCSS("opacity", "1");
+});
+
 test("slow.pics: scroll-driven row changes update the banner too", async ({ page }) => {
   await openPerRowNamesViewer(page);
 
