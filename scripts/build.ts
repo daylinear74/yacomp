@@ -3,12 +3,17 @@ import { basename, dirname, join, relative } from "path";
 
 const root = join(import.meta.dir, "..");
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf-8"));
-const banner = readFileSync(join(root, "meta", "banner.txt"), "utf-8")
-  .trimEnd()
-  .replace("__VERSION__", pkg.version);
-const watch = process.argv.includes("--watch");
 const outputArg = process.argv.find((arg) => arg.startsWith("--outfile="));
 const outPath = join(root, outputArg?.slice("--outfile=".length) || "dist/yacomp.user.js");
+const testTimestamp = /^yacomp-test-(\d{8}-\d{6})\.user\.js$/.exec(basename(outPath))?.[1];
+const banner = readFileSync(join(root, "meta", "banner.txt"), "utf-8")
+  .trimEnd()
+  .replace("__VERSION__", pkg.version)
+  .replace(
+    /^\/\/ @name\s+(.+)$/m,
+    (_match, name) => `// @name         ${name}${testTimestamp ? ` [${testTimestamp}]` : ""}`,
+  );
+const watch = process.argv.includes("--watch");
 
 async function build() {
   const result = await Bun.build({
