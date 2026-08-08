@@ -10,7 +10,7 @@ import { updateHUD } from "../ui/hud";
 import {
   defaultZoomMode as cfgZoomMode,
   fillCanvasDefault, navMapDefault, bgLoadDefault, lazyLoadMargin,
-  mouseSwitch as cfgMouseSwitch,
+  mouseSwitch as cfgMouseSwitch, sourceTitleLayout as cfgSourceTitleLayout,
 } from "../config";
 import {
   setZoomMode, setZoomWidth,
@@ -296,7 +296,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
         labelEl!.appendChild(part);
       }
     }
-    if (labelEl!.getBoundingClientRect().width > viewportWidth - 16) {
+    if (cfgSourceTitleLayout() === "filled") {
       labelEl!.classList.add("_scf_comp_label_columns");
       labelEl!.style.gridTemplateColumns = `repeat(${comp.visibleCols.length}, minmax(0, 1fr))`;
       compactNearOrphanedColumnLabels();
@@ -463,6 +463,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     topSpacer.style.height = spacers.top + "px";
     bottomSpacer.style.height = spacers.bottom + "px";
   };
+  comp.updateTitleLayout = () => buildLabel(comp.currentCol);
 
   compDiv.addEventListener("mousemove", (e) => {
     if (drag.active || !cfgMouseSwitch()) return;

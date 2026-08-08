@@ -140,6 +140,10 @@ Settings persist via `GM_setValue` and are scoped per userscript manager.
 - **Hover to switch source** — when on, moving the cursor across a row switches
   the visible source by horizontal position; when off, switching needs the
   keyboard or source menu. Default on.
+- **Title layout** (`Dense` / `Filled`) — `Dense` centers the source titles
+  together at the top. `Filled` gives every visible source an equal-width title
+  column aligned with the mouse-switch regions, while keeping each title's text
+  left-aligned inside its centered block. Default `Dense`.
 - **Close button position** (`Auto` / `Left` / `Right`) — `Auto` places it on the
   left on macOS and on the right elsewhere, matching native window controls.
 

@@ -927,6 +927,48 @@ test("settings: mouseSwitch=false suppresses pointer-driven column switching", a
   await setConfig(page, { mouseSwitch: true });
 });
 
+test("settings: title layout sits under Mouse switch and updates an open viewer", async ({ page }) => {
+  await openViewer(page, { config: { uiChromeMode: "always", sourceTitleLayout: "dense" } });
+  const label = page.locator("._scf_comp_label");
+  await expect(label).not.toHaveClass(/_scf_comp_label_columns/);
+  const denseGeometry = await label.evaluate((labelEl) => {
+    const labelRect = labelEl.getBoundingClientRect();
+    return {
+      centerDelta: (labelRect.left + labelRect.width / 2) - window.innerWidth / 2,
+      labelWidth: labelRect.width,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  expect(Math.abs(denseGeometry.centerDelta)).toBeLessThan(1);
+  expect(denseGeometry.labelWidth).toBeLessThan(denseGeometry.viewportWidth);
+
+  await openSettingsModal(page);
+  const titleRow = page.locator("._scf_settings_row").filter({
+    has: page.locator("._scf_settings_label", { hasText: "Title layout" }),
+  });
+  await expect(titleRow).toHaveCount(1);
+  expect(await titleRow.evaluate((row) =>
+    row.previousElementSibling?.querySelector("._scf_settings_label")?.firstChild?.textContent?.trim()
+  )).toBe("Mouse switch");
+  await expect(titleRow.getByRole("button", { name: "Dense", exact: true })).toHaveClass(/_scf_selected/);
+
+  await titleRow.getByRole("button", { name: "Filled", exact: true }).click();
+  await expect(label).toHaveClass(/_scf_comp_label_columns/);
+  await expect(titleRow.getByRole("button", { name: "Filled", exact: true })).toHaveClass(/_scf_selected/);
+  const filledCenterDeltas = await label.locator("._scf_comp_label_item").evaluateAll((items) => {
+    const labelRect = items[0].parentElement!.getBoundingClientRect();
+    return items.map((item, i) => {
+      const rect = item.getBoundingClientRect();
+      const expectedCenter = labelRect.left + labelRect.width * (i + 0.5) / items.length;
+      return rect.left + rect.width / 2 - expectedCenter;
+    });
+  });
+  for (const delta of filledCenterDeltas) expect(Math.abs(delta)).toBeLessThan(1);
+
+  await titleRow.getByRole("button", { name: "Dense", exact: true }).click();
+  await expect(label).not.toHaveClass(/_scf_comp_label_columns/);
+});
+
 // ── ① Auto-hide UI: the three chrome modes ────────────────────────────────────
 
 const CHROME = {
@@ -1545,12 +1587,13 @@ test("slow.pics: the banner shows the current row's names and follows key naviga
   await expect(spans.nth(1)).toHaveCSS("opacity", "1");
 });
 
-test("source banner centers each title block and indents wrapped names after its number", async ({ page }) => {
+test("filled source banner centers each title block and indents wrapped names after its number", async ({ page }) => {
   await page.setViewportSize({ width: 400, height: 720 });
   await page.goto("/");
   await page.evaluate(() => {
     (window as unknown as { __yacomp: YacompTestHooks }).__yacomp.saveConfig({
       uiChromeMode: "always",
+      sourceTitleLayout: "filled",
     });
     (window as unknown as { collection: unknown }).collection = {
       comparisons: [
@@ -1598,6 +1641,7 @@ test("source banner compacts a one- or two-character orphan but keeps a longer s
   await page.evaluate(() => {
     (window as unknown as { __yacomp: YacompTestHooks }).__yacomp.saveConfig({
       uiChromeMode: "always",
+      sourceTitleLayout: "filled",
     });
     (window as unknown as { collection: unknown }).collection = {
       comparisons: [
@@ -1611,7 +1655,7 @@ test("source banner compacts a one- or two-character orphan but keeps a longer s
         {
           key: "long-tail",
           images: Array.from({ length: 4 }, (_, i) => ({
-            name: "123456789",
+            name: "12345678901",
             publicFileName: `long-tail-${i + 1}.webp`,
           })),
         },
@@ -1628,7 +1672,7 @@ test("source banner compacts a one- or two-character orphan but keeps a longer s
   expect(await firstName.evaluate((el) => el.getBoundingClientRect().height)).toBeLessThan(16);
 
   await page.keyboard.press("ArrowDown");
-  await expect(firstName).toHaveText("123456789");
+  await expect(firstName).toHaveText("12345678901");
   await expect(firstItem).toHaveCSS("font-size", "16px");
   expect(await firstName.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThan(16);
 });
@@ -1639,6 +1683,7 @@ test("source banner and hover columns end before the comparison scrollbar gutter
   await page.evaluate(() => {
     (window as unknown as { __yacomp: YacompTestHooks }).__yacomp.saveConfig({
       uiChromeMode: "always",
+      sourceTitleLayout: "filled",
     });
     (window as unknown as { collection: unknown }).collection = {
       comparisons: [{

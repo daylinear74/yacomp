@@ -45,6 +45,8 @@ export interface Comp {
   // Rebuild the source-title banner for the current row+column (per-row names
   // make its content row-dependent). Called wherever currentRow changes.
   updateLabel?: () => void;
+  // Rebuild the banner after the dense/filled title-layout setting changes.
+  updateTitleLayout?: () => void;
   updateScrollSpacers?: () => void;
   updateNavMap: () => void;
   // Auto-hide chrome hooks (① auto-hide UI). Reveal the source label / row nav

@@ -151,6 +151,17 @@ const GROUPS: SettingGroup[] = [
       },
       {
         type: "radio",
+        key: "sourceTitleLayout",
+        label: "Title layout",
+        tooltip: "Dense keeps all source titles centered together at the top. Filled gives every visible source an equal-width column aligned with mouse switching; each title block is centered while its text stays left-aligned.",
+        options: [
+          { label: "Dense", value: "dense" },
+          { label: "Filled", value: "filled" },
+        ],
+        onSave: () => { for (const c of activeComps) c.updateTitleLayout?.(); },
+      },
+      {
+        type: "radio",
         key: "closeBtnPosition",
         label: "Close button",
         tooltip: "Where the viewer's close button sits. Auto picks left on macOS and right elsewhere. Hide removes the button — close via Esc.",
@@ -870,6 +881,7 @@ function applyImportedConfig(renderers: Renderer[]): void {
     c.syncAutoHide?.();
     c.updateFillCanvasBtn?.();
     c.updateSourceMenu?.();
+    c.updateTitleLayout?.();
   }
   refreshPTPGridToggles();
 }
@@ -1040,7 +1052,10 @@ export function openSettings(): void {
   resetBtn.textContent = "Reset Defaults";
   resetBtn.addEventListener("click", () => {
     resetConfig();
-    for (const c of activeComps) c.updateCloseBtn?.();
+    for (const c of activeComps) {
+      c.updateCloseBtn?.();
+      c.updateTitleLayout?.();
+    }
     for (const r of renderers) r();
   });
 

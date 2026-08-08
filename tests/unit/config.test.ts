@@ -24,6 +24,7 @@ import {
   resetConfig,
   saveConfig,
   siteEnabled,
+  sourceTitleLayout,
   validate,
   zoomScaleFactor,
 } from "../../src/config";
@@ -79,6 +80,11 @@ describe("validate — discriminated unions", () => {
     expect(validate({ uiChromeMode: "always" }).uiChromeMode).toBe("always");
     expect(validate({ uiChromeMode: "autohide" }).uiChromeMode).toBe("autohide");
     expect(validate({ uiChromeMode: "nope" }).uiChromeMode).toBe(DEFAULTS.uiChromeMode);
+  });
+  test("sourceTitleLayout only accepts dense/filled", () => {
+    expect(validate({ sourceTitleLayout: "dense" }).sourceTitleLayout).toBe("dense");
+    expect(validate({ sourceTitleLayout: "filled" }).sourceTitleLayout).toBe("filled");
+    expect(validate({ sourceTitleLayout: "auto" }).sourceTitleLayout).toBe(DEFAULTS.sourceTitleLayout);
   });
   test("ptpGridImageSize only accepts thumbnail/full", () => {
     expect(validate({ ptpGridImageSize: "full" }).ptpGridImageSize).toBe("full");
@@ -287,7 +293,7 @@ describe("migrate", () => {
     expect(migrated.filterCycle).toEqual(["luma", "lumaFull", "chromaFull"]);
   });
   test("current-version config is left alone", () => {
-    const raw = { v: 4, bcStep: 0.1 };
+    const raw = { v: 5, bcStep: 0.1 };
     const migrated = migrate({ ...raw });
     expect(migrated).toEqual(raw);
   });
@@ -317,13 +323,15 @@ describe("saveConfig / resetConfig — in-memory mutation", () => {
     expect(filterCycle()).toEqual(["luma", "chroma"]);
   });
   test("resetConfig restores every field to DEFAULTS", () => {
-    saveConfig({ bcStep: 0.1, mouseSwitch: false, gammaCycle: [] });
+    saveConfig({ bcStep: 0.1, mouseSwitch: false, sourceTitleLayout: "filled", gammaCycle: [] });
     expect(bcStep()).toBe(0.1);
     expect(mouseSwitch()).toBe(false);
+    expect(sourceTitleLayout()).toBe("filled");
     expect(gammaCycle()).toEqual([]);
     resetConfig();
     expect(bcStep()).toBe(DEFAULTS.bcStep);
     expect(mouseSwitch()).toBe(DEFAULTS.mouseSwitch);
+    expect(sourceTitleLayout()).toBe(DEFAULTS.sourceTitleLayout);
     expect(gammaCycle()).toEqual([...GAMMA_PRESET_IDS]);
   });
 });

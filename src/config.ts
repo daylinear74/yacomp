@@ -48,6 +48,10 @@ export interface YacompConfig {
   zoomScaleFactor: number;
   lazyLoadMargin: number;
   mouseSwitch: boolean;
+  // Source-title banner layout. Dense keeps the titles together at the top;
+  // filled gives each visible source the same horizontal slice used by mouse
+  // switching so the title and hover targets line up.
+  sourceTitleLayout: "dense" | "filled";
   zoomPercentBase: "original" | "fit";
   // What "1:1" maps one source pixel to: a physical device pixel (HiDPI-aware —
   // a 4K shot fills a 1080p@2x screen) or a CSS pixel (the browser's logical 100%,
@@ -89,7 +93,7 @@ export interface YacompConfig {
 }
 
 const STORAGE_KEY = "yacomp_config";
-const CURRENT_VERSION = 4;
+const CURRENT_VERSION = 5;
 
 const ALL_SITES_ENABLED = Object.fromEntries(
   SITE_KEYS.map((k) => [k, true]),
@@ -106,6 +110,7 @@ export const DEFAULTS: Readonly<YacompConfig> = {
   zoomScaleFactor: 1.25,
   lazyLoadMargin: 200,
   mouseSwitch: true,
+  sourceTitleLayout: "dense" as const,
   zoomPercentBase: "original",
   oneToOnePixels: "logical" as const,
   verboseZoom: false,
@@ -210,6 +215,10 @@ export function validate(raw: Record<string, unknown>): YacompConfig {
       typeof raw.mouseSwitch === "boolean"
         ? raw.mouseSwitch
         : DEFAULTS.mouseSwitch,
+    sourceTitleLayout:
+      raw.sourceTitleLayout === "dense" || raw.sourceTitleLayout === "filled"
+        ? raw.sourceTitleLayout
+        : DEFAULTS.sourceTitleLayout,
     zoomPercentBase:
       raw.zoomPercentBase === "original" || raw.zoomPercentBase === "fit"
         ? raw.zoomPercentBase
@@ -309,6 +318,7 @@ export function toastDuration(): number { return config.toastDuration; }
 export function zoomScaleFactor(): number { return config.zoomScaleFactor; }
 export function lazyLoadMargin(): number { return config.lazyLoadMargin; }
 export function mouseSwitch(): boolean { return config.mouseSwitch; }
+export function sourceTitleLayout(): "dense" | "filled" { return config.sourceTitleLayout; }
 export function zoomPercentBase(): "original" | "fit" { return config.zoomPercentBase; }
 export function oneToOnePixels(): "device" | "logical" { return config.oneToOnePixels; }
 export function verboseZoom(): boolean { return config.verboseZoom; }

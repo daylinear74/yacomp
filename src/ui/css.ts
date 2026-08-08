@@ -249,6 +249,7 @@ export function injectCSS(): void {
       box-sizing: border-box;
       min-width: 0;
       max-width: 100%;
+      margin-right: 0;
       padding: 0 6px;
       width: fit-content;
       justify-self: center;
