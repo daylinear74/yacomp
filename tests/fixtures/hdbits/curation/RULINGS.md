@@ -29,6 +29,7 @@ fixture in `tests/fixtures/hdbits/cases/` (full DOM through `setupHDBitsCore`).
 | prose guard (sentence + comma-prose) | ✓ | 093 2007, 098 3040 |
 | footer label incl. "Slow.pics" (dot) | ✓ | 007, 094 2503 |
 | explicit vs/\| ≠ comma/dash | ✓ | — |
+| bullet-list line is body text, not a title | — | 204 205 849948 |
 | FlagCounter sig image excluded | — | 092 2927 |
 | label divisibility / OP-H1 fall-through | — | 097 1261, 104 2625 |
 | H1 title only for the OP, not replies | — | 101 OP / 102 reply |
@@ -204,6 +205,26 @@ between a vs-heading and the image run severs the association, the same way
 `leadingBoldLabelInfo` already nulls out on a barrier after its candidate
 bolds. With no other title, the shots fall back to the 1-wide "Show viewer"
 gallery (838405). Iconic fixture 194.
+
+### A bullet-list line is body text, never a column title (849948)
+`The Devils` 35mm scan (torrent 849948). The description ends with a bullet
+list of what was re-synced from a DVD, then three screenshots:
+
+    - English SDH subtitles
+    - Audio commentary with Ken Russell, Mark Kermode, Michael Bradsell & Paul Joyce
+
+`collectGroups` took that last line as the group's label, `hasVsOrPipe` accepted
+it (a comma counts), and `buildMultiCompGrids` split it into three "sources"
+that divide three shots exactly. The line sat inside a `<pre>`, but a
+`<pre>`-only guard was verified NOT to be the fix: rendered as plain
+`<br>`-separated text — with or without the quote block above it — the same
+line misdetects identically, because nothing in the label path consults the
+pre-image barriers. Ruling: a line that opens with a bullet marker
+(`-`/`–`/`—`/`•`/`*`/`+` plus a space) is body text and cannot be column
+titles, UNLESS it still carries an explicit vs/`|` separator — a poster who
+bullets a real comparison heading keeps it. Comma/dash-only bullets die. The
+guard lives in `asColumnTitles`, the single column-title predicate, so every
+strategy inherits it. Iconic fixtures 204 (`<pre>`) and 205 (plain text).
 
 ### The barrier span must cover a WRAPPED image block too (847412)
 `Tabi to hibi` remux (torrent 847412). The description opens with the release

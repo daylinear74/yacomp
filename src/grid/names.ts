@@ -306,6 +306,15 @@ function stackedBitrateTitleNames(text: string): string[] | null {
   return null;
 }
 
+// A bullet-list item ("- English SDH subtitles", "• Audio commentary with …").
+// Notes lists sit right above the screenshots on plenty of descriptions, and a
+// bullet that happens to enumerate people or extras with commas would otherwise
+// split into "column titles" that divide the shot count by accident (849948).
+// A bullet is body text, not a heading — unless it still carries an EXPLICIT
+// vs/| comparison separator, where the line really is a titled comparison that
+// the poster merely bulleted.
+const BULLET_LINE_RE = /^[-–—•*+]\s+\S/;
+
 /** THE column-title predicate (MODEL.md). Turn one candidate line into validated
  *  column titles, or null. This is the single place that answers "is this a real
  *  comparison title?" — short, has an explicit separator, splits into
@@ -326,6 +335,7 @@ export function asColumnTitles(text: string): string[] | null {
   if (stacked) return stacked;
   const t = columnTitleCandidateText(raw).trim();
   if (!t) return null;
+  if (BULLET_LINE_RE.test(t) && !hasExplicitComparison(t)) return null;
   // Whole-line prose check BEFORE splitting: when the separator is a comma,
   // splitting removes the comma-connector signal from each part, so the
   // per-part check below would miss it (0117). Mask the "v."/"vs." separator
