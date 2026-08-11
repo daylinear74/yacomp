@@ -230,17 +230,24 @@ function addManualColumnControlFromCells(
   select.value = "1";
   const columnsText = document.createTextNode(" column");
   const link = makeShowComparisonLink("Show Viewer");
-  const submit = () => {
+  const submit = (initialIndex?: number) => {
     const cols = Number.parseInt(select.value, 10);
     if (!(cols >= 1) || cols > cells.length) return;
     const grid = gridFromCells(cells, cols, anchor);
     if (!grid) return;
+    const positioned = initialIndex === undefined
+      ? grid
+      : {
+          ...grid,
+          initialRow: Math.floor(initialIndex / cols),
+          initialCol: initialIndex % cols,
+        };
     select.blur();
     if (cols === 1) {
-      openWithDummyWrapper(grid);
+      openWithDummyWrapper(positioned);
       return;
     }
-    buildComparison(grid, container, link);
+    buildComparison(positioned, container, link);
   };
   select.addEventListener("change", () => {
     columnsText.data = select.value === "1" ? " column" : " columns";
@@ -253,6 +260,14 @@ function addManualColumnControlFromCells(
   link.addEventListener("click", (e) => {
     e.preventDefault();
     submit();
+  });
+  images.forEach((img, idx) => {
+    onImageClickOpen(
+      img,
+      (img.closest("a") as HTMLAnchorElement | null) ?? undefined,
+      () => submit(idx),
+      true,
+    );
   });
   wrap.append(link, " with ", select, columnsText);
   insertNodeBeforeImageRun(images, wrap, container);
@@ -294,33 +309,34 @@ function downgradeTrailingTorrentComparisonLinks(): void {
     link.remove();
     const cells = images.map(forumManualCell);
     addManualColumnControlFromCells(cells, images[0], parent, images);
-    images.forEach((img, idx) => {
-      onImageClickOpen(img, (img.closest("a") as HTMLAnchorElement | null) ?? undefined, (e) => {
-        e.preventDefault();
-        openImageViewer(cells, images[0], idx);
-      });
-    });
   }
 }
 
 // One image-click handler per on-page image, across both the getGrids and
 // slow.pics-rescue paths.
 const wiredImages = new WeakSet<HTMLImageElement>();
+const imageOpeners = new WeakMap<HTMLImageElement, (e: Event) => void>();
 
 function onImageClickOpen(
   img: HTMLImageElement | undefined,
   anchor: HTMLAnchorElement | undefined,
   open: (e: Event) => void,
+  replace = false,
 ): void {
-  if (!img || wiredImages.has(img)) return;
+  if (!img) return;
+  if (wiredImages.has(img)) {
+    if (replace) imageOpeners.set(img, open);
+    return;
+  }
   wiredImages.add(img);
+  imageOpeners.set(img, open);
   (anchor ?? img).addEventListener(
     "click",
     (e) => {
       if (hdbitsImageClick() !== "viewer") return; // leave HDBits' native behavior
       e.preventDefault();
       e.stopPropagation();
-      open(e);
+      imageOpeners.get(img)?.(e);
     },
     true, // capture, to beat any page-level image handler
   );
@@ -646,12 +662,6 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
   if (!container) return;
   if (isTorrentDescriptionContainer(container) && !hasLocalSlowPicsColumnNames(images, spLink, container)) {
     addManualColumnControl(images, spLink, container);
-    const cells = images.map(forumManualCell);
-    images.forEach((img, idx) => {
-      onImageClickOpen(img, (img.closest("a") as HTMLAnchorElement | null) ?? undefined, () => {
-        openImageViewer(cells, spLink, idx);
-      });
-    });
     return;
   }
   const link = makeShowComparisonLink();

@@ -314,6 +314,26 @@ test("hdbits: plain torrent Screens blocks get Show Viewer and open as a 1-wide 
   await expect(page.locator("._scf_comp_row")).toHaveCount(4);
 });
 
+test("hdbits: a manual column choice also governs image-click launch and clicked source", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/176-torrent-desc-slowpics-mismatch-manual-viewer");
+  await waitForHdbitsReady(page);
+
+  const select = page.locator("select._scf_column_select");
+  await select.selectOption("4");
+  // g176c is row 0, column 2 in the selected 4-wide layout.
+  await page.locator('img[src*="g176c"]').click();
+
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  const rows = page.locator("._scf_comp_row");
+  await expect(rows).toHaveCount(2);
+  await expect.poll(() => rows.evaluateAll((els) => els.map((el) => el.querySelectorAll("._scf_comp_img").length)))
+    .toEqual([4, 4]);
+  await expect(
+    page.locator("._scf_comp_label_item", { hasText: "Source 3" }),
+  ).toHaveCSS("opacity", "1");
+});
+
 test("hdbits: JPG-only HDBits originals fall back after the PNG full URL fails", async ({ page }) => {
   const fullRequests: string[] = [];
   const jpgOnlySvg =
@@ -580,7 +600,7 @@ test("hdbits: manual viewer columns can leave a short final row", async ({ page 
   const select = page.locator("select._scf_column_select");
   await expect(select).toHaveCount(1);
   await select.selectOption("3");
-  await viewerLinks(page).first().click();
+  await select.press("Enter");
 
   await expect(page.locator("._scf_comp")).toBeVisible();
   await expect(page.locator("._scf_comp_row")).toHaveCount(3);
