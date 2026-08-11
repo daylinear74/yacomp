@@ -212,7 +212,7 @@ test("hdbits: host trigger link inherits page color and opens the viewer", async
   await expect(page.locator("._scf_comp")).toBeVisible();
 });
 
-test("hdbits: indivisible comparison-thread OP opens the drop-the-odd-shot picker, then builds a clean comparison (80402)", async ({ page }) => {
+test("hdbits: indivisible comparison-thread OP partitions its trailing shot (80402)", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/113-iconic-80402");
   await page.waitForFunction(
@@ -220,22 +220,22 @@ test("hdbits: indivisible comparison-thread OP opens the drop-the-odd-shot picke
     undefined,
     { timeout: 5000 },
   );
-  // 37 shots, 2-wide AUS/GBR (from the H1) — indivisible, so the link opens the
-  // thumbnail picker (not the comparison) with all 37 shots and a disabled Build.
-  await expect(page.locator("._scf_comp_link")).toHaveCount(1);
-  await page.locator("._scf_comp_link").first().click();
-  const overlay = page.locator("._scf_orphan_select");
-  await expect(overlay).toBeVisible();
-  await expect(overlay.locator("._scf_os_thumb")).toHaveCount(37);
-  await expect(overlay.locator("._scf_os_build")).toBeDisabled();
-  // Drop one odd shot → 36 divides by 2 → Build enables; Enter builds the grid.
-  await overlay.locator("._scf_os_thumb").last().click();
-  await expect(overlay.locator("._scf_os_thumb._scf_os_excluded")).toHaveCount(1);
-  await expect(overlay.locator("._scf_os_build")).toBeEnabled();
-  await page.keyboard.press("Enter");
-  await expect(page.locator("._scf_orphan_select")).toHaveCount(0);
+  // 37 shots, 2-wide AUS/GBR (from the H1) → 36 named comparison shots and a
+  // separate one-shot viewer, following the same title-derived partition rule.
+  await expect(comparisonLinks(page)).toHaveCount(1);
+  await expect(viewerLinks(page)).toHaveCount(1);
+  await comparisonLinks(page).click();
   await expect(page.locator("._scf_comp")).toBeVisible();
-  await expect(page.locator("._scf_comp_row")).toHaveCount(18); // 36 shots / 2 cols
+  await expect(page.locator("._scf_comp_row")).toHaveCount(18);
+  const names = (await page.locator("._scf_comp_label_item").allTextContents())
+    .map((text) => text.replace(/^\d+\.\s*/, "").trim())
+    .filter(Boolean);
+  expect(names).toEqual(["AUS", "GBR"]);
+
+  await page.keyboard.press("Escape");
+  await page.locator('img[src*="g37"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(1);
 });
 
 test("hdbits: ambiguous torrent gallery gets Show Viewer and opens as 1-wide from image click (Holubice 838405)", async ({ page }) => {
@@ -514,16 +514,24 @@ test("hdbits: Dariush trailing screenshots get Show Viewer and open from image c
   await expect(page.locator("._scf_comp_row")).toHaveCount(2);
 });
 
-test("hdbits: Dariush remainder without a large gap stays a plain viewer", async ({ page }) => {
+test("hdbits: title-derived remainder partitions even without a large visual gap", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/173-torrent-desc-dariush-no-large-gap-remainder");
   await waitForHdbitsReady(page);
 
-  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(comparisonLinks(page)).toHaveCount(1);
   await expect(viewerLinks(page)).toHaveCount(1);
+  await comparisonLinks(page).click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(2);
+  await expect.poll(() => page.locator("._scf_comp_row").evaluateAll(
+    (els) => els.map((el) => el.querySelectorAll("._scf_comp_img").length),
+  )).toEqual([3, 3]);
+
+  await page.keyboard.press("Escape");
   await page.locator('img[src*="g173x"]').click();
   await expect(page.locator("._scf_comp")).toBeVisible();
-  await expect(page.locator("._scf_comp_row")).toHaveCount(8);
+  await expect(page.locator("._scf_comp_row")).toHaveCount(2);
 });
 
 test("hdbits: large-gap trailing screenshots split for any uploader", async ({ page }) => {
@@ -1453,6 +1461,131 @@ test("hdbits: forum manual — selecting label text sets the title and marks it"
       return reg ? reg.has("_scf_manual_title") : null;
     }),
   ).toBe(true);
+});
+
+test("hdbits: 82306 partitions the four-column comparison from three trailing plots", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/206-forum-post-title-remainder-82306");
+  await waitForHdbitsReady(page);
+
+  await expect(comparisonLinks(page)).toHaveCount(1);
+  await comparisonLinks(page).click();
+
+  const comp = page.locator("._scf_comp");
+  await expect(comp).toBeVisible();
+  const rows = page.locator("._scf_comp_row");
+  await expect(rows).toHaveCount(10);
+  await expect.poll(() => rows.evaluateAll((els) => els.map((el) => el.querySelectorAll("._scf_comp_img").length)))
+    .toEqual(Array(10).fill(4));
+  const names = (await page.locator("._scf_comp_label_item").allTextContents())
+    .map((text) => text.replace(/^\d+\.\s*/, "").trim())
+    .filter(Boolean);
+  expect(names).toEqual(["BD remux", "MA HDR", "iTunes DV", "UHD Remux"]);
+
+  await page.keyboard.press("Escape");
+  await expect(comp).not.toBeVisible();
+  const remainderControl = page.locator("._scf_column_control");
+  await expect(remainderControl).toHaveCount(1);
+  await expect(remainderControl.locator("option")).toHaveCount(3);
+  await expect(remainderControl.locator("select")).toHaveValue("1");
+
+  await page.locator('img[src*="plot02"]').click();
+  await expect(comp).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(3);
+  await expect.poll(() => page.locator("._scf_comp_row").evaluateAll(
+    (els) => els.map((el) => el.querySelectorAll("._scf_comp_img").length),
+  )).toEqual([1, 1, 1]);
+});
+
+test("hdbits: 82306 comparison image click maps into the partitioned four-column grid", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/206-forum-post-title-remainder-82306");
+  await waitForHdbitsReady(page);
+
+  // lo006 is row 1, column 1 after the 40 + 3 partition.
+  await page.locator('img[src*="lo006"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(10);
+  await expect(
+    page.locator("._scf_comp_label_item", { hasText: "MA HDR" }),
+  ).toHaveCSS("opacity", "1");
+});
+
+test("hdbits: custom builder reads the thread title and partitions an all-image selection", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/206-forum-post-title-remainder-82306");
+  await waitForHdbitsReady(page);
+
+  const panel = page.locator("._scf_manual_panel");
+  await panel.locator("._scf_manual_button").click();
+  const title = page.locator("h1");
+
+  // A direct title click reads all four source names and pins four columns.
+  await title.click();
+  await expect(panel.locator("._scf_manual_names"))
+    .toHaveValue("BD remux | MA HDR | iTunes DV | UHD Remux");
+  await expect(panel.locator("._scf_manual_cols")).toHaveValue("4");
+
+  // Selecting only part of the H1 is also a title pick.
+  await page.evaluate(() => {
+    const h1 = document.querySelector("h1")!;
+    const walker = document.createTreeWalker(h1, NodeFilter.SHOW_TEXT);
+    const needle = "MA HDR vs. iTunes DV";
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const start = (node.textContent ?? "").indexOf(needle);
+      if (start < 0) continue;
+      const range = document.createRange();
+      range.setStart(node, start);
+      range.setEnd(node, start + needle.length);
+      const selection = window.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+      break;
+    }
+  });
+  await expect(panel.locator("._scf_manual_names")).toHaveValue("MA HDR | iTunes DV");
+  await expect(panel.locator("._scf_manual_cols")).toHaveValue("2");
+
+  // Restore the full title, then select the whole 43-image gallery with one click.
+  await title.click();
+  await page.locator('img[src*="lo001"]').click();
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(43);
+  await expect(panel.locator("._scf_manual_cols")).toHaveValue("4");
+  await expect(panel.locator("._scf_manual_status"))
+    .toHaveText("43 selected; 40 comparison + 3 separate");
+
+  await panel.locator("._scf_manual_build").click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(10);
+  await page.keyboard.press("Escape");
+  await expect(page.locator("._scf_column_control")).toHaveCount(1);
+  await expect(page.locator("._scf_column_control option")).toHaveCount(3);
+});
+
+test("hdbits: custom builder respects images explicitly left out of the selection", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/206-forum-post-title-remainder-82306");
+  await waitForHdbitsReady(page);
+
+  const panel = page.locator("._scf_manual_panel");
+  const automaticRemainderControls = await page.locator("._scf_column_control").count();
+  expect(automaticRemainderControls).toBe(0);
+  await panel.locator("._scf_manual_button").click();
+  await page.locator("h1").click();
+  await page.locator('img[src*="lo001"]').click();
+  for (const id of ["plot01", "plot02", "plot03"]) {
+    await page.locator(`img[src*="${id}"]`).click({ modifiers: ["ControlOrMeta"] });
+  }
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(40);
+  await expect(panel.locator("._scf_manual_status")).toHaveText("40 selected");
+
+  await panel.locator("._scf_manual_build").click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(10);
+  // The three deliberately omitted plots do not create a custom remainder
+  // control: only selected images participate in the custom partition.
+  await expect(page.locator("._scf_column_control")).toHaveCount(automaticRemainderControls);
 });
 
 test("hdbits: saved Over the Garden Wall forum page uses the current manual fallback", async ({ page }) => {

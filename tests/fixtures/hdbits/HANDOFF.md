@@ -30,8 +30,8 @@ Everything else (source, tests, iconic fixtures, templates, rulings) is in git.
   vs/`|` line → per-group labels → single-group label → leading bold → structured
   → leading-vs → showhide labels → `hasLocalNonNameHeading` (suppress / H1 /
   gallery) → `findComparisonNames` → H1 fall-through. Special fallbacks:
-  `cmpThreadLargestBlock` (comparison-thread OP, incl. the indivisible partial
-  grid), `leadingComparisonNamesBeforeContainer` (multi-section parent title),
+  `cmpThreadLargestBlock` (comparison-thread OP, with a separate gallery for an
+  indivisible trailing row), `leadingComparisonNamesBeforeContainer` (multi-section parent title),
   the torrent gallery fallback (`Grid.gallery`).
 - `src/grid/names.ts` — `splitNames()` and the separator precedence
   (`|` > `vs`/`v.` > `>>>` > `,` > `-` > `/` > `~` > `×`), plus the guards
@@ -39,9 +39,9 @@ Everything else (source, tests, iconic fixtures, templates, rulings) is in git.
   and `namesFromHeadings` (the H1 reader, OP-only).
 - `src/sites/hdbits.ts` — `setupHDBitsCore()`: slow.pics collection, `getGrids`,
   link insertion, the slow.pics rescue, forum manual custom comparison, and the
-  click dispatch
-  (`grid.gallery` → "Show viewer" 1-wide; `grid.partial` → `openOrphanSelect`
-  picker; else the normal comparison).
+  click dispatch (`grid.gallery` → "Show viewer" 1-wide; else the normal
+  comparison). The legacy `grid.partial` picker remains available but parser
+  partitions title-derived remainders before dispatch.
 - `src/viewer/` — `comparison.ts` (inline viewer), `row.ts`, and
   `orphan-select.ts` (the drop-odd-shot thumbnail picker).
 

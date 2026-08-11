@@ -60,17 +60,18 @@ describe("extractCollection + collectionToGridInfo", () => {
   });
 });
 
-import { buildRescueGrid } from "../../src/sites/hdbits-slowpics";
+import { buildRescueGridPartition } from "../../src/sites/hdbits-slowpics";
 
 function mockImg(hash: string): HTMLImageElement {
   return { src: `https://t.hdbits.org/${hash}.jpg`, closest: () => null } as unknown as HTMLImageElement;
 }
 
-describe("buildRescueGrid", () => {
+describe("buildRescueGridPartition", () => {
   const info = { names: ["S", "F", "E"], numCols: 3, imageUrls: [] };
   test("reshapes a flat 9-image block into a 3x3 grid", () => {
     const imgs = ["a", "b", "c", "d", "e", "f", "g", "h", "i"].map(mockImg);
-    const grid = buildRescueGrid(imgs, info)!;
+    const partition = buildRescueGridPartition(imgs, info)!;
+    const grid = partition.comparison;
     expect(grid.numCols).toBe(3);
     expect(grid.rows.length).toBe(3);
     expect(grid.names).toEqual(["S", "F", "E"]);
@@ -79,12 +80,18 @@ describe("buildRescueGrid", () => {
       "https://i.hdbits.org/b.png",
       "https://i.hdbits.org/c.png",
     ]);
+    expect(partition.remainder).toBeNull();
   });
-  test("rejects when image count doesn't fit the column count", () => {
-    expect(buildRescueGrid(["a", "b", "c", "d"].map(mockImg), info)).toBeNull();
+  test("keeps a non-divisible tail as a separate gallery", () => {
+    const partition = buildRescueGridPartition(["a", "b", "c", "d"].map(mockImg), info)!;
+    expect(partition.comparison.rows).toHaveLength(1);
+    expect(partition.comparison.rows[0]).toHaveLength(3);
+    expect(partition.remainder?.gallery).toBe(true);
+    expect(partition.remainder?.rows).toHaveLength(1);
+    expect(partition.remainder?.rows[0][0].full).toBe("https://i.hdbits.org/d.png");
   });
   test("rejects fewer than 2 columns", () => {
-    expect(buildRescueGrid([mockImg("a"), mockImg("b")], { names: ["S"], numCols: 1, imageUrls: [] })).toBeNull();
+    expect(buildRescueGridPartition([mockImg("a"), mockImg("b")], { names: ["S"], numCols: 1, imageUrls: [] })).toBeNull();
   });
 });
 

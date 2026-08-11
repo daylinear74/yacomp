@@ -9,6 +9,7 @@
 
 import type { Grid, GridCell } from "../grid";
 import { hdbFull } from "../grid/parser";
+import { partitionTrailingRemainder } from "../grid/partition";
 import { slowPicsKeyFromAnchor, type SlowPicsGridInfo } from "./slowpics-source";
 
 export interface SlowPicsComparison {
@@ -91,22 +92,44 @@ export function findSlowPicsComparisons(container: Element): SlowPicsComparison[
     .map(({ a, key }) => ({ key, link: a, images: byLink.get(a)! }));
 }
 
-/** Reshape rescued HDBits thumbnails into a grid using slow.pics' column count
- *  and titles. Returns null when the image count doesn't fit the column count. */
-export function buildRescueGrid(
+export interface RescueGridPartition {
+  comparison: Grid;
+  remainder: Grid | null;
+}
+
+/** Reshape rescued HDBits thumbnails using slow.pics' column count and titles.
+ *  Complete rows form the named comparison; a trailing non-divisible group is
+ *  preserved as a separate one-column gallery instead of invalidating both. */
+export function buildRescueGridPartition(
   images: HTMLImageElement[],
   info: SlowPicsGridInfo,
   anchorEl?: Node | null,
-): Grid | null {
+): RescueGridPartition | null {
   const numCols = info.numCols;
-  if (numCols < 2 || images.length < numCols || images.length % numCols !== 0) return null;
+  if (numCols < 2 || images.length < numCols) return null;
   const cells: GridCell[] = images.map((img) => ({
     thumb: img.src,
     full: hdbFull(img.src),
     img,
     a: img.closest("a") as HTMLAnchorElement | undefined,
   }));
+  const partition = partitionTrailingRemainder(cells, numCols);
+  if (partition.complete.length < numCols) return null;
   const rows: GridCell[][] = [];
-  for (let i = 0; i < cells.length; i += numCols) rows.push(cells.slice(i, i + numCols));
-  return { rows, numCols, names: info.names.slice(0, numCols), anchorEl };
+  for (let i = 0; i < partition.complete.length; i += numCols) {
+    rows.push(partition.complete.slice(i, i + numCols));
+  }
+  const remainder = partition.remainder.length
+    ? {
+        rows: partition.remainder.map((cell) => [cell]),
+        numCols: 1,
+        names: null,
+        anchorEl: partition.remainder[0].a ?? partition.remainder[0].img ?? anchorEl,
+        gallery: true,
+      }
+    : null;
+  return {
+    comparison: { rows, numCols, names: info.names.slice(0, numCols), anchorEl },
+    remainder,
+  };
 }

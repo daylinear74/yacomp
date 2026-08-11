@@ -19,14 +19,22 @@ import { saveConfig, getConfig, resetConfig } from "../../../src/config";
 // rescue/enrichment paths can be exercised offline. UnknownNamesKey simulates a
 // successful fetch with unusable source names; FetchFailKey simulates no fetch.
 function stubSlowPicsHtml(url: string): string {
-  const names = /UnknownNamesKey/i.test(url) ? ["unknown", "", "Unknown"] : ["S", "F", "E"];
+  const names = /FourNamesKey/i.test(url)
+    ? ["BD remux", "MA HDR", "iTunes DV", "UHD Remux"]
+    : /UnknownNamesKey/i.test(url)
+      ? ["unknown", "", "Unknown"]
+      : ["S", "F", "E"];
+  const rowCount = /FourNamesKey/i.test(url) ? 10 : 2;
   return `<html><body><script>var collection = ${JSON.stringify({
     key: "STUBKEY",
     name: "stub",
-    comparisons: [
-      { key: "r1", images: names.map((name, i) => ({ name, publicFileName: `${i + 1}.png` })) },
-      { key: "r2", images: names.map((name, i) => ({ name, publicFileName: `${i + 4}.png` })) },
-    ],
+    comparisons: Array.from({ length: rowCount }, (_, row) => ({
+      key: `r${row + 1}`,
+      images: names.map((name, col) => ({
+        name,
+        publicFileName: `${row * names.length + col + 1}.png`,
+      })),
+    })),
   })};</script></body></html>`;
 }
 

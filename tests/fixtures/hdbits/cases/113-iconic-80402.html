@@ -1,9 +1,9 @@
 <!--
 slot: forum.post
 expected_grids: 1
-expected_names: [null]
+expected_names: [["AUS","GBR"]]
 thread_title: "[Comparisons] Berserk (1967) - AUS vs GBR"
-notes: Iconic case 80402 — comparison-thread OP with a slow.pics link and 37 screenshots (prime; the poster dropped one, it should be 38 for the 2-wide AUS/GBR set). The OP has no body title, so the H1 supplies AUS/GBR. The count is indivisible, so cmpThreadLargestBlock emits a PARTIAL grid (Grid.partial) titled from the H1 rather than suppressing the button. Clicking it opens the drop-the-odd-shot thumbnail picker (openOrphanSelect) — pick the lone shot(s) anywhere, press Enter, and the kept shots re-flow into a clean comparison. expected_names is [null] so the cases-loop skips the name probe (the link opens the picker, not the viewer); the dedicated e2e exercises the full flow. Sanitized (genericized image hashes, stub slow.pics key).
+notes: Iconic case 80402 — comparison-thread OP with a slow.pics link and 37 screenshots for the 2-wide AUS/GBR title. The universal title-derived partition keeps the first 36 shots as 18 named rows and surfaces the final shot as a separate one-column viewer. Sanitized (genericized image hashes, stub slow.pics key).
 -->
 
 <strong>Slowpics:</strong><br>

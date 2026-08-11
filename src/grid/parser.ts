@@ -14,6 +14,7 @@ import {
   EXTERNAL_SCREENSHOT_HOST_RE, DIRECT_IMAGE_URL_RE, NON_SCREENSHOT_IMG_RE,
   isHDBitsThumbUrl, isHDBitsImagePageUrl,
 } from "./screenshot-urls";
+import { partitionTrailingRemainder } from "./partition";
 import { genericSourceNames } from "../util";
 
 // Re-exported from names.ts (moved there so name strategies can guard with it).
@@ -1195,9 +1196,10 @@ function isTheFarmTorrentDescription(container: Element): boolean {
 /** Comparison-thread OP fallback: a comparison is a CONTIGUOUS image block, so
  *  when the whole-container reshape fails (stray example screenshots scattered
  *  through a "Hidden text" spoiler, then the real grid — 80070), retry on the
- *  LARGEST image group alone, titled by the curated H1. Only when it divides
- *  cleanly, so a reply/discussion post's 1-per-line samples (3 imgs / 2 cols)
- *  stay suppressed. Off comparison threads / non-OP posts → null. */
+ *  LARGEST image group alone, titled by the curated H1. A normal single block
+ *  uses complete title-width rows and surfaces its trailing remainder as a
+ *  separate gallery; the scattered-spoiler rescue still requires a clean
+ *  divide. Off comparison threads / non-OP posts → null. */
 function cmpThreadLargestBlock(container: Element, groups: GridCell[][]): Grid[] | null {
   if (!groups.length) return null;
   if (!isComparisonThread() || !isOriginalPost(container)) return null;
@@ -1206,34 +1208,47 @@ function cmpThreadLargestBlock(container: Element, groups: GridCell[][]): Grid[]
   // the fallback from resurrecting an unrelated leftover block (057).
   const h1 = namesFromHeadings();
   if (!h1 || !looksLikeNames(h1)) return null;
-  let total = groups.flat().length;
+  const total = groups.flat().length;
   const block = groups.reduce((a, b) => (b.length > a.length ? b : a), groups[0]);
   if (block.length < h1.length) return null;
 
   const hasSpoiler = [...container.querySelectorAll("label.label_showhide")].some(
     (l) => /^hidden\s+text$/i.test((l.textContent || "").replace(/\s*\[(?:show|hide)\]\s*$/i, "").trim()),
   );
-  let partial = false;
   if (hasSpoiler) {
     // 80070: example frames scattered through a generic "Hidden text" spoiler,
     // with the real grid outside it → take the largest block, but it must
     // divide the H1 column count cleanly.
     if (block.length % h1.length !== 0) return null;
-  } else if (hasSlowPicsLink(container) && block.length === total && block.length > h1.length) {
-    // 80402: a comparison-thread OP whose slow.pics-linked shots are ONE
-    // contiguous block titled by the H1, but the count is indivisible (the
-    // poster dropped a screenshot — 37 shots for a 2-wide AUS/GBR set). Show it
-    // anyway; the trailing short row is the "orphan" the viewer lets you click
-    // to ignore. Gated to the slow.pics + single-block shape so a multi-section
-    // OP with no slow.pics link (057's leftover blocks) stays suppressed.
-    partial = block.length % h1.length !== 0;
-  } else {
+  } else if (!(hasSlowPicsLink(container) && block.length === total && block.length > h1.length)) {
+    // Gated to the slow.pics + single-block shape so a multi-section OP with no
+    // slow.pics link (057's leftover blocks) stays suppressed.
     return null;
   }
 
+  const partition = partitionTrailingRemainder(block, h1.length);
+  if (partition.complete.length < h1.length) return null;
   const rows: GridCell[][] = [];
-  for (let i = 0; i < block.length; i += h1.length) rows.push(block.slice(i, i + h1.length));
-  return [{ rows, numCols: h1.length, names: finalizeNames(h1), anchorEl: null, partial }];
+  for (let i = 0; i < partition.complete.length; i += h1.length) {
+    rows.push(partition.complete.slice(i, i + h1.length));
+  }
+  const result: Grid[] = [{
+    rows,
+    numCols: h1.length,
+    names: finalizeNames(h1),
+    anchorEl: null,
+  }];
+  if (partition.remainder.length) {
+    const first = partition.remainder[0];
+    result.push({
+      rows: partition.remainder.map((cell) => [cell]),
+      numCols: 1,
+      names: null,
+      anchorEl: first.a ?? first.img ?? null,
+      gallery: true,
+    });
+  }
+  return result;
 }
 
 /** True when the container carries a slow.pics comparison link (direct or via an
@@ -1801,6 +1816,27 @@ function hasInlineImageFormattingWrapper(container: Element): boolean {
     screenshotImagesIn(child).length >= 2);
 }
 
+/** A container with two distinct local column headings holds multiple
+ *  comparisons, even when PRE/plaintext formatting prevents collectGroups from
+ *  exposing a normal section boundary. One title must not partition images
+ *  governed by the other (057: Overall FRA/USA/GBR + Close-up USA/GBR). */
+function hasMultipleLocalColumnTitles(container: Element): boolean {
+  const titles = new Set<string>();
+  for (const el of container.querySelectorAll("strong, b")) {
+    const names = asColumnTitles((el.textContent || "").replace(/\s+/g, " ").trim());
+    if (!names || !looksLikeNames(names)) continue;
+    titles.add(names.map((name) => tidyName(name).toLowerCase()).join("\u0000"));
+    if (titles.size > 1) return true;
+  }
+  return false;
+}
+
+function titleAnchorPrecedesImages(anchorEl: Node | null, groups: GridCell[][]): boolean {
+  const first = groups[0]?.[0]?.a ?? groups[0]?.[0]?.img;
+  if (!anchorEl || !first) return false;
+  return Boolean(anchorEl.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
 function trimTrailingGroupsUntilDivisible(collected: GroupsResult, numCols: number): GroupsResult {
   return trimTrailingGroupsUntilDivisibleWithRemainder(collected, numCols).collected;
 }
@@ -1852,6 +1888,45 @@ function galleryGridFromGroups(collected: GroupsResult | null): Grid | null {
     names: null,
     anchorEl: galleryAnchorBeforeImages(collected.groups, collected.groupLabelEls),
     gallery: true,
+  };
+}
+
+/** Apply the title-derived column count to a row-major image run. Complete rows
+ *  stay in the named comparison and the final short row becomes its own
+ *  one-column gallery. Unlike the general gallery fallback, a one-shot
+ *  remainder is intentional here and must remain reachable. */
+function partitionNamedRowMajorRemainder(
+  collected: GroupsResult,
+  numCols: number,
+): { collected: GroupsResult; remainder: Grid | null } {
+  const partition = partitionTrailingRemainder(collected.groups.flat(), numCols);
+  if (!partition.remainder.length || partition.complete.length < numCols) {
+    return { collected, remainder: null };
+  }
+
+  const groups: GridCell[][] = [];
+  for (let i = 0; i < partition.complete.length; i += numCols) {
+    groups.push(partition.complete.slice(i, i + numCols));
+  }
+  const emptyLabels = groups.map(() => null);
+  const zeros = groups.map(() => 0);
+  const falseValues = groups.map(() => false);
+  const firstRemainder = partition.remainder[0];
+  return {
+    collected: {
+      groups,
+      groupLabels: emptyLabels,
+      groupLabelEls: [...emptyLabels],
+      groupLeadingBreaks: zeros,
+      groupPrecededByText: falseValues,
+    },
+    remainder: {
+      rows: partition.remainder.map((cell) => [cell]),
+      numCols: 1,
+      names: null,
+      anchorEl: firstRemainder.a ?? firstRemainder.img ?? null,
+      gallery: true,
+    },
   };
 }
 
@@ -2149,6 +2224,11 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   let names: string[] | null = null;
   let anchorEl: Node | null = null;
   let forceGenericNames = false;
+  // Per-source image runs are column-major (all A shots, then all B shots), so
+  // the row-major trailing-remainder rule must never flatten them into A/A and
+  // B/B pairs. `buildOddSourceGroupComparison` handles unequal 3+ source runs;
+  // this flag protects the remaining per-source-label shape.
+  let sourceGroupedNames = false;
   const siblingPreviewHeading = hasPreviousSiblingPreviewHeading(container);
   let total = groups.flat().length;
   // Highest precedence: a leading line with an explicit "vs"/"v."/"|" comparison.
@@ -2205,6 +2285,7 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     const anyNonSource = labels.some(isNonSourceLabel);
     if (!allNumeric && !anyMultiSource && !anyNonSource) {
       names = stripAsymmetricTitle(cleanPerSourceGroupLabels(labels));
+      sourceGroupedNames = true;
     }
   }
   if (!names) {
@@ -2417,6 +2498,32 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     if (h1 && total % h1.length === 0 && looksLikeNames(h1)) {
       names = h1;
       anchorEl = null;
+    }
+  }
+  const isUninterruptedImageRun = splitGallerySections({
+    groups,
+    groupLabels,
+    groupLabelEls,
+    groupLeadingBreaks,
+    groupPrecededByText,
+  }).length === 1;
+  if (
+    names &&
+    total % names.length !== 0 &&
+    !sourceGroupedNames &&
+    isUninterruptedImageRun &&
+    titleAnchorPrecedesImages(anchorEl, groups) &&
+    !hasMultipleLocalColumnTitles(container)
+  ) {
+    const partition = partitionNamedRowMajorRemainder(
+      { groups, groupLabels, groupLabelEls, groupLeadingBreaks, groupPrecededByText },
+      names.length,
+    );
+    if (partition.remainder) {
+      trailingGalleries.push(partition.remainder);
+      collected = partition.collected;
+      ({ groups, groupLabels, groupLabelEls, groupLeadingBreaks, groupPrecededByText } = collected);
+      total = groups.flat().length;
     }
   }
   if (names && total % names.length !== 0) {

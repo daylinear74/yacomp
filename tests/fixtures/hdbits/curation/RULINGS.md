@@ -17,7 +17,7 @@ fixture in `tests/fixtures/hdbits/cases/` (full DOM through `setupHDBitsCore`).
 | `>>>` / `>>` (better-than) is a separator | ✓ | 109 79242 |
 | `~` (spaced tilde) separator, BELOW `/` precedence | ✓ | 111 78043 |
 | leading comparison title in PARENT, before container | — | 057 |
-| indivisible comparison-thread OP → drop-odd-shot picker | — | 113 80402 |
+| named indivisible run → complete rows + remainder gallery | — | 113 173 206 |
 | quote/URL-sourced title is unreliable; torrent gallery → 1-wide viewer | — | 114 838405 |
 | per-source labels before showhide/BDInfo blocks | — | 105 77086, 107 80662 |
 | dangling `\|` after a dropped URL stripped | — | 108 79784 |
@@ -176,22 +176,17 @@ previous image block) and takes its `vs`/`|` names → `FRA / USA / GBR`, 63 / 3
 that one line so a sibling grid's title can never leak across. (The 6-wide audio
 downmix `USA_2 | GBR_6_2_…` is a separate section-c comparison.)
 
-### Comparison-thread OP, indivisible count → show it anyway (80402)
+### Comparison-thread OP, indivisible count → partition the trailing row (80402)
 `Berserk (1967) AUS vs GBR` (forumid 40). The OP posted 37 screenshots for a
 2-wide AUS/GBR set — it should be 38, but the poster dropped one, so the count is
-prime and no clean grid exists. Owner ruling: for an OP in a comparison thread,
-always offer the "Show comparison" button anyway so the viewer can look. The
-title comes from the H1 (the body has only a "Slowpics:" link, no inline label).
-`cmpThreadLargestBlock` emits a PARTIAL grid (`grid.partial`) instead of
-suppressing. Because the dropped shot can be ANYWHERE (a middle drop shifts every
-pair after it), clicking "Show comparison" opens a thumbnail PICKER
-(`openOrphanSelect`) laid out in the column count: the user clicks the odd
-shot(s) to drop — with a live "N shots ÷ C ✓ / drop K more" hint — and Enter /
-"Build comparison" re-flows the kept shots into a clean comparison. Gated to the
-comparison-thread OP + slow.pics + single-contiguous-block shape, so a
+prime and no full final row exists. The H1 supplies the authoritative AUS/GBR
+column count (the body has only a "Slowpics:" link, no inline label), so the
+universal rule keeps the first 36 shots as an 18-row comparison and exposes the
+37th as a separate one-column viewer. `cmpThreadLargestBlock` remains gated to
+the comparison-thread OP + slow.pics + single-contiguous-block shape, so a
 multi-section OP with no slow.pics link (057's leftover blocks) stays suppressed,
-and the divisible spoiler case (80070) keeps its clean-divide requirement. The
-grid claims the shots, so the slow.pics rescue does not add a second button.
+and the divisible spoiler case (80070) keeps its clean-divide requirement. Both
+parts claim their own shots, so the slow.pics rescue cannot add a duplicate.
 
 ### vs-title severed from screenshots by a quote/log block (845637)
 `Anyone But You` hybrid remux (torrent 845637). Mid-description, a
@@ -256,5 +251,29 @@ torrent page, a single flat image group whose only title was that blob falls bac
 to a 1-wide gallery (`Grid.gallery`, trigger reads "Show viewer"). Scoped so it
 only fires where a bogus grid would otherwise have formed — quiet untitled blocks
 stay quiet, and real Source/Encode / per-source comparisons (clean titles) are
-untouched. A clean title with an indivisible count still becomes a partial grid
-(80402), not a gallery.
+untouched. A clean title with an indivisible count uses its complete rows as the
+comparison and puts only the final short row in a separate gallery (80402).
+
+### Named comparison with a trailing remainder → separate gallery (82306)
+`Lights Out (2016) - BD remux vs. MA HDR vs. iTunes DV vs. UHD Remux`
+(forumid 40). The linked comparison and thread H1 both establish four source
+columns, but the post contains 43 HDBits thumbnails: 40 comparison screenshots
+followed by three plot images, with no text label between the blocks. Treating
+all 43 as one comparison made the slow.pics rescue fail its divisibility check
+and downgrade "Show comparison" to a one-column manual viewer. Ruling: when an
+authoritative title supplies `C` columns, split a row-major selection at
+`N - (N % C)`. Complete rows form the named comparison; the final remainder is
+preserved as a separate one-column gallery. The custom comparison builder uses
+the same partition after a clicked or selected thread title sets the columns.
+This arithmetic partition is the default for every trusted, uninterrupted
+row-major image group; it does not depend on a blank-line gap (173). Substantive
+author content still separates independent galleries (185), and per-source
+column-major runs stay out of this path because flattening them would pair shots
+from the same source. Multiple distinct local column titles also delimit their
+own comparisons even inside plaintext/PRE formatting where the DOM exposes no
+ordinary section boundary (057). For the general DOM parser, the governing title
+must be local and precede the image run; a later title or page-level H1 alone
+cannot promote an unrelated or technical gallery. Dedicated slow.pics/H1 rescue
+handles comparison-thread mirrors such as 82306.
+Only selected images participate, so explicitly deselected images stay out.
+Iconic fixture 206.

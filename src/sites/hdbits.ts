@@ -4,12 +4,18 @@
 
 import { injectCSS, injectTriggerLinkCSS } from "../ui/css";
 import { hdbitsImageClick, hdbitsManualAllThreads } from "../config";
-import { getGrids, hdbFull, isTorrentDescriptionContainer } from "../grid";
+import { getGrids, hdbFull, isTorrentDescriptionContainer, partitionTrailingRemainder } from "../grid";
 import type { Grid, GridCell } from "../grid";
 import { hasVsOrPipe, splitNames, looksLikeNames, isNonSourceLabel, looksLikeProse, tidyName } from "../grid/names";
 import { buildComparison, insertLinkAfter, openOrphanSelect, openWithDummyWrapper } from "../viewer";
 import { fetchSlowPicsGridInfo, slowPicsKeyFromAnchor, type SlowPicsGridInfo } from "./slowpics-source";
-import { findSlowPicsComparisons, buildRescueGrid, hasLocalLabelBetween, type SlowPicsComparison } from "./hdbits-slowpics";
+import {
+  findSlowPicsComparisons,
+  buildRescueGridPartition,
+  hasLocalLabelBetween,
+  type SlowPicsComparison,
+  type RescueGridPartition,
+} from "./hdbits-slowpics";
 import { genericSourceNames } from "../util";
 
 const FORUM_MANUAL_PANEL_ID = "_scf_manual_panel_";
@@ -173,7 +179,7 @@ function insertNodeBeforeImageRun(images: HTMLImageElement[], node: Node, contai
 }
 
 function gridFromCells(cells: GridCell[], cols: number, anchor: Node | null | undefined): Grid | null {
-  if (cols < 1 || cols > cells.length || cells.length < 2) return null;
+  if (cols < 1 || cols > cells.length || !cells.length) return null;
   const rows: GridCell[][] = [];
   for (let i = 0; i < cells.length; i += cols) {
     rows.push(cells.slice(i, i + cols));
@@ -191,6 +197,46 @@ function openImageViewer(cells: GridCell[], anchor: Node | null | undefined, ini
   const grid = gridFromCells(cells, 1, anchor);
   if (!grid) return;
   openWithDummyWrapper({ ...grid, initialRow, initialCol: 0 });
+}
+
+function installSeparateGallery(grid: Grid | null, container: HTMLElement): void {
+  if (!grid?.gallery) return;
+  const cells = grid.rows.flat();
+  const images = cells.map((cell) => cell.img).filter((img): img is HTMLImageElement => !!img);
+  if (!images.length) return;
+  addManualColumnControlFromCells(
+    cells,
+    grid.anchorEl ?? images[0],
+    container,
+    images,
+  );
+}
+
+function openRescuePartitionAt(
+  partition: RescueGridPartition,
+  container: HTMLElement,
+  link: HTMLAnchorElement,
+  initialIndex?: number,
+): void {
+  installSeparateGallery(partition.remainder, container);
+  const comparisonCount = partition.comparison.rows.flat().length;
+  if (initialIndex === undefined || initialIndex < comparisonCount) {
+    const positioned = initialIndex === undefined
+      ? partition.comparison
+      : {
+          ...partition.comparison,
+          initialRow: Math.floor(initialIndex / partition.comparison.numCols),
+          initialCol: initialIndex % partition.comparison.numCols,
+        };
+    buildComparison(positioned, container, link);
+    return;
+  }
+  if (!partition.remainder) return;
+  openWithDummyWrapper({
+    ...partition.remainder,
+    initialRow: initialIndex - comparisonCount,
+    initialCol: 0,
+  });
 }
 
 function isScreenshotLikeImage(img: HTMLImageElement): boolean {
@@ -539,9 +585,8 @@ export function setupHDBitsCore(): void {
       opening = true;
       try {
         await maybeEnrichNames(grid);
-        // An indivisible set (a comparison-thread OP that dropped a shot, 80402)
-        // can't pair up cleanly and the gap may be anywhere, so let the user pick
-        // the odd shot(s) to drop first, then build the comparison from the rest.
+        // Retain the legacy partial-grid picker for explicit callers. Parsed
+        // title-derived grids partition their short final row into a gallery.
         if (grid.partial) openOrphanSelect(grid, container as HTMLElement, link);
         else buildComparison(grid, container as HTMLElement, link);
       } finally {
@@ -683,9 +728,9 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
         // slow.pics is authoritative for the column COUNT; prefer the descriptive
         // HDBits heading for the titles when it matches that count. Placeholder
         // / missing titles fall back to the viewer manual-column control below.
-        const grid = buildRescueGrid(images, resolved, spLink);
-        if (grid) {
-          buildComparison(grid, container, link);
+        const partition = buildRescueGridPartition(images, resolved, spLink);
+        if (partition) {
+          openRescuePartitionAt(partition, container, link);
           return;
         }
       }
@@ -710,13 +755,9 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
       void fetchSlowPicsGridInfo(key).then((info) => {
         const resolved = resolveSlowPicsInfo(info, images, spLink, container);
         if (resolved) {
-          const grid = buildRescueGrid(images, resolved, spLink);
-          if (grid) {
-            buildComparison(
-              { ...grid, initialRow: Math.floor(idx / grid.numCols), initialCol: idx % grid.numCols },
-              container,
-              link,
-            );
+          const partition = buildRescueGridPartition(images, resolved, spLink);
+          if (partition) {
+            openRescuePartitionAt(partition, container, link, idx);
             return;
           }
         }
@@ -1003,6 +1044,12 @@ function forumImageGroups(): HTMLImageElement[][] {
     if (node instanceof HTMLImageElement) {
       if (isSelectableForumImage(node)) current.push(node);
     } else if (node.nodeType === Node.TEXT_NODE) {
+      // Controls inserted by yacomp are not author content and must not split
+      // the original image gallery for custom selection. This matters when an
+      // automatic parser has already inserted a remainder viewer between the
+      // complete comparison rows and their trailing images.
+      const parent = node.parentElement;
+      if (parent?.closest("._scf_column_control, ._scf_comp_link")) continue;
       if ((node.textContent ?? "").trim()) flush();
     } else if (node instanceof HTMLElement && (node.tagName === "HR" || /^H[1-6]$/.test(node.tagName))) {
       flush();
@@ -1045,7 +1092,7 @@ function forumTextUnderPointer(event: MouseEvent): { text: string; range: Range 
   const node: Node | undefined =
     doc.caretRangeFromPoint?.(event.clientX, event.clientY)?.startContainer ??
     doc.caretPositionFromPoint?.(event.clientX, event.clientY)?.offsetNode;
-  if (node && node.nodeType === Node.TEXT_NODE && node.parentElement?.closest("td.comment")) {
+  if (node && node.nodeType === Node.TEXT_NODE && node.parentElement?.closest("td.comment, h1")) {
     const t = (node.textContent ?? "").trim();
     if (t) {
       const range = document.createRange();
@@ -1059,7 +1106,7 @@ function forumTextUnderPointer(event: MouseEvent): { text: string; range: Range 
   if (
     el instanceof HTMLElement &&
     !(el instanceof HTMLImageElement) &&
-    el.closest("td.comment") &&
+    el.closest("td.comment, h1") &&
     /^(?:STRONG|B|SPAN|FONT|EM|U|I|A|LABEL)$/.test(el.tagName)
   ) {
     const t = (el.textContent ?? "").trim();
@@ -1129,6 +1176,20 @@ function addForumManualComparisonControl(): void {
   let dragStartY = 0;
   let dragStartImage: HTMLImageElement | null = null;
   let suppressNextClick = false;
+  let suppressNextClickTimer: number | null = null;
+
+  const clearClickSuppression = () => {
+    suppressNextClick = false;
+    if (suppressNextClickTimer !== null) {
+      window.clearTimeout(suppressNextClickTimer);
+      suppressNextClickTimer = null;
+    }
+  };
+
+  const expireClickSuppressionSoon = () => {
+    if (suppressNextClickTimer !== null) window.clearTimeout(suppressNextClickTimer);
+    suppressNextClickTimer = window.setTimeout(clearClickSuppression, 0);
+  };
 
   const panel = document.createElement("div");
   panel.id = FORUM_MANUAL_PANEL_ID;
@@ -1260,6 +1321,25 @@ function addForumManualComparisonControl(): void {
     status.textContent = message ?? `${selected.length} selected`;
   };
 
+  const updateSelectionStatus = (whenEmpty?: string) => {
+    if (!selected.length) {
+      updateStatus(whenEmpty);
+      return;
+    }
+    const titleColumns = titleParts.length >= 2 ? titleParts.length : 0;
+    if (titleColumns && selected.length >= titleColumns) {
+      const partition = partitionTrailingRemainder(selected, titleColumns);
+      if (partition.remainder.length) {
+        updateStatus(
+          `${selected.length} selected; ${partition.complete.length} comparison + ` +
+          `${partition.remainder.length} separate`,
+        );
+        return;
+      }
+    }
+    updateStatus();
+  };
+
   const setSelecting = (on: boolean) => {
     if (selecting === on) return;
     selecting = on;
@@ -1281,7 +1361,7 @@ function addForumManualComparisonControl(): void {
       dragSelecting = false;
       dragMoved = false;
       dragStartImage = null;
-      suppressNextClick = false;
+      clearClickSuppression();
       clearForumTitleHighlight();
     }
   };
@@ -1304,8 +1384,8 @@ function addForumManualComparisonControl(): void {
 
   const refreshSelection = () => {
     updateManualSelectionStyles(selected);
-    repopulateColumns();
-    updateStatus();
+    repopulateColumns(titleParts.length >= 2 ? titleParts.length : undefined);
+    updateSelectionStatus();
   };
 
   // Selection is kept in document order so rows assemble top-to-bottom,
@@ -1332,7 +1412,7 @@ function addForumManualComparisonControl(): void {
     namesInput.value = titleParts.join(" | ");
     // While unlocked, keep the column count in step with the title.
     if (!colsLocked && titleParts.length >= 2) setColumns(titleParts.length);
-    updateStatus(titleParts.length ? `title: ${titleParts.join(" | ")}` : undefined);
+    updateSelectionStatus(titleParts.length ? `title: ${titleParts.join(" | ")}` : undefined);
     setForumTitleHighlights(titleRanges.filter((r): r is Range => !!r));
   };
 
@@ -1407,7 +1487,7 @@ function addForumManualComparisonControl(): void {
     const text = sel.toString().trim();
     if (!text) return false;
     const host = sel.anchorNode instanceof Element ? sel.anchorNode : sel.anchorNode?.parentElement;
-    if (!host?.closest("td.comment")) return false;
+    if (!host?.closest("td.comment, h1")) return false;
     const names = titleNamesFromText(text);
     if (!names.length) return false;
     if (!addTitle(names, append, sel.getRangeAt(0).cloneRange())) return false;
@@ -1421,6 +1501,24 @@ function addForumManualComparisonControl(): void {
     selected.push(img);
     selected.sort(docOrder);
     refreshSelection();
+  };
+
+  const selectImageFromPointer = (img: HTMLImageElement, event: MouseEvent) => {
+    if (event.metaKey || event.ctrlKey) {
+      // Ctrl/⌘ toggles a single image — fine add or deselect.
+      if (selected.includes(img)) setSelection(selected.filter((x) => x !== img));
+      else setSelection([...selected, img]);
+      anchor = img;
+    } else if (event.shiftKey && anchor) {
+      // Shift extends the range from the last anchor to this image.
+      setSelection([...selected, ...forumImagesBetween(anchor, img)]);
+    } else {
+      // A plain pointer action selects the whole contiguous gallery.
+      const group = forumGroupOf(img);
+      setSelection(group);
+      anchor = img;
+      setColumns(titleParts.length >= 2 ? titleParts.length : forumRowWidth(group, img));
+    }
   };
 
   function imageFromEvent(event: MouseEvent): HTMLImageElement | null {
@@ -1473,6 +1571,19 @@ function addForumManualComparisonControl(): void {
       event.preventDefault();
       event.stopPropagation();
       suppressNextClick = true;
+      // Some browsers do not dispatch a click after a prevented/off-target
+      // drag mouseup. Do not let the one-click guard leak into the user's next
+      // independent interaction when there is no generated click to consume.
+      expireClickSuppressionSoon();
+    } else if (dragStartImage) {
+      // Chrome can omit `click` after a previous off-target drag, while still
+      // delivering this complete down/up pair. Apply image-selection semantics
+      // on the reliable mouseup and consume a generated click if one follows.
+      event.preventDefault();
+      event.stopPropagation();
+      selectImageFromPointer(dragStartImage, event);
+      suppressNextClick = true;
+      expireClickSuppressionSoon();
     }
     dragSelecting = false;
     dragMoved = false;
@@ -1485,7 +1596,7 @@ function addForumManualComparisonControl(): void {
     // after a release over whitespace, eating the NEXT real click (and a
     // release over a text label silently overwrote the column title).
     if (suppressNextClick) {
-      suppressNextClick = false;
+      clearClickSuppression();
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -1494,21 +1605,9 @@ function addForumManualComparisonControl(): void {
     if (img) {
       event.preventDefault();
       event.stopPropagation();
-      if (event.metaKey || event.ctrlKey) {
-        // Ctrl/⌘-click toggles a single image — fine add or deselect.
-        if (selected.includes(img)) setSelection(selected.filter((x) => x !== img));
-        else setSelection([...selected, img]);
-        anchor = img;
-      } else if (event.shiftKey && anchor) {
-        // Shift-click adds the range from the anchor to here.
-        setSelection([...selected, ...forumImagesBetween(anchor, img)]);
-      } else {
-        // A plain click selects the whole contiguous gallery.
-        const group = forumGroupOf(img);
-        setSelection(group);
-        anchor = img;
-        setColumns(forumRowWidth(group, img));
-      }
+      // Programmatic/synthetic clicks may have no preceding mouseup; retain a
+      // click fallback for those while pointer clicks use the reliable path.
+      selectImageFromPointer(img, event);
       return;
     }
     // A click on a text label names a column. Plain click sets the first column
@@ -1536,8 +1635,8 @@ function addForumManualComparisonControl(): void {
       updateStatus("enter 2+ columns");
       return;
     }
-    if (selected.length < numCols || selected.length % numCols !== 0) {
-      updateStatus(`${selected.length} selected; choose divisible columns`);
+    if (selected.length < numCols) {
+      updateStatus(`${selected.length} selected; choose at least ${numCols}`);
       return;
     }
 
@@ -1553,19 +1652,31 @@ function addForumManualComparisonControl(): void {
       names = Array.from({ length: numCols }, (_, i) => `Source ${i + 1}`);
     }
 
+    const partition = typed
+      ? partitionTrailingRemainder(selected, numCols)
+      : { complete: [...selected], remainder: [] as HTMLImageElement[] };
+    if (!typed && selected.length % numCols !== 0) {
+      updateStatus(`${selected.length} selected; choose divisible columns or a title`);
+      return;
+    }
+    if (partition.complete.length < numCols) {
+      updateStatus(`${selected.length} selected; no complete comparison row`);
+      return;
+    }
+
     const rows: GridCell[][] = [];
     if (sourceGrouped.checked) {
       // Column-major: the selection is `numCols` contiguous per-source blocks;
       // transpose so row r pairs the r-th shot of each block.
-      const perCol = selected.length / numCols;
+      const perCol = partition.complete.length / numCols;
       for (let r = 0; r < perCol; r++) {
         const row: GridCell[] = [];
-        for (let c = 0; c < numCols; c++) row.push(forumManualCell(selected[c * perCol + r]));
+        for (let c = 0; c < numCols; c++) row.push(forumManualCell(partition.complete[c * perCol + r]));
         rows.push(row);
       }
     } else {
-      for (let i = 0; i < selected.length; i += numCols) {
-        rows.push(selected.slice(i, i + numCols).map(forumManualCell));
+      for (let i = 0; i < partition.complete.length; i += numCols) {
+        rows.push(partition.complete.slice(i, i + numCols).map(forumManualCell));
       }
     }
     const grid: Grid = {
@@ -1576,7 +1687,24 @@ function addForumManualComparisonControl(): void {
     };
     // Keep the floating toolbar + selection up so closing the viewer returns to
     // the builder for another pass, rather than dropping out of selecting mode.
-    updateStatus();
+    if (partition.remainder.length) {
+      const remainderContainer = partition.remainder[0].closest("td.comment") as HTMLElement | null;
+      if (remainderContainer) {
+        const remainderCells = partition.remainder.map(forumManualCell);
+        addManualColumnControlFromCells(
+          remainderCells,
+          partition.remainder[0],
+          remainderContainer,
+          partition.remainder,
+        );
+      }
+      updateStatus(
+        `${selected.length} selected; ${partition.complete.length} comparison + ` +
+        `${partition.remainder.length} separate`,
+      );
+    } else {
+      updateStatus();
+    }
     openWithDummyWrapper(grid);
   });
 
