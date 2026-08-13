@@ -8,7 +8,7 @@ import {
   findComparisonNames, namesFromLeadingStructuredLabels, namesFromColorSpans, namesFromHeadings, isOriginalPost,
   namesFromSiblingInfo, looksLikeProse, asColumnTitles,
   foldTrailingSize, isNonSourceLabel, isUrlLabel, isFooterLabel, tidyName, isMultiSourceLabel,
-  stripAsymmetricTitle, isHDBitsRequestsMetadataElement,
+  stripAsymmetricTitle, isHDBitsRequestsMetadataElement, widerOriginalPostHeading,
 } from "./names";
 import {
   EXTERNAL_SCREENSHOT_HOST_RE, DIRECT_IMAGE_URL_RE, NON_SCREENSHOT_IMG_RE,
@@ -754,14 +754,21 @@ function hasFooterLabelBetweenGroups(groups: GridCell[][], endIndex: number): bo
   }
 }
 
-function singleGroupLabelInfo(groupLabels: (string | null)[], groupLabelEls: (ChildNode | null)[]): { names: string[]; anchorEl: ChildNode | null } | null {
+function singleGroupLabelInfo(
+  groupLabels: (string | null)[],
+  groupLabelEls: (ChildNode | null)[],
+): { names: string[]; anchorEl: ChildNode | null; explicit: boolean } | null {
   const labels = groupLabels
     .map((label, index) => ({ label, index }))
     .map((g) => g.label ? { ...g, names: asColumnTitles(g.label) } : { ...g, names: null })
     .filter((g): g is { label: string; index: number; names: string[] } =>
       !!g.label && !!g.names && !isStructuralReleaseTitleLabel(g.label));
   if (labels.length !== 1) return null;
-  return { names: labels[0].names, anchorEl: groupLabelEls[labels[0].index] };
+  return {
+    names: labels[0].names,
+    anchorEl: groupLabelEls[labels[0].index],
+    explicit: hasExplicitComparison(labels[0].label),
+  };
 }
 
 /** Final pass on a grid's names: drop a name set that is entirely bare numbers
@@ -2325,8 +2332,11 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
   if (!names) {
     const singleLabel = singleGroupLabelInfo(groupLabels, groupLabelEls);
     if (singleLabel) {
-      names = singleLabel.names;
-      anchorEl = singleLabel.anchorEl;
+      const widerTopic = !singleLabel.explicit && !hasMultipleLocalColumnTitles(container)
+        ? widerOriginalPostHeading(container, singleLabel.names, total)
+        : null;
+      names = widerTopic ?? singleLabel.names;
+      anchorEl = widerTopic ? null : singleLabel.anchorEl;
     }
   }
   if (!names) {
@@ -2453,7 +2463,13 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
     }
   }
   if (!names && !hasPreImageTitleBarrierBeforeFirstScreenshot(container)) {
-    names = findComparisonNames(container);
+    // Let a wider explicit OP topic title compete with only the loose leading-
+    // text strategy. Distinct local column headings describe separate sections
+    // and must retain their existing locality precedence.
+    names = findComparisonNames(
+      container,
+      hasMultipleLocalColumnTitles(container) ? undefined : total,
+    );
   }
   if (!names && !detailsLinkComparisonOnly && !ambiguousTitle && hasRejectedLeadingColumnTitle(container)) {
     const h1 = isOriginalPost(container) ? namesFromHeadings() : null;

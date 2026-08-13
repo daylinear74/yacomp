@@ -950,10 +950,40 @@ export function isOriginalPost(container: Element): boolean {
   return first === container || first.contains(container) || container.contains(first);
 }
 
-export function findComparisonNames(container: Element): string[] | null {
+/** Prefer an original post's explicit topic title when it describes more
+ *  columns than a weak local candidate. `availableImages >= topic.length`
+ *  deliberately allows the parser's complete-rows + trailing-remainder rule. */
+export function widerOriginalPostHeading(
+  container: Element,
+  localNames: string[],
+  availableImages: number,
+): string[] | null {
+  if (!isOriginalPost(container)) return null;
+  const topic = namesFromHeadings();
+  return topic && topic.length > localNames.length && availableImages >= topic.length ? topic : null;
+}
+
+export function findComparisonNames(container: Element, availableImages?: number): string[] | null {
+  const sibling = namesFromSiblings(container);
+  if (sibling) return sibling;
+
+  const leading = namesFromLeadingText(container);
+  if (leading) {
+    // A loose leading line is close to the screenshots, but it can merely be
+    // source-provenance prose whose commas happen to parse as columns (82313:
+    // "Blu-ray is from …, AMZN from …"). When the original post's explicit
+    // topic title names MORE columns and the image run is large enough to use
+    // them, prefer that wider title. The grid parser only supplies the image
+    // count for a post without competing local section titles; structured
+    // sibling/group labels keep their existing higher precedence.
+    const topic = availableImages === undefined
+      ? null
+      : widerOriginalPostHeading(container, leading, availableImages);
+    if (topic) return topic;
+    return leading;
+  }
+
   return (
-    namesFromSiblings(container) ||
-    namesFromLeadingText(container) ||
     namesFromColorSpans(container) ||
     namesFromLeadingBoldTags(container) ||
     namesFromAncestors(container) ||
