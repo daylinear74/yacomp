@@ -95,6 +95,7 @@ export function syncCurrentRowFromScroll(
     comp.currentRow = closest;
     updateRowNav(closest);
     comp.updateLabel?.();
+    comp.updateLoadingOverlay?.();
   }
 }
 
@@ -108,6 +109,15 @@ export function calcScrollSpacerHeights(
     top: Math.max(0, halfViewport - firstRowHeight / 2),
     bottom: Math.max(0, halfViewport - lastRowHeight / 2),
   };
+}
+
+export function formatLoadingCellLabel(
+  sourceName: string | null | undefined,
+  colIndex: number,
+  rowIndex: number,
+): string {
+  const title = sourceName?.replace(/\s+/g, " ").trim() || `Source ${colIndex + 1}`;
+  return `${title} (C${colIndex + 1}, R${rowIndex + 1})`;
 }
 
 export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLElement): void {
@@ -142,6 +152,14 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
 
   const compDiv = document.createElement("div") as HTMLDivElement;
   compDiv.className = "_scf_comp";
+  const loadingOverlay = document.createElement("div");
+  loadingOverlay.className = "_scf_loading_overlay";
+  loadingOverlay.hidden = true;
+  const loadingSpinner = document.createElement("div");
+  loadingSpinner.className = "_scf_loading_spinner";
+  const loadingCaption = document.createElement("div");
+  loadingCaption.className = "_scf_loading_caption";
+  loadingOverlay.append(loadingSpinner, loadingCaption);
   const wheelZoomGesture: WheelZoomGestureState = { anchor: null, resetTimer: null };
 
   const { drag, onDragMove, onDragEnd } = setupDragHandlers(compDiv);
@@ -195,6 +213,20 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
       comparisonViewportWidth(),
       comp.visibleCols,
     );
+  }
+
+  function loadingLabelFor(rowIndex: number, colIndex: number): string {
+    const names = grid.rowNames?.[rowIndex] ?? grid.names;
+    return formatLoadingCellLabel(names?.[colIndex], colIndex, rowIndex);
+  }
+
+  function syncLoadingOverlay(): void {
+    const rowIndex = Number.isInteger(comp.currentRow) ? comp.currentRow : initialPosition.row;
+    const colIndex = Number.isInteger(comp.currentCol) ? comp.currentCol : initialPosition.col;
+    const rowData = allRowData[rowIndex];
+    const loading = rowData?.rowDiv.classList.contains("_scf_loading") ?? false;
+    loadingOverlay.hidden = !loading;
+    if (loading) loadingCaption.textContent = loadingLabelFor(rowIndex, colIndex);
   }
 
   // The source-title banner. With per-row names (grid.rowNames — slow.pics)
@@ -312,7 +344,8 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   function switchColumn(col: number) {
     if (!comp.visibleCols.includes(col)) return;
     comp.currentCol = col;
-    for (const rowData of allRowData) {
+    for (let rowIndex = 0; rowIndex < allRowData.length; rowIndex++) {
+      const rowData = allRowData[rowIndex];
       const { rowDiv, imgs, loaded } = rowData;
       // Only promote a deferred src → src in rows the IO has already
       // loaded. Unloaded rows keep their `dataset.src` and pick up the
@@ -347,6 +380,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
       }
       rowDiv.dataset.col = String(col);
     }
+    syncLoadingOverlay();
     buildLabel(col);
     comp.revealColumnNav?.();
     // Update nav map thumbnail for new column (only when zoomed)
@@ -386,6 +420,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     allRowData.push(rowData);
   }
   compDiv.appendChild(bottomSpacer);
+  compDiv.appendChild(loadingOverlay);
 
   // IntersectionObserver: load deferred rows as they enter the viewport
   const rowObserver = new IntersectionObserver((entries) => {
@@ -464,6 +499,15 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     bottomSpacer.style.height = spacers.bottom + "px";
   };
   comp.updateTitleLayout = () => buildLabel(comp.currentCol);
+  comp.updateLoadingOverlay = syncLoadingOverlay;
+
+  const loadingObserver = new MutationObserver((records) => {
+    const activeRow = allRowData[comp.currentRow]?.rowDiv;
+    if (records.some((record) => record.target === activeRow)) syncLoadingOverlay();
+  });
+  for (const rowData of allRowData) {
+    loadingObserver.observe(rowData.rowDiv, { attributes: true, attributeFilter: ["class"] });
+  }
 
   compDiv.addEventListener("mousemove", (e) => {
     if (drag.active || !cfgMouseSwitch()) return;
@@ -577,6 +621,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     comp.currentRow = rowIdx;
     comp.navTargetRow = rowIdx;
     comp.updateLabel?.();
+    comp.updateLoadingOverlay?.();
     allRowData[rowIdx].rowDiv.scrollIntoView({ behavior: "smooth", block: "center" });
     rowNav.updateRowNav(rowIdx);
     comp.revealRowNav?.();
@@ -629,6 +674,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     window.removeEventListener("resize", onWindowResize);
     if (spacerResizeObserver) spacerResizeObserver.disconnect();
     openCenterRO?.disconnect();
+    loadingObserver.disconnect();
 
     rowObserver.disconnect();
     resetWheelZoomGesture(wheelZoomGesture);

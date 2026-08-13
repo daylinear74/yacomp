@@ -95,21 +95,49 @@ export function injectCSS(): void {
       line-height: 0;
       overflow: hidden;
     }
-    ._scf_comp_row._scf_loading::after {
-      content: '';
-      position: absolute;
+    ._scf_loading_overlay {
+      position: fixed;
       top: 50%;
       left: 50%;
+      width: 0;
+      height: 0;
+      pointer-events: none;
+      z-index: 2;
+    }
+    ._scf_loading_overlay[hidden] {
+      display: none;
+    }
+    ._scf_loading_spinner {
+      position: absolute;
+      top: 0;
+      left: 0;
       width: 32px;
       height: 32px;
-      margin: -16px 0 0 -16px;
+      margin: 0;
       border: 3px solid rgba(255,255,255,.15);
       border-top-color: #fff;
       border-radius: 50%;
+      transform: translate(-50%, -50%);
       animation: _scf_spin .7s linear infinite;
-      z-index: 1;
     }
-    @keyframes _scf_spin { to { transform: rotate(360deg); } }
+    ._scf_loading_caption {
+      position: absolute;
+      top: 28px;
+      left: 0;
+      width: max-content;
+      max-width: min(80vw, 720px);
+      overflow: hidden;
+      color: rgba(255,255,255,.9);
+      font: 600 14px/1.35 system-ui, sans-serif;
+      text-overflow: ellipsis;
+      text-shadow: 0 1px 4px rgba(0,0,0,.8);
+      white-space: nowrap;
+      transform: translateX(-50%);
+    }
+    @keyframes _scf_spin {
+      from { transform: translate(-50%, -50%) rotate(0deg); }
+      to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
     ._scf_comp._scf_zoomed ._scf_comp_row {
       cursor: crosshair;
     }

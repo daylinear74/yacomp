@@ -77,6 +77,71 @@ test("viewer opens on button click", async ({ page }) => {
   await openViewer(page);
 });
 
+test("loading spinner stays at viewport center for a narrow left-aligned source", async ({ page }) => {
+  let releaseImages!: () => void;
+  const imagesBlocked = new Promise<void>((resolve) => { releaseImages = resolve; });
+  await page.route(/i\.slow\.pics/, async (route) => {
+    await imagesBlocked;
+    await route.fulfill({
+      contentType: "image/svg+xml",
+      body: fixtureSvg(DEFAULT_IMAGE_SIZE),
+    });
+  });
+  try {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.click("#open-viewer");
+
+    const comp = page.locator("._scf_comp");
+    const firstRow = page.locator("._scf_comp_row").first();
+    const spinner = page.locator("._scf_loading_spinner");
+    const caption = page.locator("._scf_loading_caption");
+    await expect(firstRow).toHaveClass(/_scf_loading/);
+    await expect(spinner).toBeVisible();
+    await expect(caption).toHaveText("FRA (C1, R1)");
+
+    // Reproduce the geometry that exposed the bug: a three-source viewer on
+    // its rightmost source, followed by a mouse sweep to the left source while
+    // the image row itself is narrow and pinned to the viewport's left edge.
+    await page.keyboard.press("Digit3");
+    await expect(caption).toHaveText("TWN(Gamma=0 92) (C3, R1)");
+    await firstRow.evaluate((element) => {
+      const row = element as HTMLElement;
+      row.style.width = "320px";
+      row.style.height = "180px";
+      row.style.aspectRatio = "auto";
+      row.style.marginLeft = "0";
+      row.style.marginRight = "auto";
+    });
+    const compBox = await comp.boundingBox();
+    expect(compBox).not.toBeNull();
+    await page.mouse.move(compBox!.x + 10, compBox!.y + compBox!.height / 2);
+    await expect(caption).toHaveText("FRA (C1, R1)");
+
+    const assertViewportCentered = async () => {
+      const spinnerBox = await spinner.boundingBox();
+      const captionBox = await caption.boundingBox();
+      const viewport = page.viewportSize();
+      expect(spinnerBox).not.toBeNull();
+      expect(captionBox).not.toBeNull();
+      expect(viewport).not.toBeNull();
+      expect(Math.abs(spinnerBox!.x + spinnerBox!.width / 2 - viewport!.width / 2))
+        .toBeLessThanOrEqual(1);
+      expect(Math.abs(spinnerBox!.y + spinnerBox!.height / 2 - viewport!.height / 2))
+        .toBeLessThanOrEqual(1);
+      expect(captionBox!.y).toBeGreaterThan(viewport!.height / 2 + 20);
+    };
+    await assertViewportCentered();
+
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("ArrowDown");
+    await expect(caption).toHaveText("FRA (C1, R4)");
+    await assertViewportCentered();
+  } finally {
+    releaseImages();
+  }
+});
+
 test("viewer opens with V shortcut", async ({ page }) => {
   await page.goto("/");
   await page.keyboard.press("KeyV");

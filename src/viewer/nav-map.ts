@@ -141,6 +141,7 @@ export function createNavMap(
     compDiv.scrollTop = next.scrollTop;
     if (comp.updateRowNav) comp.updateRowNav(rowIdx);
     comp.updateLabel?.();
+    comp.updateLoadingOverlay?.();
   }
   navMapEl.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return;

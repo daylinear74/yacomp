@@ -1,10 +1,21 @@
 import { describe, test, expect } from "bun:test";
 import {
   calcScrollSpacerHeights,
+  formatLoadingCellLabel,
   insertLinkAfter,
   resetWheelZoomGesture,
   type WheelZoomGestureState,
 } from "../../src/viewer/comparison";
+
+describe("formatLoadingCellLabel", () => {
+  test("shows a normalized title with 1-based column and row coordinates", () => {
+    expect(formatLoadingCellLabel("  BD   Remux  ", 0, 3)).toBe("BD Remux (C1, R4)");
+  });
+
+  test("falls back to a numbered source when the title is absent", () => {
+    expect(formatLoadingCellLabel(null, 2, 0)).toBe("Source 3 (C3, R1)");
+  });
+});
 
 describe("calcScrollSpacerHeights", () => {
   test("computes spacers for centered scrolling", () => {
