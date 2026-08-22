@@ -113,9 +113,11 @@ export function buildFilter(
   gammaCheck: GammaMismatchCheckId | null = null,
 ): string {
   const parts: string[] = [];
-  if (svgFilter) parts.push(svgFilter);
+  // Gamma is a per-source calibration. Apply it before the shared analysis
+  // mode so Solar/Residual/Luma/Chroma inspect the corrected pixels.
   const gamma = gammaMismatchCheckFilter(gammaCheck);
   if (gamma) parts.push(gamma);
+  if (svgFilter) parts.push(svgFilter);
   const bc = bcString(b, c);
   if (bc) parts.push(bc);
   return parts.join(" ");

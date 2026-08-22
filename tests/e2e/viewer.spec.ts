@@ -768,6 +768,74 @@ test("gamma mismatch filter defs live in the same tree as the comp images", asyn
   await expectFilterIdResolvesFromImageRoot(page, fragmentId!);
 });
 
+test("gamma calibration precedes Solar without clearing the active filter", async ({
+  page,
+}) => {
+  await openViewer(page);
+  await page.keyboard.press("KeyF");
+
+  async function readActiveFilter(): Promise<string> {
+    return await page.evaluate(() => {
+      const shadow = (document.getElementById("_scf_root_") as HTMLElement | null)
+        ?.shadowRoot;
+      const img = shadow?.querySelector("._scf_comp_img") as HTMLImageElement | null;
+      return img?.style.filter ?? "";
+    });
+  }
+
+  await expect.poll(readActiveFilter, { timeout: 5000 }).toContain("scf-s1");
+
+  await page.evaluate(() => {
+    const shadow = (document.getElementById("_scf_root_") as HTMLElement | null)
+      ?.shadowRoot;
+    const img = shadow?.querySelector("._scf_comp_img") as HTMLImageElement | null;
+    if (!img) throw new Error("Active comparison image not found");
+    const mutations: Array<{ oldValue: string | null; filter: string }> = [];
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        mutations.push({
+          oldValue: record.oldValue,
+          filter: img.style.filter,
+        });
+      }
+    });
+    observer.observe(img, {
+      attributes: true,
+      attributeFilter: ["style"],
+      attributeOldValue: true,
+    });
+    const testWindow = window as unknown as {
+      __gammaSolarMutations: typeof mutations;
+      __gammaSolarObserver: MutationObserver;
+    };
+    testWindow.__gammaSolarMutations = mutations;
+    testWindow.__gammaSolarObserver = observer;
+  });
+
+  await page.keyboard.press("KeyG");
+  await expect.poll(readActiveFilter, { timeout: 5000 })
+    .toContain("scf-gamma-mismatch-aeqt-0p88");
+
+  const result = await page.evaluate(() => {
+    const testWindow = window as unknown as {
+      __gammaSolarMutations: Array<{ oldValue: string | null; filter: string }>;
+      __gammaSolarObserver: MutationObserver;
+    };
+    testWindow.__gammaSolarObserver.disconnect();
+    return {
+      filter: testWindow.__gammaSolarMutations.at(-1)?.filter ?? "",
+      mutations: testWindow.__gammaSolarMutations,
+    };
+  });
+
+  expect(result.mutations).toHaveLength(1);
+  expect(result.mutations[0].oldValue).toContain("scf-s1");
+  const gammaIndex = result.filter.indexOf("scf-gamma-mismatch-aeqt-0p88");
+  const solarIndex = result.filter.indexOf("scf-s1");
+  expect(gammaIndex).toBeGreaterThanOrEqual(0);
+  expect(solarIndex).toBeGreaterThan(gammaIndex);
+});
+
 // ─── Settings-driven runtime behavior ──────────────────────────────────────
 //
 // These tests verify that user-configurable settings actually change runtime

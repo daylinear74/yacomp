@@ -1,6 +1,7 @@
 import { afterEach, describe, test, expect } from "bun:test";
 import {
   applyFilterToImg,
+  buildFilter,
   orderedRowsAroundAnchor,
   orderedColumnsAroundAnchor,
   orderedCompImageTargetsByAnchor,
@@ -18,6 +19,15 @@ import type { Comp, RowData } from "../../src/viewer/types";
 // image filters first") points at the right tests immediately.
 
 afterEach(() => setModeIndex(0));
+
+describe("filter composition order", () => {
+  test("applies per-source gamma before the shared analysis mode", () => {
+    expect(buildFilter("url(#scf-s1)", 1.2, 0.8, "aeqt-0p88")).toBe(
+      "url(#scf-gamma-mismatch-aeqt-0p88) url(#scf-s1) " +
+      "brightness(1.20) contrast(0.80)",
+    );
+  });
+});
 
 describe("async image-source filtering", () => {
   test("does not commit a colorspace result after the image source changes", async () => {
