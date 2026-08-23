@@ -124,6 +124,10 @@ function viewerLinks(page: Page) {
   return page.locator("._scf_comp_link").filter({ hasText: /^Show Viewer/ });
 }
 
+function viewerSwitches(page: Page) {
+  return page.locator("._scf_torrent_viewer_switch");
+}
+
 async function readGridNames(page: Page, linkIndex: number): Promise<string[]> {
   // Click the Nth comparison link, read source names off the viewer's
   // label, then close the viewer so the next assertion starts clean.
@@ -210,6 +214,69 @@ test("hdbits: host trigger link inherits page color and opens the viewer", async
 
   await link.click();
   await expect(page.locator("._scf_comp")).toBeVisible();
+});
+
+test("hdbits: torrent ⇄ switches both ways and image clicks honor the active mode", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/001-torrent-desc-simple-grid");
+  await waitForHdbitsReady(page);
+
+  const link = comparisonLinks(page);
+  const toggle = viewerSwitches(page);
+  await expect(link).toHaveCount(1);
+  await expect(toggle).toHaveText("⇄");
+  await expect(toggle).toHaveAttribute("title", "Switch to Viewer");
+  await expect(toggle).toHaveAttribute("aria-label", "Switch comparison to Viewer");
+  await expect(page.locator("._scf_torrent_viewer_sep")).toHaveText("|");
+  expect(
+    await link.evaluate((el) => [
+      el.textContent?.trim(),
+      el.nextElementSibling?.textContent?.trim(),
+      el.nextElementSibling?.nextElementSibling?.textContent?.trim(),
+    ]),
+  ).toEqual(["Show comparison", "|", "⇄"]);
+
+  await toggle.click();
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerSwitches(page)).toHaveCount(1);
+  await expect(toggle).toHaveAttribute("title", "Switch to comparison");
+  await expect(toggle).toHaveAttribute("aria-label", "Switch Viewer to comparison");
+  await expect(viewerLinks(page)).toHaveCount(1);
+
+  const select = page.locator("select._scf_column_select");
+  await expect(select).toHaveValue("1");
+  await expect(select.locator("option")).toHaveCount(6);
+  await select.selectOption("3");
+  await expect(page.locator("._scf_column_control")).toContainText("columns");
+
+  // The switch replaces the comparison image openers as well as its link.
+  // ccc1 is flat index 4 → row 1, column 1 in the selected 3-wide Viewer.
+  await page.locator('img[src*="ccc1"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  const rows = page.locator("._scf_comp_row");
+  await expect(rows).toHaveCount(2);
+  await expect.poll(() => rows.evaluateAll((els) => els.map((el) => el.querySelectorAll("._scf_comp_img").length)))
+    .toEqual([3, 3]);
+  await expect(page.locator("._scf_comp_label_item", { hasText: "Source 2" })).toHaveCSS("opacity", "1");
+
+  await page.keyboard.press("Escape");
+  await toggle.click();
+  await expect(viewerLinks(page)).toHaveCount(0);
+  await expect(comparisonLinks(page)).toHaveCount(1);
+  await expect(toggle).toHaveAttribute("title", "Switch to Viewer");
+  await expect(toggle).toHaveAttribute("aria-label", "Switch comparison to Viewer");
+
+  // Switching back restores the inferred 2-wide Source/Encode comparison,
+  // including its original per-image opener.
+  await page.locator('img[src*="ccc1"]').click();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(3);
+  await expect(page.locator("._scf_comp_label_item", { hasText: "Source" })).toHaveCSS("opacity", "1");
+
+  // The selected Viewer width survives a round trip through comparison mode.
+  await page.keyboard.press("Escape");
+  await toggle.click();
+  await expect(page.locator("select._scf_column_select")).toHaveValue("3");
+  await expect(page.locator("._scf_column_control")).toContainText("columns");
 });
 
 test("hdbits: indivisible comparison-thread OP partitions its trailing shot (80402)", async ({ page }) => {
@@ -466,6 +533,15 @@ test("hdbits: offer description gets torrent-description semantics (gallery fall
   await page.locator('img[src*="g196a"]').click();
   await expect(page.locator("._scf_comp")).toBeVisible();
   await expect(page.locator("._scf_comp_row")).toHaveCount(6);
+});
+
+test("hdbits: offer comparisons do not get the torrent Viewer switch", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/195-offer-desc-three-column-comparison");
+  await waitForHdbitsReady(page);
+
+  await expect(comparisonLinks(page)).toHaveCount(1);
+  await expect(viewerSwitches(page)).toHaveCount(0);
 });
 
 test("hdbits: technical doc labels before a torrent gallery are not source columns", async ({ page }) => {
@@ -832,9 +908,13 @@ test("hdbits: a Comparisons heading after a sample block still forms a titled co
       }
       return -2;
     };
+    const switchButton = link.nextElementSibling?.nextElementSibling;
+    const comparisonControlEnd = switchButton?.classList.contains("_scf_torrent_viewer_switch")
+      ? switchButton
+      : link;
     return {
       titleToLink: countBreaks(heading, link),
-      linkToImages: countBreaks(link, firstImg),
+      linkToImages: countBreaks(comparisonControlEnd, firstImg),
     };
   });
   expect(spacing).toEqual({ titleToLink: 2, linkToImages: 1 });
@@ -871,7 +951,8 @@ test("hdbits: Show comparison link sits immediately before the image run", async
         const firstImage = document.querySelector('img[src*="note01"]');
         if (!trigger || !firstImage) return null;
         const range = document.createRange();
-        range.setStartAfter(trigger);
+        const switchButton = trigger.nextElementSibling?.nextElementSibling;
+        range.setStartAfter(switchButton?.classList.contains("_scf_torrent_viewer_switch") ? switchButton : trigger);
         range.setEndBefore(firstImage.closest("a") ?? firstImage);
         return range.toString().trim();
       }),
@@ -920,7 +1001,11 @@ test("hdbits: sibling heading sections place triggers before matching image runs
   const placement = await page.evaluate(() =>
     [...document.querySelectorAll<HTMLAnchorElement>("._scf_comp_link")].map((link) => {
       let next: Node | null = link.nextSibling;
-      while (next && (next.nodeName === "BR" || (next.nodeType === 3 && !(next.textContent || "").trim()))) {
+      while (next && (
+        next.nodeName === "BR" ||
+        (next.nodeType === 3 && !(next.textContent || "").trim()) ||
+        (next instanceof Element && next.matches("._scf_torrent_viewer_sep, ._scf_torrent_viewer_switch"))
+      )) {
         next = next.nextSibling;
       }
       const img = next instanceof HTMLAnchorElement
@@ -930,7 +1015,8 @@ test("hdbits: sibling heading sections place triggers before matching image runs
           : null;
       const range = document.createRange();
       if (img) {
-        range.setStartAfter(link);
+        const switchButton = link.nextElementSibling?.nextElementSibling;
+        range.setStartAfter(switchButton?.classList.contains("_scf_torrent_viewer_switch") ? switchButton : link);
         range.setEndBefore(img.closest("a") ?? img);
       }
       return {

@@ -35,6 +35,23 @@ function injectColumnSelectCSS(): void {
       padding: 0 1px;
       margin: 0;
     }
+    ._scf_torrent_viewer_sep {
+      margin-left: 6px;
+      opacity: .4;
+      user-select: none;
+    }
+    ._scf_torrent_viewer_switch {
+      display: inline-block;
+      vertical-align: middle;
+      margin-left: 6px;
+      cursor: pointer;
+      color: inherit;
+      text-decoration: none;
+      font-size: 1.15em;
+      line-height: 1;
+      opacity: .7;
+    }
+    ._scf_torrent_viewer_switch:hover { opacity: 1; }
   `;
   document.head.appendChild(style);
 }
@@ -78,6 +95,9 @@ function isLegacyManualColumnControl(node: Node | null): node is HTMLElement {
 }
 
 function removeExistingComparisonLinks(): void {
+  for (const node of document.querySelectorAll("._scf_torrent_viewer_sep, ._scf_torrent_viewer_switch")) {
+    node.remove();
+  }
   for (const control of document.querySelectorAll("._scf_column_control")) {
     control.remove();
   }
@@ -261,6 +281,7 @@ function addManualColumnControlFromCells(
   anchor: Node,
   container: HTMLElement,
   images: HTMLImageElement[],
+  initialColumns = 1,
 ): HTMLAnchorElement {
   injectColumnSelectCSS();
   const wrap = document.createElement("span");
@@ -273,8 +294,9 @@ function addManualColumnControlFromCells(
     option.textContent = String(i);
     select.appendChild(option);
   }
-  select.value = "1";
-  const columnsText = document.createTextNode(" column");
+  const startingColumns = Math.max(1, Math.min(initialColumns, cells.length));
+  select.value = String(startingColumns);
+  const columnsText = document.createTextNode(startingColumns === 1 ? " column" : " columns");
   const link = makeShowComparisonLink("Show Viewer");
   const submit = (initialIndex?: number) => {
     const cols = Number.parseInt(select.value, 10);
@@ -318,6 +340,86 @@ function addManualColumnControlFromCells(
   wrap.append(link, " with ", select, columnsText);
   insertNodeBeforeImageRun(images, wrap, container);
   return link;
+}
+
+interface TorrentViewerSwitchTarget {
+  link: HTMLAnchorElement;
+  cells: GridCell[];
+  images: HTMLImageElement[];
+  anchor: Node;
+  container: HTMLElement;
+}
+
+/** Add a compact mode switch beside an inferred torrent comparison. Automatic
+ *  detection remains the default, while Viewer mode reuses the existing column
+ *  control and can be switched back to the original comparison. */
+function addTorrentViewerSwitch(target: TorrentViewerSwitchTarget): void {
+  const { link, cells, images, anchor, container } = target;
+  if (
+    !link.isConnected ||
+    !link.closest("table#details") ||
+    !isTorrentDescriptionContainer(link) ||
+    images.length < 2
+  ) return;
+  if (link.nextElementSibling?.classList.contains("_scf_torrent_viewer_sep")) return;
+  injectColumnSelectCSS();
+
+  const sep = document.createElement("span");
+  sep.className = "_scf_torrent_viewer_sep";
+  sep.textContent = "|";
+  sep.setAttribute("aria-hidden", "true");
+
+  const toggle = document.createElement("a");
+  toggle.href = "#";
+  toggle.className = "_scf_torrent_viewer_switch";
+  toggle.title = "Switch to Viewer";
+  toggle.setAttribute("role", "button");
+  toggle.setAttribute("aria-label", "Switch comparison to Viewer");
+  toggle.textContent = "⇄";
+  const comparisonImageOpeners = images.map((img) => imageOpeners.get(img));
+  let viewerControl: HTMLElement | null = null;
+  let viewerColumns = 1;
+
+  const placeSwitchAfter = (element: Element): void => {
+    element.insertAdjacentElement("afterend", toggle);
+    element.insertAdjacentElement("afterend", sep);
+  };
+
+  const switchToViewer = (): void => {
+    link.remove();
+    sep.remove();
+    toggle.remove();
+    const viewerLink = addManualColumnControlFromCells(cells, anchor, container, images, viewerColumns);
+    viewerControl = viewerLink.closest<HTMLElement>("._scf_column_control");
+    if (!viewerControl) return;
+    toggle.title = "Switch to comparison";
+    toggle.setAttribute("aria-label", "Switch Viewer to comparison");
+    placeSwitchAfter(viewerControl);
+  };
+
+  const switchToComparison = (): void => {
+    if (!viewerControl) return;
+    const selected = viewerControl.querySelector<HTMLSelectElement>("._scf_column_select")?.value;
+    viewerColumns = Number.parseInt(selected || "1", 10) || 1;
+    viewerControl.replaceWith(link);
+    viewerControl = null;
+    images.forEach((img, idx) => {
+      const open = comparisonImageOpeners[idx];
+      if (open) imageOpeners.set(img, open);
+      else imageOpeners.delete(img);
+    });
+    toggle.title = "Switch to Viewer";
+    toggle.setAttribute("aria-label", "Switch comparison to Viewer");
+  };
+
+  toggle.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (viewerControl) switchToComparison();
+    else switchToViewer();
+  });
+
+  placeSwitchAfter(link);
 }
 
 function immediateImagesAfter(node: Node): HTMLImageElement[] {
@@ -569,6 +671,7 @@ export function setupHDBitsCore(): void {
   }
 
   const claimed = new Set<HTMLImageElement>();
+  const torrentViewerSwitches: TorrentViewerSwitchTarget[] = [];
   for (const { grid, container } of getGrids(slowpicsImgs)) {
     for (const cell of grid.rows.flat()) if (cell.img) claimed.add(cell.img);
     const cells = grid.rows.flat();
@@ -594,6 +697,16 @@ export function setupHDBitsCore(): void {
       }
     };
     if (!grid.gallery) link.addEventListener("click", (e) => { void open(e); });
+
+    if (!grid.gallery) {
+      torrentViewerSwitches.push({
+        link,
+        cells,
+        images,
+        anchor: grid.anchorEl ?? images[0] ?? container,
+        container: container as HTMLElement,
+      });
+    }
 
     // Click any recognized HDBits grid image to jump straight into the viewer.
     attachGridImageClicks(grid, container as HTMLElement, link);
@@ -621,6 +734,7 @@ export function setupHDBitsCore(): void {
     }
   }
   downgradeTrailingTorrentComparisonLinks();
+  for (const target of torrentViewerSwitches) addTorrentViewerSwitch(target);
 
   // Rescue from slow.pics only the comparisons whose screenshots getGrids did
   // not already shape from a local label.
@@ -769,6 +883,13 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
   });
 
   insertLinkAfter(spLink, link);
+  addTorrentViewerSwitch({
+    link,
+    cells: images.map(forumManualCell),
+    images,
+    anchor: spLink,
+    container,
+  });
 }
 
 /** Last resort: a compact "Show Viewer" control with a columns dropdown. One
