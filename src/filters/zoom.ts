@@ -269,9 +269,9 @@ function sizeRowScaled(rd: RowData, comp: Comp, scale: number): void {
     },
     { once: true },
   );
-  // The sizer (the row's col-0 full image) is a reliable resolution source: if
-  // the active column's own image is still loading — or its one-shot load was
-  // missed — size from the sizer the moment it lands so the row reaches its
+  // The sizer (the row's initial active-source image) is a reliable resolution
+  // source: if the active column's own image is still loading — or its one-shot
+  // load was missed — size from the sizer the moment it lands so the row reaches its
   // device-1:1 width instead of being stranded at the fit-width fallback (which
   // reads as the logical/"real" size on a HiDPI screen).
   if (rd.sizer && !rd.sizer.naturalWidth) {
@@ -334,8 +334,9 @@ function getReferenceWidth(): number {
   return activeColumnNaturalWidth() || oneToOneWidth(getSizerNaturalWidth()) || window.innerWidth;
 }
 
-/** Raw source-pixel width of the column-0 sizer (NOT device-adjusted) — the
- *  image's true native width, for the toast's "Native" readout. */
+/** Raw source-pixel width of the first row's initial active-source sizer (NOT
+ *  device-adjusted) — the image's true native width, for the toast's "Native"
+ *  readout. */
 function getSizerNaturalWidth(): number {
   const sizer = getShadowRoot().querySelector("._scf_comp_sizer") as HTMLImageElement | null;
   return sizer?.naturalWidth || 0;
@@ -365,9 +366,9 @@ function currentRowReadout(): { nativeW: number; nativeH: number; screenW: numbe
 }
 
 /** Native pixel width of the ACTIVE column's image (from any loaded row), so 1:1
- *  shows each column at its own resolution instead of always column 0's sizer
- *  (a 1080p source and a 4K encode in one comparison should each be 1:1). Falls
- *  back to the column-0 sizer until the active column has measured. */
+ *  shows each column at its own resolution instead of relying on a sizer whose
+ *  source may no longer be active (a 1080p source and a 4K encode in one
+ *  comparison should each be 1:1). Returns 0 until that column has measured. */
 function activeColumnNaturalWidth(): number {
   const comp = activeComps[activeComps.length - 1];
   if (comp) {
@@ -377,7 +378,7 @@ function activeColumnNaturalWidth(): number {
     }
   }
   // 0 (not "the sizer") when the active column hasn't measured, so doZoom1to1 /
-  // refit1to1 wait for its image instead of locking to column 0's width.
+  // refit1to1 wait for its image instead of locking to the sizer's width.
   return 0;
 }
 

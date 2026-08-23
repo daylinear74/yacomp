@@ -413,6 +413,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
       drag,
       switchColumn,
       pointerColumnForEvent,
+      initialPosition.col,
       ri > 0 && ri !== initialPosition.row,
     );
     if (ri === 0 || ri === initialPosition.row) rowData.loaded = true;

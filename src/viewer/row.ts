@@ -71,11 +71,13 @@ export function buildRow(
   drag: DragState,
   switchColumn: (col: number) => void,
   pointerColumnForEvent: (e: MouseEvent) => number,
+  initialCol: number,
   deferred: boolean,
 ): RowData {
+  const activeCol = rowCells[initialCol] ? initialCol : 0;
   const rowDiv = document.createElement("div");
   rowDiv.className = "_scf_comp_row _scf_loading";
-  rowDiv.dataset.col = "0";
+  rowDiv.dataset.col = String(activeCol);
 
   const sizer = document.createElement("img");
   sizer.className = "_scf_comp_sizer";
@@ -86,11 +88,11 @@ export function buildRow(
   const knownAspectRatio = rowCellsAspectRatio(rowCells);
   if (knownAspectRatio) rowDiv.style.aspectRatio = knownAspectRatio;
   if (deferred) {
-    sizer.dataset.src = rowCells[0].full;
+    sizer.dataset.src = rowCells[activeCol].full;
     if (!knownAspectRatio) rowDiv.style.aspectRatio = "16 / 9";
   } else {
     sizer.addEventListener("load", () => rowDiv.classList.remove("_scf_loading"), { once: true });
-    sizer.src = rowCells[0].full;
+    sizer.src = rowCells[activeCol].full;
   }
   rowDiv.appendChild(sizer);
 
@@ -118,16 +120,16 @@ export function buildRow(
     img.className = "_scf_comp_img";
     installHdbImageFallback(img);
     const src = rowCells[ci].full;
-    // Eager-load only column 0 of non-deferred rows; every other cell
+    // Eager-load only the active column of non-deferred rows; every other cell
     // waits until the user activates it (switchColumn / loadRowColumn)
     // or the row enters the IO buffer (loadRow loads the active col).
-    if (!deferred && ci === 0) {
+    if (!deferred && ci === activeCol) {
       img.addEventListener("load", () => adjustRowAR(img), { once: true });
       img.src = src;
     } else {
       img.dataset.src = src;
     }
-    img.style.visibility = ci === 0 ? "visible" : "hidden";
+    img.style.visibility = ci === activeCol ? "visible" : "hidden";
     if (img.src) {
       void applyFilterToImg(img);
     }

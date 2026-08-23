@@ -393,6 +393,60 @@ test("lazy load: opening the viewer promotes only a handful of cells", async ({ 
   expect(stats.promoted).toBeGreaterThanOrEqual(1);
 });
 
+test("lazy load: a nonzero initial column does not promote hidden column zero", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => {
+    // openSlowPicsViewer reads #image as the page's active shot. Point it at
+    // row 1 / column 2 so both the always-ready first row and the initial row
+    // exercise buildRow's eager path with a nonzero source.
+    const activeImage = document.createElement("img");
+    activeImage.id = "image";
+    activeImage.src = "https://i.slow.pics/pillar-source-c.webp";
+    document.body.appendChild(activeImage);
+  });
+  await page.click("#open-viewer");
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await page.waitForTimeout(300);
+
+  const state = await page.evaluate(() => {
+    const root = (document.getElementById("_scf_root_") as HTMLElement).shadowRoot!;
+    const rows = Array.from(root.querySelectorAll<HTMLElement>("._scf_comp_row"));
+    return {
+      hiddenColumnZeroPromoted: rows.filter((row) =>
+        row.querySelectorAll<HTMLImageElement>("._scf_comp_img")[0]?.hasAttribute("src")
+      ).length,
+      eagerRows: rows.slice(0, 2).map((row) => {
+        const images = Array.from(row.querySelectorAll<HTMLImageElement>("._scf_comp_img"));
+        return {
+          column: row.dataset.col,
+          sizer: row.querySelector<HTMLImageElement>("._scf_comp_sizer")?.src.split("/").pop(),
+          promoted: images.map((img) => img.hasAttribute("src")),
+          columnZeroDeferred: !!images[0]?.dataset.src,
+          activeVisibility: images[2]?.style.visibility,
+        };
+      }),
+    };
+  });
+
+  expect(state.hiddenColumnZeroPromoted).toBe(0);
+  expect(state.eagerRows).toEqual([
+    {
+      column: "2",
+      sizer: "wide-source-c.webp",
+      promoted: [false, false, true],
+      columnZeroDeferred: true,
+      activeVisibility: "visible",
+    },
+    {
+      column: "2",
+      sizer: "pillar-source-c.webp",
+      promoted: [false, false, true],
+      columnZeroDeferred: true,
+      activeVisibility: "visible",
+    },
+  ]);
+});
+
 test("lazy load: scrolling the viewport promotes one cell per revealed row", async ({ page }) => {
   await openViewer(page);
   await page.waitForTimeout(300);
