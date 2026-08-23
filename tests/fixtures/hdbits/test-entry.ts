@@ -62,7 +62,12 @@ function run(): void {
   // the viewer once a "Show comparison" link has been clicked.
   setupKeyboard();
   setupHDBitsCore();
-  (window as unknown as { __yacomp: unknown }).__yacomp = { saveConfig, getConfig, resetConfig };
+  (window as unknown as { __yacomp: unknown }).__yacomp = {
+    saveConfig,
+    getConfig,
+    resetConfig,
+    rerunHDBits: setupHDBitsCore,
+  };
   (window as unknown as { __yacomp_test_ready: boolean }).__yacomp_test_ready = true;
 }
 

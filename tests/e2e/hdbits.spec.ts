@@ -279,6 +279,53 @@ test("hdbits: torrent ⇄ switches both ways and image clicks honor the active m
   await expect(page.locator("._scf_column_control")).toContainText("columns");
 });
 
+test("hdbits: rerunning setup from Viewer mode restores fresh comparison image openers", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/001-torrent-desc-simple-grid");
+  await waitForHdbitsReady(page);
+
+  await viewerSwitches(page).click();
+  await page.locator("select._scf_column_select").selectOption("3");
+  await page.evaluate(() => {
+    (window as unknown as { __yacomp: { rerunHDBits: () => void } }).__yacomp.rerunHDBits();
+  });
+
+  await expect(comparisonLinks(page)).toHaveCount(1);
+  await expect(viewerLinks(page)).toHaveCount(0);
+  await expect(viewerSwitches(page)).toHaveCount(1);
+
+  // The rerun must replace the detached 3-wide Viewer callback with the fresh
+  // 2-wide Source/Encode comparison callback for this same image element.
+  await page.locator('img[src*="ccc1"]').click();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(3);
+  await expect(page.locator("._scf_comp_label_item", { hasText: "Source" })).toHaveCSS("opacity", "1");
+});
+
+test("hdbits: rerun leaves native clicks intact for images no longer recognized", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/087-forum-post-slowpics-rescue-dirty-line-fix");
+  await waitForHdbitsReady(page);
+
+  const clickState = await page.evaluate(() => {
+    const img = document.querySelector<HTMLImageElement>('img[src*="g01"]')!;
+    const anchor = img.closest<HTMLAnchorElement>("a")!;
+    anchor.remove();
+    (window as unknown as { __yacomp: { rerunHDBits: () => void } }).__yacomp.rerunHDBits();
+    let state: { seen: boolean; defaultPrevented: boolean } | undefined;
+    anchor.addEventListener("click", (e) => {
+      state = {
+        seen: true,
+        defaultPrevented: e.defaultPrevented,
+      };
+    }, { capture: true, once: true });
+    anchor.click();
+    return state;
+  });
+
+  expect(clickState).toEqual({ seen: true, defaultPrevented: false });
+  await expect(page.locator("._scf_comp")).toHaveCount(0);
+});
+
 test("hdbits: indivisible comparison-thread OP partitions its trailing shot (80402)", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/113-iconic-80402");
@@ -1768,6 +1815,43 @@ test("hdbits: double-clicking Show comparison during the slow.pics fetch opens o
   await expect(page.locator("._scf_comp").first()).toBeVisible();
   await page.waitForTimeout(500);
   await expect(page.locator("._scf_comp")).toHaveCount(1);
+});
+
+test("hdbits: link and image clicks during one delayed fetch open one viewer", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/202-torrent-desc-slowpics-delayed-fetch-double-click");
+  await waitForHdbitsReady(page);
+
+  // Fire both entry points in one task so the image click necessarily lands
+  // while the comparison link's delayed fetch is still pending.
+  await page.evaluate(() => {
+    document.querySelector<HTMLAnchorElement>("._scf_comp_link")!.click();
+    document.querySelector<HTMLImageElement>('img[src*="g202a"]')!
+      .closest<HTMLAnchorElement>("a")!.click();
+  });
+
+  await expect(page.locator("._scf_comp").first()).toBeVisible();
+  await page.waitForTimeout(500);
+  await expect(page.locator("._scf_comp")).toHaveCount(1);
+});
+
+test("hdbits: switching away and back cancels a delayed comparison open", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/202-torrent-desc-slowpics-delayed-fetch-double-click");
+  await waitForHdbitsReady(page);
+
+  await comparisonLinks(page).click();
+  await viewerSwitches(page).click();
+  await expect(viewerLinks(page)).toHaveCount(1);
+  await viewerSwitches(page).click();
+  await expect(comparisonLinks(page)).toHaveCount(1);
+
+  await page.waitForTimeout(500);
+  await expect(page.locator("._scf_comp")).toHaveCount(0);
+
+  // Invalidating the stale request must not disable a fresh comparison open.
+  await comparisonLinks(page).click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
 });
 
 test("hdbits: a single-column gallery viewer shows no source-title banner", async ({ page }) => {

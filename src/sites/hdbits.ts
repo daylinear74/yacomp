@@ -276,13 +276,19 @@ function elementHasComparisonControl(el: Element): boolean {
     .some((link) => link.textContent === "Show comparison");
 }
 
+interface ManualColumnControl {
+  element: HTMLSpanElement;
+  link: HTMLAnchorElement;
+  select: HTMLSelectElement;
+}
+
 function addManualColumnControlFromCells(
   cells: GridCell[],
   anchor: Node,
   container: HTMLElement,
   images: HTMLImageElement[],
   initialColumns = 1,
-): HTMLAnchorElement {
+): ManualColumnControl {
   injectColumnSelectCSS();
   const wrap = document.createElement("span");
   wrap.className = "_scf_column_control";
@@ -339,7 +345,7 @@ function addManualColumnControlFromCells(
   });
   wrap.append(link, " with ", select, columnsText);
   insertNodeBeforeImageRun(images, wrap, container);
-  return link;
+  return { element: wrap, link, select };
 }
 
 interface TorrentViewerSwitchTarget {
@@ -348,6 +354,44 @@ interface TorrentViewerSwitchTarget {
   images: HTMLImageElement[];
   anchor: Node;
   container: HTMLElement;
+}
+
+interface ComparisonOpenState {
+  generation: number;
+  inFlightGeneration: number | null;
+}
+
+const comparisonOpenStates = new WeakMap<HTMLAnchorElement, ComparisonOpenState>();
+
+function comparisonOpenState(link: HTMLAnchorElement): ComparisonOpenState {
+  let state = comparisonOpenStates.get(link);
+  if (!state) {
+    state = { generation: 0, inFlightGeneration: null };
+    comparisonOpenStates.set(link, state);
+  }
+  return state;
+}
+
+function beginComparisonOpen(link: HTMLAnchorElement): number | null {
+  const state = comparisonOpenState(link);
+  if (state.inFlightGeneration === state.generation) return null;
+  state.inFlightGeneration = state.generation;
+  return state.generation;
+}
+
+function finishComparisonOpen(link: HTMLAnchorElement, generation: number): boolean {
+  const state = comparisonOpenState(link);
+  if (state.inFlightGeneration !== generation) return false;
+  state.inFlightGeneration = null;
+  return true;
+}
+
+function invalidateComparisonOpens(link: HTMLAnchorElement): void {
+  comparisonOpenState(link).generation++;
+}
+
+function isCurrentComparisonOpen(link: HTMLAnchorElement, generation: number): boolean {
+  return link.isConnected && comparisonOpenState(link).generation === generation;
 }
 
 /** Add a compact mode switch beside an inferred torrent comparison. Automatic
@@ -372,13 +416,20 @@ function addTorrentViewerSwitch(target: TorrentViewerSwitchTarget): void {
   const toggle = document.createElement("a");
   toggle.href = "#";
   toggle.className = "_scf_torrent_viewer_switch";
-  toggle.title = "Switch to Viewer";
   toggle.setAttribute("role", "button");
-  toggle.setAttribute("aria-label", "Switch comparison to Viewer");
   toggle.textContent = "⇄";
   const comparisonImageOpeners = images.map((img) => imageOpeners.get(img));
-  let viewerControl: HTMLElement | null = null;
+  const comparisonLabel = link.textContent;
+  let viewerControl: ManualColumnControl | null = null;
   let viewerColumns = 1;
+
+  const setSwitchDestination = (toViewer: boolean): void => {
+    toggle.title = toViewer ? "Switch to Viewer" : "Switch to comparison";
+    toggle.setAttribute(
+      "aria-label",
+      toViewer ? "Switch comparison to Viewer" : "Switch Viewer to comparison",
+    );
+  };
 
   const placeSwitchAfter = (element: Element): void => {
     element.insertAdjacentElement("afterend", toggle);
@@ -386,30 +437,27 @@ function addTorrentViewerSwitch(target: TorrentViewerSwitchTarget): void {
   };
 
   const switchToViewer = (): void => {
+    invalidateComparisonOpens(link);
+    link.textContent = comparisonLabel;
     link.remove();
     sep.remove();
     toggle.remove();
-    const viewerLink = addManualColumnControlFromCells(cells, anchor, container, images, viewerColumns);
-    viewerControl = viewerLink.closest<HTMLElement>("._scf_column_control");
-    if (!viewerControl) return;
-    toggle.title = "Switch to comparison";
-    toggle.setAttribute("aria-label", "Switch Viewer to comparison");
-    placeSwitchAfter(viewerControl);
+    viewerControl = addManualColumnControlFromCells(cells, anchor, container, images, viewerColumns);
+    setSwitchDestination(false);
+    placeSwitchAfter(viewerControl.element);
   };
 
   const switchToComparison = (): void => {
     if (!viewerControl) return;
-    const selected = viewerControl.querySelector<HTMLSelectElement>("._scf_column_select")?.value;
-    viewerColumns = Number.parseInt(selected || "1", 10) || 1;
-    viewerControl.replaceWith(link);
+    viewerColumns = Number.parseInt(viewerControl.select.value, 10) || 1;
+    viewerControl.element.replaceWith(link);
     viewerControl = null;
     images.forEach((img, idx) => {
       const open = comparisonImageOpeners[idx];
       if (open) imageOpeners.set(img, open);
       else imageOpeners.delete(img);
     });
-    toggle.title = "Switch to Viewer";
-    toggle.setAttribute("aria-label", "Switch comparison to Viewer");
+    setSwitchDestination(true);
   };
 
   toggle.addEventListener("click", (e) => {
@@ -419,6 +467,7 @@ function addTorrentViewerSwitch(target: TorrentViewerSwitchTarget): void {
     else switchToViewer();
   });
 
+  setSwitchDestination(true);
   placeSwitchAfter(link);
 }
 
@@ -462,8 +511,9 @@ function downgradeTrailingTorrentComparisonLinks(): void {
 
 // One image-click handler per on-page image, across both the getGrids and
 // slow.pics-rescue paths.
+type ImageOpener = (e: Event) => void;
 const wiredImages = new WeakSet<HTMLImageElement>();
-const imageOpeners = new WeakMap<HTMLImageElement, (e: Event) => void>();
+let imageOpeners = new WeakMap<HTMLImageElement, ImageOpener>();
 
 function onImageClickOpen(
   img: HTMLImageElement | undefined,
@@ -473,7 +523,7 @@ function onImageClickOpen(
 ): void {
   if (!img) return;
   if (wiredImages.has(img)) {
-    if (replace) imageOpeners.set(img, open);
+    if (replace || !imageOpeners.has(img)) imageOpeners.set(img, open);
     return;
   }
   wiredImages.add(img);
@@ -482,9 +532,11 @@ function onImageClickOpen(
     "click",
     (e) => {
       if (hdbitsImageClick() !== "viewer") return; // leave HDBits' native behavior
+      const currentOpen = imageOpeners.get(img);
+      if (!currentOpen) return;
       e.preventDefault();
       e.stopPropagation();
-      imageOpeners.get(img)?.(e);
+      currentOpen(e);
     },
     true, // capture, to beat any page-level image handler
   );
@@ -495,22 +547,22 @@ function onImageClickOpen(
  *  whole grid; this just adds a per-image entry point at the right row/col.
  *  Read live, so toggling the setting takes effect without a reload. */
 function attachGridImageClicks(grid: Grid, container: HTMLElement, link: HTMLAnchorElement): void {
-  // One in-flight guard per grid: the enrichment fetch can take ~1s, and a
-  // second click during it would stack a second full-screen viewer.
-  let opening = false;
+  // The trigger link and every image share one per-link in-flight guard: the
+  // enrichment fetch can take ~1s, and mixed entry points must not stack viewers.
   for (let r = 0; r < grid.rows.length; r++) {
     const row = grid.rows[r];
     for (let c = 0; c < row.length; c++) {
       onImageClickOpen(row[c].img, row[c].a, () => {
-        if (opening) return;
-        opening = true;
+        const generation = beginComparisonOpen(link);
+        if (generation === null) return;
         void maybeEnrichNames(grid)
           .then(() => {
+            if (!isCurrentComparisonOpen(link, generation)) return;
             if (grid.partial) openOrphanSelect(grid, container, link);
             else buildComparison({ ...grid, initialRow: r, initialCol: c }, container, link);
           })
           .finally(() => {
-            opening = false;
+            finishComparisonOpen(link, generation);
           });
       });
     }
@@ -645,6 +697,9 @@ async function maybeEnrichNames(grid: Grid): Promise<void> {
 export function setupHDBitsCore(): void {
   injectCSS();
   injectTriggerLinkCSS();
+  // Capture listeners survive a same-page setup rerun. Start a fresh dispatch
+  // map so they receive this run's controls instead of detached old closures.
+  imageOpeners = new WeakMap<HTMLImageElement, ImageOpener>();
   removeExistingComparisonLinks();
   addForumManualComparisonControl();
 
@@ -677,23 +732,28 @@ export function setupHDBitsCore(): void {
     const cells = grid.rows.flat();
     const images = cells.map((cell) => cell.img).filter((img): img is HTMLImageElement => !!img);
     const link = grid.gallery
-      ? addManualColumnControlFromCells(cells, grid.anchorEl ?? firstGridNode(grid) ?? container, container as HTMLElement, images)
+      ? addManualColumnControlFromCells(
+          cells,
+          grid.anchorEl ?? firstGridNode(grid) ?? container,
+          container as HTMLElement,
+          images,
+        ).link
       : makeShowComparisonLink();
-    let opening = false;
     const open = async (e: Event): Promise<void> => {
       e.preventDefault();
       // A second click while the enrichment fetch is in flight would stack a
       // second viewer over the first.
-      if (opening) return;
-      opening = true;
+      const generation = beginComparisonOpen(link);
+      if (generation === null) return;
       try {
         await maybeEnrichNames(grid);
+        if (!isCurrentComparisonOpen(link, generation)) return;
         // Retain the legacy partial-grid picker for explicit callers. Parsed
         // title-derived grids partition their short final row into a gallery.
         if (grid.partial) openOrphanSelect(grid, container as HTMLElement, link);
         else buildComparison(grid, container as HTMLElement, link);
       } finally {
-        opening = false;
+        finishComparisonOpen(link, generation);
       }
     };
     if (!grid.gallery) link.addEventListener("click", (e) => { void open(e); });
@@ -823,20 +883,21 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
     addManualColumnControl(images, spLink, container);
     return;
   }
+  const cells = images.map(forumManualCell);
   const link = makeShowComparisonLink();
-  let resolving = false;
   link.style.display = "block";
   link.style.marginTop = "6px";
   // Warm the ~1s slow.pics fetch on hover so the click feels instant (cached).
   link.addEventListener("mouseenter", () => { void fetchSlowPicsGridInfo(key); });
   link.addEventListener("click", async (e) => {
     e.preventDefault();
-    if (resolving) return;
-    resolving = true;
+    const generation = beginComparisonOpen(link);
+    if (generation === null) return;
     const original = link.textContent;
     link.textContent = "Loading comparison…";
     try {
       const info = await fetchSlowPicsGridInfo(key);
+      if (!isCurrentComparisonOpen(link, generation)) return;
       const resolved = resolveSlowPicsInfo(info, images, spLink, container);
       if (resolved) {
         // slow.pics is authoritative for the column COUNT; prefer the descriptive
@@ -853,20 +914,21 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
     } finally {
       // Restore the label even when resolving threw, so a transient failure
       // doesn't leave a link stuck on "Loading comparison…".
-      link.textContent = original;
-      resolving = false;
+      if (finishComparisonOpen(link, generation)) {
+        link.textContent = original;
+      }
     }
   });
 
   // Click any of this comparison's images to open the viewer at that shot.
   // Rescued comparisons aren't in getGrids, so the column shape is only known
   // after the slow.pics fetch — reshape then, mapping the flat index to row/col.
-  let openingImage = false;
   images.forEach((img, idx) => {
     onImageClickOpen(img, (img.closest("a") as HTMLAnchorElement | null) ?? undefined, () => {
-      if (openingImage) return;
-      openingImage = true;
+      const generation = beginComparisonOpen(link);
+      if (generation === null) return;
       void fetchSlowPicsGridInfo(key).then((info) => {
+        if (!isCurrentComparisonOpen(link, generation)) return;
         const resolved = resolveSlowPicsInfo(info, images, spLink, container);
         if (resolved) {
           const partition = buildRescueGridPartition(images, resolved, spLink);
@@ -875,9 +937,9 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
             return;
           }
         }
-        openImageViewer(images.map(forumManualCell), spLink, idx);
+        openImageViewer(cells, spLink, idx);
       }).finally(() => {
-        openingImage = false;
+        finishComparisonOpen(link, generation);
       });
     });
   });
@@ -885,7 +947,7 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
   insertLinkAfter(spLink, link);
   addTorrentViewerSwitch({
     link,
-    cells: images.map(forumManualCell),
+    cells,
     images,
     anchor: spLink,
     container,
