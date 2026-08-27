@@ -157,45 +157,88 @@ function insertLinkBeforeGridImages(grid: Grid, link: HTMLAnchorElement): boolea
   return true;
 }
 
-function insertNodeBeforeImageRun(images: HTMLImageElement[], node: Node, container: HTMLElement): void {
+interface ImageRunInsertion {
+  dispose(): void;
+}
+
+function insertNodeBeforeImageRun(
+  images: HTMLImageElement[],
+  node: Node,
+  container: HTMLElement,
+): ImageRunInsertion {
   const first = images[0];
   const firstNode = first ? (first.closest("a[href]") ?? first) : null;
   const parent = firstNode?.parentNode;
   if (!firstNode || !parent) {
     container.insertBefore(node, container.firstChild);
-    return;
+    return {
+      dispose() {
+        if (node.isConnected && node.parentNode === container) container.removeChild(node);
+      },
+    };
   }
 
+  // Preserve the page's exact original spacing so a temporary builder control
+  // can put it back. Normal controls live for the page lifetime and simply keep
+  // the normalized one-line gap.
+  const removedSeparators: Node[] = [];
   let current: Node | null = firstNode.previousSibling;
   while (current && (isBreakNode(current) || isBlankTextNode(current))) {
     const previous = current.previousSibling;
+    removedSeparators.unshift(current);
     current.parentNode?.removeChild(current);
     current = previous;
   }
 
   const previousMeaningful = previousMeaningfulSibling(firstNode);
+  const insertedSeparators: HTMLBRElement[] = [];
+  const restoreOriginalSpacing = () => {
+    for (const separator of insertedSeparators) {
+      if (separator.parentNode === parent) separator.remove();
+    }
+    if (firstNode.parentNode !== parent) return;
+    for (const separator of removedSeparators) {
+      if (!separator.parentNode) parent.insertBefore(separator, firstNode);
+    }
+  };
   if (
     previousMeaningful instanceof HTMLElement &&
     previousMeaningful.classList.contains("_scf_column_control") &&
     previousMeaningful.parentNode === parent
   ) {
+    const displacedControl = previousMeaningful;
     previousMeaningful.replaceWith(node);
-    let nextNode: Node | null = node.nextSibling;
-    while (nextNode && (isBreakNode(nextNode) || isBlankTextNode(nextNode))) {
-      const next = nextNode.nextSibling;
-      nextNode.parentNode?.removeChild(nextNode);
-      nextNode = next;
-    }
-    parent.insertBefore(document.createElement("br"), firstNode);
-    return;
+    const separator = document.createElement("br");
+    insertedSeparators.push(separator);
+    parent.insertBefore(separator, firstNode);
+    return {
+      dispose() {
+        // A newer control may already have replaced this one. Only restore the
+        // displaced control while our node is still the connected DOM owner.
+        if (!node.isConnected || node.parentNode !== parent || firstNode.parentNode !== parent) return;
+        parent.replaceChild(displacedControl, node);
+        restoreOriginalSpacing();
+      },
+    };
   }
 
   const previous = firstNode.previousSibling;
   if (previous && !isBreakNode(previous)) {
-    parent.insertBefore(document.createElement("br"), firstNode);
+    const separator = document.createElement("br");
+    insertedSeparators.push(separator);
+    parent.insertBefore(separator, firstNode);
   }
   parent.insertBefore(node, firstNode);
-  parent.insertBefore(document.createElement("br"), firstNode);
+  const separator = document.createElement("br");
+  insertedSeparators.push(separator);
+  parent.insertBefore(separator, firstNode);
+  return {
+    dispose() {
+      if (!node.isConnected || node.parentNode !== parent || firstNode.parentNode !== parent) return;
+      parent.removeChild(node);
+      restoreOriginalSpacing();
+    },
+  };
 }
 
 function gridFromCells(cells: GridCell[], cols: number, anchor: Node | null | undefined): Grid | null {
@@ -280,6 +323,7 @@ interface ManualColumnControl {
   element: HTMLSpanElement;
   link: HTMLAnchorElement;
   select: HTMLSelectElement;
+  dispose(): void;
 }
 
 function addManualColumnControlFromCells(
@@ -290,6 +334,8 @@ function addManualColumnControlFromCells(
   initialColumns = 1,
 ): ManualColumnControl {
   injectColumnSelectCSS();
+  const previousOpeners = images.map((img) => imageOpeners.get(img));
+  const installedOpeners: ImageOpener[] = [];
   const wrap = document.createElement("span");
   wrap.className = "_scf_column_control";
   const select = document.createElement("select");
@@ -336,16 +382,32 @@ function addManualColumnControlFromCells(
     submit();
   });
   images.forEach((img, idx) => {
+    const openImage = () => submit(idx);
+    installedOpeners.push(openImage);
     onImageClickOpen(
       img,
       (img.closest("a") as HTMLAnchorElement | null) ?? undefined,
-      () => submit(idx),
+      openImage,
       true,
     );
   });
   wrap.append(link, " with ", select, columnsText);
-  insertNodeBeforeImageRun(images, wrap, container);
-  return { element: wrap, link, select };
+  const insertion = insertNodeBeforeImageRun(images, wrap, container);
+  return {
+    element: wrap,
+    link,
+    select,
+    dispose() {
+      insertion.dispose();
+      images.forEach((img, idx) => {
+        // Do not clobber an opener installed by a newer control/setup pass.
+        if (imageOpeners.get(img) !== installedOpeners[idx]) return;
+        const previous = previousOpeners[idx];
+        if (previous) imageOpeners.set(img, previous);
+        else imageOpeners.delete(img);
+      });
+    },
+  };
 }
 
 interface TorrentViewerSwitchTarget {
@@ -1481,6 +1543,12 @@ function addForumManualComparisonControl(): void {
   const status = document.createElement("span");
   status.className = "_scf_manual_status";
   status.textContent = "0 selected";
+  let builtRemainderControl: ManualColumnControl | null = null;
+
+  const clearBuiltRemainder = () => {
+    builtRemainderControl?.dispose();
+    builtRemainderControl = null;
+  };
 
   // The selection how-to lives behind a "?" hint instead of crowding the bar.
   const helpWrap = document.createElement("span");
@@ -1550,6 +1618,7 @@ function addForumManualComparisonControl(): void {
   };
 
   const reset = () => {
+    clearBuiltRemainder();
     selected.splice(0, selected.length);
     titleParts.splice(0, titleParts.length);
     titleRanges.splice(0, titleRanges.length);
@@ -1835,6 +1904,15 @@ function addForumManualComparisonControl(): void {
       names = Array.from({ length: numCols }, (_, i) => `Source ${i + 1}`);
     }
 
+    // Grouped mode treats the selection as equal-size contiguous source
+    // blocks. Without explicit source boundaries an indivisible selection
+    // cannot be separated safely: trimming a row-major tail first could pair
+    // two screenshots from the same source.
+    if (sourceGrouped.checked && selected.length % numCols !== 0) {
+      updateStatus(`${selected.length} selected; grouped sources need equal image counts`);
+      return;
+    }
+
     const partition = typed
       ? partitionTrailingRemainder(selected, numCols)
       : { complete: [...selected], remainder: [] as HTMLImageElement[] };
@@ -1868,13 +1946,16 @@ function addForumManualComparisonControl(): void {
       names,
       anchorEl: panel,
     };
+    // A successful build supersedes the prior build's separate Viewer. Its
+    // disposer also restores (or removes) the image-click openers it replaced.
+    clearBuiltRemainder();
     // Keep the floating toolbar + selection up so closing the viewer returns to
     // the builder for another pass, rather than dropping out of selecting mode.
     if (partition.remainder.length) {
       const remainderContainer = partition.remainder[0].closest("td.comment") as HTMLElement | null;
       if (remainderContainer) {
         const remainderCells = partition.remainder.map(forumManualCell);
-        addManualColumnControlFromCells(
+        builtRemainderControl = addManualColumnControlFromCells(
           remainderCells,
           partition.remainder[0],
           remainderContainer,

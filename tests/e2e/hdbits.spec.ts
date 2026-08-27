@@ -1375,6 +1375,28 @@ test("hdbits: forum manual custom comparison grouped-by-source mode pairs column
   ]);
 });
 
+test("hdbits: grouped-by-source mode rejects an indivisible selection instead of pairing one source with itself", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/155-forum-post-grouped-manual-selection");
+  await waitForHdbitsReady(page);
+
+  const panel = page.locator("._scf_manual_panel");
+  await panel.locator("._scf_manual_button").click();
+  await page.locator(".cmp-label").click();
+  await page.locator('img[src*="grpA1"]').click(); // [A1, A2]
+  await page.locator('img[src*="grpB1"]').click({ modifiers: ["ControlOrMeta"] }); // + B1
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(3);
+
+  await panel.locator("._scf_manual_grouped").check();
+  await panel.locator("._scf_manual_cols").selectOption("2");
+  await panel.locator("._scf_manual_build").click();
+
+  await expect(panel.locator("._scf_manual_status"))
+    .toHaveText("3 selected; grouped sources need equal image counts");
+  await expect(page.locator("._scf_comp")).toHaveCount(0);
+  await expect(page.locator("._scf_column_control")).toHaveCount(0);
+});
+
 test("hdbits: forum manual custom comparison clear resets selected screenshots", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/154-forum-post-manual-custom-comparison");
@@ -1694,6 +1716,111 @@ test("hdbits: custom builder reads the thread title and partitions an all-image 
   await page.keyboard.press("Escape");
   await expect(page.locator("._scf_column_control")).toHaveCount(1);
   await expect(page.locator("._scf_column_control option")).toHaveCount(3);
+});
+
+test("hdbits: custom builder disposes stale remainder controls and image openers on rebuild and Clear", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/154-forum-post-manual-custom-comparison");
+  await waitForHdbitsReady(page);
+
+  const panel = page.locator("._scf_manual_panel");
+  const selectThreeAndBuild = async () => {
+    await panel.locator("._scf_manual_button").click();
+    await page.locator('img[src$="/manual01.jpg"]').click();
+    await panel.locator("._scf_manual_cols").selectOption("2");
+    await panel.locator("._scf_manual_cols_lock").click();
+    await page.locator('img[src$="/manual04.jpg"]').click({ modifiers: ["ControlOrMeta"] });
+    await expect(page.locator("._scf_manual_selected")).toHaveCount(3);
+    await panel.locator("._scf_manual_names").fill("A | B");
+    await panel.locator("._scf_manual_build").click();
+    await expect(page.locator("._scf_comp")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("._scf_comp")).not.toBeVisible();
+  };
+  const clickWithoutFollowingNativeLink = async (selector: string) => {
+    await page.locator(selector).evaluate((img) => {
+      document.addEventListener("click", (event) => event.preventDefault(), { capture: true, once: true });
+      (img as HTMLImageElement).click();
+    });
+  };
+
+  // Clear must remove both the generated control and its image opener.
+  await selectThreeAndBuild();
+  await expect(page.locator("._scf_column_control")).toHaveCount(1);
+  await panel.locator("._scf_manual_clear").click();
+  await expect(page.locator("._scf_column_control")).toHaveCount(0);
+  await clickWithoutFollowingNativeLink('img[src$="/manual03.jpg"]');
+  await expect(page.locator("._scf_comp")).toHaveCount(0);
+
+  // A later divisible build supersedes the old remainder Viewer instead of
+  // accumulating another control/opener; Clear leaves native clicks native.
+  await selectThreeAndBuild();
+  await expect(page.locator("._scf_column_control")).toHaveCount(1);
+  await page.locator('img[src$="/manual03.jpg"]').click({ modifiers: ["ControlOrMeta"] });
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(2);
+  await panel.locator("._scf_manual_build").click();
+  await expect(page.locator("._scf_column_control")).toHaveCount(0);
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await panel.locator("._scf_manual_clear").click();
+  await clickWithoutFollowingNativeLink('img[src$="/manual03.jpg"]');
+  await expect(page.locator("._scf_comp")).toHaveCount(0);
+});
+
+test("hdbits: custom builder Clear restores a displaced Viewer control and its image opener", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/190-forum-post-source-grouped-odd-audio-group");
+  await waitForHdbitsReady(page);
+
+  const originalControl = page.locator("._scf_column_control");
+  await expect(originalControl).toHaveCount(1);
+  await originalControl.evaluate((control) => {
+    control.setAttribute("data-test-original-control", "true");
+  });
+  await originalControl.locator("select").selectOption("2");
+  const audioGapSignature = () => page.evaluate(() => {
+    const control = document.querySelector('[data-test-original-control="true"]');
+    const first = document.querySelector('img[src$="/w190a1.jpg"]')?.closest("a");
+    if (!control || !first) return null;
+    const signature: string[] = [];
+    for (let node = control.nextSibling; node && node !== first; node = node.nextSibling) {
+      signature.push(node.nodeType === Node.TEXT_NODE ? `#text:${node.textContent}` : node.nodeName);
+    }
+    return signature;
+  });
+  const originalGap = await audioGapSignature();
+
+  const panel = page.locator("._scf_manual_panel");
+  await panel.locator("._scf_manual_button").click();
+  await page.locator('img[src$="/w190u1.jpg"]').click();
+  await page.locator('img[src$="/w190c10.jpg"]').click({ modifiers: ["Shift"] });
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(20);
+  await panel.locator("._scf_manual_cols").selectOption("5");
+  await panel.locator("._scf_manual_cols_lock").click();
+  await expect(panel.locator("._scf_manual_cols")).toBeDisabled();
+  await page.locator('img[src$="/w190a4.jpg"]').click({ modifiers: ["Shift"] });
+  await expect(page.locator("._scf_manual_selected")).toHaveCount(24);
+
+  // Five named columns leave the four-image Audio gallery as the separate
+  // remainder, temporarily replacing its existing automatic Viewer control.
+  await panel.locator("._scf_manual_names").fill("A | B | C | D | E");
+  await panel.locator("._scf_manual_build").click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator('[data-test-original-control="true"]')).toHaveCount(0);
+  await expect(page.locator("._scf_column_control")).toHaveCount(1);
+
+  await panel.locator("._scf_manual_clear").click();
+  const restoredControl = page.locator('[data-test-original-control="true"]');
+  await expect(restoredControl).toHaveCount(1);
+  await expect(restoredControl.locator("select")).toHaveValue("2");
+  expect(await audioGapSignature()).toEqual(originalGap);
+
+  // The restored control's original two-column image opener wins again; the
+  // temporary remainder opener would instead produce four one-column rows.
+  await page.locator('img[src$="/w190a3.jpg"]').click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(2);
 });
 
 test("hdbits: custom builder respects images explicitly left out of the selection", async ({ page }) => {
