@@ -46,18 +46,66 @@ function hdbNextFallbackSrc(src: string): string | null {
   return next ? `${match[1]}.${next}${match[3] ?? ""}` : null;
 }
 
-function installHdbImageFallback(img: HTMLImageElement, onGiveUp?: () => void): void {
+type ManagedImageStatus = "idle" | "pending" | "settled";
+
+interface ManagedImageState {
+  rowDiv: HTMLDivElement;
+  status: ManagedImageStatus;
+}
+
+const managedImageStates = new WeakMap<HTMLImageElement, ManagedImageState>();
+const rowLoadingOwners = new WeakMap<HTMLDivElement, HTMLImageElement>();
+
+function settleManagedImage(img: HTMLImageElement): void {
+  const state = managedImageStates.get(img);
+  if (!state) return;
+  state.status = "settled";
+  if (rowLoadingOwners.get(state.rowDiv) === img) {
+    state.rowDiv.classList.remove("_scf_loading");
+  }
+}
+
+function setManagedImageSrc(img: HTMLImageElement, src: string): void {
+  const state = managedImageStates.get(img);
+  if (state) state.status = "pending";
+  img.src = src;
+}
+
+/**
+ * Make one image the sole owner of a row's spinner. Async completion from a
+ * previously active cell (or the row's sizer) can still update its own load
+ * state, but cannot settle the spinner after ownership has moved elsewhere.
+ */
+export function setRowLoadingOwner(
+  rowDiv: HTMLDivElement,
+  img: HTMLImageElement | null,
+): void {
+  if (!img) {
+    rowLoadingOwners.delete(rowDiv);
+    rowDiv.classList.remove("_scf_loading");
+    return;
+  }
+
+  rowLoadingOwners.set(rowDiv, img);
+  rowDiv.classList.toggle("_scf_loading", managedImageStates.get(img)?.status === "pending");
+}
+
+function installHdbImageFallback(img: HTMLImageElement, rowDiv: HTMLDivElement): void {
+  managedImageStates.set(img, { rowDiv, status: "idle" });
+
+  img.addEventListener("load", () => settleManagedImage(img));
   img.addEventListener("error", () => {
-    const fallback = hdbNextFallbackSrc(img.currentSrc || img.src);
-    const tried = (img.dataset.hdbFallbackTried || "").split(",").filter(Boolean);
-    if (!fallback || tried.includes(fallback)) {
-      // No (further) format to try — the image is dead. Tell the caller so a
-      // row spinner can stop instead of spinning forever over a blank cell.
-      onGiveUp?.();
+    // `src` is the URL assigned for this attempt. Unlike `currentSrc`, it does
+    // not lag behind when an error handler advances the fallback chain.
+    const fallback = hdbNextFallbackSrc(img.src);
+    if (!fallback) {
+      // No further format to try. This is the only error that settles the
+      // managed request; png/jpg failures remain pending while the next URL
+      // is attempted.
+      settleManagedImage(img);
       return;
     }
-    img.dataset.hdbFallbackTried = [...tried, fallback].join(",");
-    img.src = fallback;
+    setManagedImageSrc(img, fallback);
     // A colorspace lookup for the failed URL may still be in flight. Invalidate
     // that generation and resolve the filter again for the fallback URL,
     // preserving the comparison's current per-column adjustments.
@@ -81,18 +129,14 @@ export function buildRow(
 
   const sizer = document.createElement("img");
   sizer.className = "_scf_comp_sizer";
-  // A dead sizer image fires `error`, never `load`, so clear the row's loading
-  // spinner when the fallback chain is exhausted (a 404 screenshot on an old
-  // thread would otherwise spin forever over a blank row).
-  installHdbImageFallback(sizer, () => rowDiv.classList.remove("_scf_loading"));
+  installHdbImageFallback(sizer, rowDiv);
   const knownAspectRatio = rowCellsAspectRatio(rowCells);
   if (knownAspectRatio) rowDiv.style.aspectRatio = knownAspectRatio;
   if (deferred) {
     sizer.dataset.src = rowCells[activeCol].full;
     if (!knownAspectRatio) rowDiv.style.aspectRatio = "16 / 9";
   } else {
-    sizer.addEventListener("load", () => rowDiv.classList.remove("_scf_loading"), { once: true });
-    sizer.src = rowCells[activeCol].full;
+    setManagedImageSrc(sizer, rowCells[activeCol].full);
   }
   rowDiv.appendChild(sizer);
 
@@ -118,14 +162,14 @@ export function buildRow(
     cell.className = "_scf_comp_cell";
     const img = document.createElement("img");
     img.className = "_scf_comp_img";
-    installHdbImageFallback(img);
+    installHdbImageFallback(img, rowDiv);
     const src = rowCells[ci].full;
     // Eager-load only the active column of non-deferred rows; every other cell
     // waits until the user activates it (switchColumn / loadRowColumn)
     // or the row enters the IO buffer (loadRow loads the active col).
     if (!deferred && ci === activeCol) {
       img.addEventListener("load", () => adjustRowAR(img), { once: true });
-      img.src = src;
+      setManagedImageSrc(img, src);
     } else {
       img.dataset.src = src;
     }
@@ -137,6 +181,10 @@ export function buildRow(
     rowDiv.appendChild(cell);
     imgs.push(img);
   }
+
+  // The visible cell, not the layout-only sizer, owns the spinner. This keeps
+  // an independently decoded/failed sizer from hiding a still-pending image.
+  if (!deferred) setRowLoadingOwner(rowDiv, imgs[activeCol] ?? sizer);
 
   rowDiv.addEventListener("mousemove", (e) => {
     if (drag.active || !mouseSwitch()) return;
@@ -162,7 +210,7 @@ function loadCellSrc(
   const src = img.dataset.src;
   delete img.dataset.src;
   img.addEventListener("load", () => adjustRowAR(img), { once: true });
-  img.src = src;
+  setManagedImageSrc(img, src);
   void applyFilterToImg(img, {
     brightness: comp.colBrightness[ci],
     contrast: comp.colContrast[ci],
@@ -186,10 +234,11 @@ export function loadRow(rd: RowData, comp: Comp): void {
     // images per lazily-loaded row. Falls back to column 0 for a short row.
     const src = imgs[activeCol]?.dataset.src || imgs[activeCol]?.src || sizer.dataset.src;
     delete sizer.dataset.src;
-    sizer.addEventListener("load", () => rowDiv.classList.remove("_scf_loading"), { once: true });
-    sizer.src = src;
+    setManagedImageSrc(sizer, src);
   }
-  if (imgs[activeCol]) loadCellSrc(imgs[activeCol], activeCol, comp, adjustRowAR);
+  const activeImg = imgs[activeCol];
+  if (activeImg) loadCellSrc(activeImg, activeCol, comp, adjustRowAR);
+  setRowLoadingOwner(rowDiv, activeImg ?? sizer);
   // When zoomed, a row scrolling in must take its OWN native width × the
   // current scale (it may be a different resolution than rows already on
   // screen). Sizes once the active cell measures; no-op in fit.

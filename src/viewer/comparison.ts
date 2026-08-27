@@ -21,7 +21,7 @@ import {
   type CapturedZoomAnchor,
 } from "../filters/zoom";
 import { setupDragHandlers } from "./drag";
-import { buildRow, fillRow, loadRow, loadRowColumn } from "./row";
+import { buildRow, fillRow, loadRow, loadRowColumn, setRowLoadingOwner } from "./row";
 import { createNavMap } from "./nav-map";
 import { createRowNav } from "./row-nav";
 import { createSourceMenu } from "./source-menu";
@@ -364,19 +364,11 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
       });
       // Spinner state only makes sense for rows the user can actually
       // see right now. Unloaded rows still carry the initial
-      // `_scf_loading` class from buildRow; loadRow will clear it when
-      // the sizer lands.
+      // `_scf_loading` class from buildRow; loadRow assigns it to the active
+      // image and clears it when that image settles.
       if (loaded) {
         const activeImg = imgs[col];
-        if (activeImg && activeImg.src && !activeImg.complete) {
-          rowDiv.classList.add("_scf_loading");
-          activeImg.addEventListener("load", () => rowDiv.classList.remove("_scf_loading"), { once: true });
-          // A dead column image never fires `load`; clear the spinner on error
-          // too so switching to a 404 source doesn't leave it spinning.
-          activeImg.addEventListener("error", () => rowDiv.classList.remove("_scf_loading"), { once: true });
-        } else {
-          rowDiv.classList.remove("_scf_loading");
-        }
+        setRowLoadingOwner(rowDiv, activeImg ?? null);
       }
       rowDiv.dataset.col = String(col);
     }

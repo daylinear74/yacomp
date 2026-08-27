@@ -23,6 +23,22 @@ function fixtureSvg({ width, height }: { width: number; height: number }): strin
   );
 }
 
+function requestGate(): {
+  started: Promise<void>;
+  markStarted: () => void;
+  released: Promise<void>;
+  release: () => void;
+} {
+  let markStarted!: () => void;
+  let release!: () => void;
+  return {
+    started: new Promise<void>((resolve) => { markStarted = resolve; }),
+    markStarted: () => markStarted(),
+    released: new Promise<void>((resolve) => { release = resolve; }),
+    release: () => release(),
+  };
+}
+
 async function expectRowCanvasAspectRatio(
   page: Page,
   rowIndex: number,
@@ -140,6 +156,187 @@ test("loading spinner stays at viewport center for a narrow left-aligned source"
   } finally {
     releaseImages();
   }
+});
+
+test("loading spinner ignores a stale sizer and prior source after a rapid B to C switch", async ({ page }) => {
+  await page.goto("/");
+
+  const gates = {
+    a: requestGate(),
+    b: requestGate(),
+    c: requestGate(),
+  };
+  await page.route(/owner-race-([abc])\.webp$/, async (route) => {
+    const key = new URL(route.request().url()).pathname.match(/owner-race-([abc])\.webp$/)?.[1] as
+      | keyof typeof gates
+      | undefined;
+    if (!key) return route.abort();
+    const gate = gates[key];
+    gate.markStarted();
+    await gate.released;
+    await route.fulfill({
+      contentType: "image/svg+xml",
+      body: fixtureSvg(DEFAULT_IMAGE_SIZE),
+    });
+  });
+
+  try {
+    await page.evaluate(() => {
+      const images = window.collection!.comparisons[0].images;
+      images[0].publicFileName = "owner-race-a.webp";
+      images[1].publicFileName = "owner-race-b.webp";
+      images[2].publicFileName = "owner-race-c.webp";
+    });
+    await page.click("#open-viewer");
+
+    const row = page.locator("._scf_comp_row").first();
+    const caption = page.locator("._scf_loading_caption");
+    await gates.a.started;
+
+    // The sizer is layout-only once a visible cell has started. Even its
+    // terminal failure must not clear that cell's pending spinner.
+    await row.locator("._scf_comp_sizer").dispatchEvent("error");
+    await expect(row).toHaveClass(/_scf_loading/);
+
+    await page.keyboard.press("Digit2");
+    await gates.b.started;
+    await page.keyboard.press("Digit3");
+    await gates.c.started;
+    await expect(caption).toHaveText("TWN(Gamma=0 92) (C3, R1)");
+
+    // B's terminal error is stale as soon as C owns the row. Its later real
+    // load is stale too; neither completion path may clear C's pending state.
+    await row.locator("._scf_comp_img").nth(1).dispatchEvent("error");
+    await expect(row).toHaveClass(/_scf_loading/);
+
+    // The original sizer and B both finish after C owns the spinner. Neither
+    // stale load may clear C's still-pending state.
+    gates.a.release();
+    gates.b.release();
+    await expect.poll(() => row.evaluate((element) => {
+      const sizer = element.querySelector<HTMLImageElement>("._scf_comp_sizer")!;
+      const images = element.querySelectorAll<HTMLImageElement>("._scf_comp_img");
+      return {
+        sizerLoaded: sizer.complete && sizer.naturalWidth > 0,
+        bLoaded: images[1].complete && images[1].naturalWidth > 0,
+        cPending: !images[2].complete,
+      };
+    })).toEqual({ sizerLoaded: true, bLoaded: true, cPending: true });
+    await expect(row).toHaveClass(/_scf_loading/);
+    await expect(caption).toBeVisible();
+
+    gates.c.release();
+    await expect(row).not.toHaveClass(/_scf_loading/);
+    await expect(caption).toBeHidden();
+  } finally {
+    gates.a.release();
+    gates.b.release();
+    gates.c.release();
+  }
+});
+
+test("HDB fallback stays loading through png and jpg failures until webp loads", async ({ page }) => {
+  await openViewer(page);
+  const jpg = requestGate();
+  const webp = requestGate();
+
+  await page.route(/loading-fallback\.(png|jpg|webp)$/, async (route) => {
+    const ext = new URL(route.request().url()).pathname.split(".").pop();
+    if (ext === "png") return route.fulfill({ status: 404, body: "missing png" });
+    const gate = ext === "jpg" ? jpg : webp;
+    gate.markStarted();
+    await gate.released;
+    if (ext === "jpg") return route.fulfill({ status: 404, body: "missing jpg" });
+    return route.fulfill({
+      contentType: "image/svg+xml",
+      body: fixtureSvg(DEFAULT_IMAGE_SIZE),
+    });
+  });
+
+  try {
+    const row = page.locator("._scf_comp_row").first();
+    await row.locator("._scf_comp_img").nth(1).evaluate((image) => {
+      image.dataset.src = "https://i.hdbits.org/loading-fallback.png";
+    });
+    await page.keyboard.press("Digit2");
+
+    // png has failed and jpg is now the live attempt.
+    await jpg.started;
+    await expect(row).toHaveClass(/_scf_loading/);
+    jpg.release();
+
+    // jpg has failed and webp is now the live attempt.
+    await webp.started;
+    await expect(row).toHaveClass(/_scf_loading/);
+    webp.release();
+
+    await expect(row).not.toHaveClass(/_scf_loading/);
+    await expect.poll(() => row.locator("._scf_comp_img").nth(1).evaluate((element) => {
+      const image = element as HTMLImageElement;
+      return {
+        src: image.src,
+        loaded: image.complete && image.naturalWidth > 0,
+      };
+    })).toEqual({
+      src: "https://i.hdbits.org/loading-fallback.webp",
+      loaded: true,
+    });
+  } finally {
+    jpg.release();
+    webp.release();
+  }
+});
+
+test("HDB fallback settles loading after the final webp failure", async ({ page }) => {
+  await openViewer(page);
+  const attempts: { ext: string; resourceType: string; method: string }[] = [];
+  await page.route(/terminal-fallback\.(png|jpg|webp)$/, async (route) => {
+    attempts.push({
+      ext: new URL(route.request().url()).pathname.split(".").pop()!,
+      resourceType: route.request().resourceType(),
+      method: route.request().method(),
+    });
+    await route.fulfill({ status: 404, body: "missing" });
+  });
+
+  const row = page.locator("._scf_comp_row").first();
+  await row.locator("._scf_comp_img").nth(1).evaluate((element) => {
+    const image = element as HTMLImageElement;
+    const oldSrcs: (string | null)[] = [];
+    new MutationObserver((records) => {
+      oldSrcs.push(...records.map((record) => record.oldValue));
+    }).observe(image, {
+      attributes: true,
+      attributeFilter: ["src"],
+      attributeOldValue: true,
+    });
+    (window as unknown as { __terminalFallbackOldSrcs: (string | null)[] })
+      .__terminalFallbackOldSrcs = oldSrcs;
+    image.dataset.src = "https://i.hdbits.org/terminal-fallback.png";
+  });
+  await page.keyboard.press("Digit2");
+
+  // Other viewer consumers can request the active URL too: in 1:1 mode the
+  // nav-map follows the managed image and may issue a second WebP request.
+  // Assert the managed image's actual src assignments instead of conflating
+  // resource requests with fallback transitions.
+  await expect.poll(() => attempts.map(({ ext }) => ext).filter(
+    (ext, index, all) => all.indexOf(ext) === index,
+  )).toEqual(["png", "jpg", "webp"]);
+  expect(attempts.every(({ resourceType, method }) => resourceType === "image" && method === "GET"))
+    .toBe(true);
+  await expect(row).not.toHaveClass(/_scf_loading/);
+  await expect(row.locator("._scf_comp_img").nth(1)).toHaveAttribute(
+    "src",
+    "https://i.hdbits.org/terminal-fallback.webp",
+  );
+  await expect.poll(() => page.evaluate(() => (
+    window as unknown as { __terminalFallbackOldSrcs: (string | null)[] }
+  ).__terminalFallbackOldSrcs)).toEqual([
+    null,
+    "https://i.hdbits.org/terminal-fallback.png",
+    "https://i.hdbits.org/terminal-fallback.jpg",
+  ]);
 });
 
 test("viewer opens with V shortcut", async ({ page }) => {
