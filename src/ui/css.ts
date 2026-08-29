@@ -89,7 +89,7 @@ export function injectCSS(): void {
     }
     ._scf_comp_row {
       position: relative;
-      width: 100vw;
+      width: 100%;
       cursor: crosshair;
       margin: 0 auto 2px;
       line-height: 0;

@@ -514,7 +514,70 @@ test("zoom shortcuts zoom in and reset to fit", async ({ page }) => {
   await page.keyboard.press("Digit0");
   await expect(comp).not.toHaveClass(/_scf_zoomed/);
   await expect.poll(async () => row.evaluate((el) => (el as HTMLElement).style.width))
-    .toBe("100vw");
+    .toBe("100%");
+});
+
+test("fit uses the scrollbar-subtracted content width without hidden horizontal clipping", async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 720 });
+  await page.goto("/");
+  await page.evaluate(() => {
+    const images = window.collection!.comparisons[0].images;
+    images[0].publicFileName = "wide-source-a.webp";
+    images[1].publicFileName = "wide-source-b.webp";
+    images[2].publicFileName = "wide-source-c.webp";
+  });
+  await page.click("#open-viewer");
+
+  const comp = page.locator("._scf_comp");
+  const row = page.locator("._scf_comp_row").first();
+  // A border-box border is a deterministic stand-in for the classic vertical
+  // scrollbar gutter: it reduces the scroll container's usable content width
+  // without changing window.innerWidth.
+  await comp.evaluate((el) => {
+    const element = el as HTMLElement;
+    element.style.boxSizing = "border-box";
+    element.style.borderRight = "23px solid transparent";
+  });
+
+  await page.keyboard.press("Digit0");
+  await expect.poll(() => comp.evaluate((compEl) => {
+    const element = compEl as HTMLElement;
+    const rowEl = element.querySelector<HTMLElement>("._scf_comp_row")!;
+    return {
+      clientWidth: element.clientWidth,
+      rowWidth: rowEl.offsetWidth,
+      rowStyleWidth: rowEl.style.width,
+      scrollLeft: element.scrollLeft,
+      horizontalOverflow: element.scrollWidth - element.clientWidth,
+      overflowX: getComputedStyle(element).overflowX,
+    };
+  })).toEqual({
+    clientWidth: 777,
+    rowWidth: 777,
+    rowStyleWidth: "100%",
+    scrollLeft: 0,
+    horizontalOverflow: 0,
+    overflowX: "hidden",
+  });
+
+  // Actual size is still a real pixel width and remains horizontally
+  // scrollable when it is wider than the Viewer content box.
+  await page.keyboard.press("KeyO");
+  await expect.poll(() => comp.evaluate((compEl) => {
+    const element = compEl as HTMLElement;
+    const rowEl = element.querySelector<HTMLElement>("._scf_comp_row")!;
+    return {
+      clientWidth: element.clientWidth,
+      rowWidth: rowEl.offsetWidth,
+      scrollWidth: element.scrollWidth,
+      overflowX: getComputedStyle(element).overflowX,
+    };
+  })).toEqual({
+    clientWidth: 777,
+    rowWidth: 1920,
+    scrollWidth: 1920,
+    overflowX: "auto",
+  });
 });
 
 test("mixed-resolution rows keep max canvas aspect ratio", async ({ page }) => {

@@ -259,7 +259,7 @@ function sizeRowScaled(rd: RowData, comp: Comp, scale: number): void {
   }
   rd.rowDiv.style.width = rd.sizer?.naturalWidth
     ? `${Math.round(oneToOneWidth(rd.sizer.naturalWidth) * scale)}px`
-    : "100vw";
+    : "100%";
   img?.addEventListener(
     "load",
     () => {
@@ -282,10 +282,10 @@ function sizeRowScaled(rd: RowData, comp: Comp, scale: number): void {
         // sized) — robust to a mouse-sweep that changed the active column
         // mid-load and left the original column's one-shot listener
         // guard-skipped. The sizer always lands for a visible row, so the row
-        // can't stay stranded at "100vw" (which reads as the logical / "real"
+        // can't stay stranded at "100%" (which reads as the logical / "real"
         // width on a HiDPI screen until you press O).
         if (zoomMode === "fit") return;
-        if (rd.rowDiv.style.width && rd.rowDiv.style.width !== "100vw") return;
+        if (rd.rowDiv.style.width && rd.rowDiv.style.width !== "100%") return;
         const nw = rd.imgs[comp.currentCol]?.naturalWidth || rd.sizer?.naturalWidth || 0;
         if (nw) rd.rowDiv.style.width = `${Math.round(oneToOneWidth(nw) * currentZoomScale())}px`;
       },
@@ -307,7 +307,7 @@ export function sizeRowOnLoad(rd: RowData, comp: Comp): void {
 export function applyZoom(anchors: CapturedZoomAnchor[] = []): void {
   for (const comp of activeComps) {
     if (zoomMode === "fit") {
-      for (const rd of comp.allRowData) rd.rowDiv.style.width = "100vw";
+      for (const rd of comp.allRowData) rd.rowDiv.style.width = "100%";
       comp.compDiv.classList.remove("_scf_zoomed");
     } else {
       // 1:1 (scale 1) and custom (scale ≠ 1) share one per-row scaled path.
