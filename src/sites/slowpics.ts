@@ -3,7 +3,7 @@
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
 import { openWithDummyWrapper } from "../viewer";
-import type { GridCell, GridInitialZoom } from "../grid";
+import type { GridCell } from "../grid";
 
 type SlowPicsCanvasMode = "none" | "fit-width" | "fit-height";
 

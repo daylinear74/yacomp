@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach } from "bun:test";
 import {
   isDefault, adjustBrightness, brightnessAdjustmentLabel, bcString,
-  BC_STEP, BC_MIN, BC_MAX,
+  BC_MIN, BC_MAX,
 } from "../../src/filters/brightness";
 import { resetConfig, saveConfig } from "../../src/config";
 
@@ -17,10 +17,10 @@ describe("isDefault", () => {
 
 describe("adjustBrightness — default bcStep", () => {
   test("increases by the default step (0.05)", () => {
-    expect(adjustBrightness(1.0, 1)).toBe(1.0 + BC_STEP);
+    expect(adjustBrightness(1.0, 1)).toBe(1.05);
   });
   test("decreases by the default step", () => {
-    expect(adjustBrightness(1.0, -1)).toBe(1.0 - BC_STEP);
+    expect(adjustBrightness(1.0, -1)).toBe(0.95);
   });
   test("clamps at min", () => {
     expect(adjustBrightness(BC_MIN, -1)).toBe(BC_MIN);

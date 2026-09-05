@@ -3,7 +3,7 @@
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
 import {
-  getConfig, saveConfig, resetConfig, DEFAULTS,
+  getConfig, saveConfig, resetConfig,
   type YacompConfig,
   SITE_KEYS, SITE_LABELS, type SiteKey,
   FILTER_MODE_IDS, type FilterModeId,

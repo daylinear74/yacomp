@@ -5,7 +5,6 @@
 import { active, setModeIndex } from "./modes";
 import { bcStep } from "../config";
 
-export const BC_STEP = 0.05;
 export const BC_MIN = 0.05;
 export const BC_MAX = 4.0;
 
