@@ -5,8 +5,6 @@
 import { applyFilterToImg, syncAll } from "../filters/imaging";
 import { hasAdjustments } from "../filters/brightness";
 import { sizeRowOnLoad } from "../filters/zoom";
-import { mouseSwitch } from "../config";
-import type { DragState } from "./drag";
 import type { RowData, Comp } from "./types";
 
 interface ImageDimensions {
@@ -116,9 +114,6 @@ function installHdbImageFallback(img: HTMLImageElement, rowDiv: HTMLDivElement):
 export function buildRow(
   rowCells: { full: string; width?: number | null; height?: number | null }[],
   numCols: number,
-  drag: DragState,
-  switchColumn: (col: number) => void,
-  pointerColumnForEvent: (e: MouseEvent) => number,
   initialCol: number,
   deferred: boolean,
 ): RowData {
@@ -185,15 +180,6 @@ export function buildRow(
   // The visible cell, not the layout-only sizer, owns the spinner. This keeps
   // an independently decoded/failed sizer from hiding a still-pending image.
   if (!deferred) setRowLoadingOwner(rowDiv, imgs[activeCol] ?? sizer);
-
-  rowDiv.addEventListener("mousemove", (e) => {
-    if (drag.active || !mouseSwitch()) return;
-    const newCol = pointerColumnForEvent(e);
-    const prevCol = parseInt(rowDiv.dataset.col!, 10);
-    if (newCol !== prevCol) {
-      switchColumn(newCol);
-    }
-  });
 
   return { rowDiv, sizer, imgs, adjustRowAR };
 }

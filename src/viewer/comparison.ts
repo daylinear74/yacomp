@@ -21,6 +21,7 @@ import {
   type CapturedZoomAnchor,
 } from "../filters/zoom";
 import { setupDragHandlers } from "./drag";
+import { createFilterSyncGuard, syncActiveFilter, syncAll } from "../filters/imaging";
 import { buildRow, fillRow, loadRow, loadRowColumn, setRowLoadingOwner } from "./row";
 import { createNavMap } from "./nav-map";
 import { createRowNav } from "./row-nav";
@@ -96,6 +97,7 @@ export function syncCurrentRowFromScroll(
     updateRowNav(closest);
     comp.updateLabel?.();
     comp.updateLoadingOverlay?.();
+    comp.updateActiveFilter?.();
   }
 }
 
@@ -343,6 +345,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
 
   function switchColumn(col: number) {
     if (!comp.visibleCols.includes(col)) return;
+    const changed = comp.currentCol !== col;
     comp.currentCol = col;
     for (let rowIndex = 0; rowIndex < allRowData.length; rowIndex++) {
       const rowData = allRowData[rowIndex];
@@ -386,6 +389,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     }
     comp.updateSourceMenu?.();
     updateHUD();
+    if (changed) comp.updateActiveFilter?.();
   }
 
   for (let ri = 0; ri < grid.rows.length; ri++) {
@@ -402,9 +406,6 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     const rowData = buildRow(
       grid.rows[ri],
       grid.numCols,
-      drag,
-      switchColumn,
-      pointerColumnForEvent,
       initialPosition.col,
       ri > 0 && ri !== initialPosition.row,
     );
@@ -493,6 +494,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
   };
   comp.updateTitleLayout = () => buildLabel(comp.currentCol);
   comp.updateLoadingOverlay = syncLoadingOverlay;
+  comp.updateActiveFilter = () => syncActiveFilter(comp);
 
   const loadingObserver = new MutationObserver((records) => {
     const activeRow = allRowData[comp.currentRow]?.rowDiv;
@@ -611,10 +613,12 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
 
   comp.setRow = (rowIdx: number) => {
     if (rowIdx < 0 || rowIdx >= comp.numRows) return;
+    const changed = comp.currentRow !== rowIdx;
     comp.currentRow = rowIdx;
     comp.navTargetRow = rowIdx;
     comp.updateLabel?.();
     comp.updateLoadingOverlay?.();
+    if (changed) comp.updateActiveFilter?.();
     allRowData[rowIdx].rowDiv.scrollIntoView({ behavior: "smooth", block: "center" });
     rowNav.updateRowNav(rowIdx);
     comp.revealRowNav?.();
@@ -661,6 +665,7 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
 
   function closeThis() {
     closed = true;
+    createFilterSyncGuard();
     for (const timer of bgLoadTimers) clearTimeout(timer);
     window.removeEventListener("mousemove", onDragMove);
     window.removeEventListener("mouseup", onDragEnd);
@@ -698,7 +703,9 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
     // them so per-column readouts don't float over the host page. The HUD
     // re-renders from the remaining comps (or the page-level filter mode).
     hideToast();
-    updateHUD();
+    // The newly exposed page/remaining viewer must not retain an old effect
+    // after cancelling this viewer's in-flight metadata queue.
+    syncAll();
   }
 
   comp.close = closeThis;

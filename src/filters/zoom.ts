@@ -186,10 +186,12 @@ function restoreZoomAnchor(anchor: CapturedZoomAnchor): void {
   suppressRowSync(anchor.comp);
   anchor.comp.compDiv.scrollLeft = next.scrollLeft;
   anchor.comp.compDiv.scrollTop = next.scrollTop;
+  const rowChanged = anchor.comp.currentRow !== anchor.currentRowIdx;
   anchor.comp.currentRow = anchor.currentRowIdx;
   if (anchor.comp.updateRowNav) anchor.comp.updateRowNav(anchor.currentRowIdx);
   anchor.comp.updateLabel?.();
   anchor.comp.updateLoadingOverlay?.();
+  if (rowChanged) anchor.comp.updateActiveFilter?.();
 }
 
 /** Center the viewport on the active row's active cell — horizontally and

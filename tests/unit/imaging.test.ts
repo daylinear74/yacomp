@@ -1,4 +1,4 @@
-import { afterEach, describe, test, expect } from "bun:test";
+import { afterEach, beforeEach, describe, test, expect, spyOn } from "bun:test";
 import {
   applyFilterToImg,
   buildFilter,
@@ -13,6 +13,7 @@ import {
 } from "../../src/filters/imaging";
 import { setModeIndex } from "../../src/filters/modes";
 import type { Comp, RowData } from "../../src/viewer/types";
+import { iccChunk, iccProfile, pngHeader } from "../fixtures/color-metadata";
 
 // Tests are organized by the user-facing contract each block protects,
 // not by the function name, so a regression on a contract (e.g. "active
@@ -30,6 +31,14 @@ describe("filter composition order", () => {
 });
 
 describe("async image-source filtering", () => {
+  let fetchMock: ReturnType<typeof spyOn<typeof globalThis, "fetch">>;
+  beforeEach(() => {
+    fetchMock = spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(new Uint8Array(pngHeader(iccChunk(iccProfile("2020"))))),
+    );
+  });
+  afterEach(() => fetchMock.mockRestore());
+
   test("does not commit a colorspace result after the image source changes", async () => {
     setModeIndex(4); // luma
     const img = {
@@ -39,10 +48,12 @@ describe("async image-source filtering", () => {
     } as unknown as HTMLImageElement;
 
     const pending = applyFilterToImg(img);
+    const provisional = img.style.filter;
     img.src = "https://example.com/new-709.webp";
     await pending;
 
-    expect(img.style.filter).toBe("");
+    expect(provisional).toBe("url(#scf-luma709)");
+    expect(img.style.filter).toBe(provisional);
   });
 
   test("commits the result while the source remains current", async () => {

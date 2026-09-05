@@ -28,6 +28,9 @@ or [Violentmonkey](https://violentmonkey.github.io/), then **[click here to
 install the latest release](https://github.com/daylinear74/yacomp/releases/latest/download/yacomp.user.js)**.
 
 - On HDB torrent and offer pages, detected comparison grids get a **Show comparison** link.
+  On torrent descriptions, the adjacent **⇄** button switches to a generic
+  Viewer when the detected titles are wrong, and switches back to the original
+  comparison. The Viewer column choice is retained and also governs image clicks.
   Other screenshot groups get a compact **Show Viewer** control placed directly
   above the image run, and image clicks open the same gallery viewer by default.
   If a block is ambiguous, **Show Viewer** includes a column-count dropdown:
@@ -61,8 +64,10 @@ install the latest release](https://github.com/daylinear74/yacomp/releases/lates
 - **Per-source adjustments** — brightness, contrast, and gamma-mismatch checks
   (sRGB ↔ BT.1886, the 0.88 AE/QuickTime fix, Legacy Mac) for the selected
   source only.
-- **Colorspace-aware luma/chroma** — BT.709 / BT.2020 handling from URL hints or
-  PNG/JPEG ICC profile data when available.
+- **Colorspace-aware luma/chroma previews** — structured PNG color metadata and
+  PNG/JPEG/WebP ICC profiles take precedence over filename hints. Unknown or
+  unavailable metadata uses the 709 preview. Metadata reads are bounded and
+  temporary failures are retried after a short backoff.
 - **Custom comparison builder** (HDB forums) — when markup is too irregular for
   safe auto-detection, build a comparison by hand. Click or drag across
   screenshots to select a gallery (`Shift` to extend, `Ctrl`/`⌘`-click to toggle
@@ -83,10 +88,17 @@ install the latest release](https://github.com/daylinear74/yacomp/releases/lates
 - **Lazy loading** — rows load on demand, with optional background loading and
   automatic syncing for dynamically added (lazy / SPA) images.
 
-> **Chrome / Edge note:** a browser GPU bug can render the visual filters
-> slightly off (filtered images look a touch dark). To avoid it for now, disable
-> hardware acceleration — *Settings → System → "Use graphics acceleration when
-> available"* → off, then relaunch.
+Filters analyze the browser's displayed RGB image. They are visual aids, not
+reconstruction of the original video's HDR transfer function or YUV planes.
+Gamma presets apply a luma-based power adjustment in normalized display RGB;
+their names describe comparison heuristics, not exact color-space conversions.
+Browser color management, scaling, and GPU precision can affect the result.
+While metadata is loading, the selected luma/chroma preview uses cached
+colorimetry or a provisional 709 matrix, then updates when metadata is available.
+
+Some Chrome/Edge GPU configurations have produced darker filtered output. If
+you encounter that discrepancy, compare with graphics acceleration disabled
+and relaunch the browser.
 
 ## Shortcuts
 

@@ -47,6 +47,8 @@ export interface Comp {
   updateLabel?: () => void;
   // Keep the viewport-centered loader in sync with the active row and column.
   updateLoadingOverlay?: () => void;
+  // Reprioritize pending colorspace work when the visible source/row changes.
+  updateActiveFilter?: () => void;
   // Rebuild the banner after the dense/filled title-layout setting changes.
   updateTitleLayout?: () => void;
   updateScrollSpacers?: () => void;

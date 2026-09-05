@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { test, expect } from "./fixtures";
+import { iccChunk, iccProfile, pngHeader } from "../fixtures/color-metadata";
 
 // Stub the slow.pics CDN so the suite is hermetic (no external network).
 // Specific fixture files use production-risk dimensions; the fallback keeps
@@ -529,7 +530,6 @@ test("fit uses the scrollbar-subtracted content width without hidden horizontal 
   await page.click("#open-viewer");
 
   const comp = page.locator("._scf_comp");
-  const row = page.locator("._scf_comp_row").first();
   // A border-box border is a deterministic stand-in for the classic vertical
   // scrollbar gutter: it reduces the scroll container's usable content width
   // without changing window.innerWidth.
@@ -918,10 +918,8 @@ test("switching the active source re-anchors the next chroma sync to the new col
     .toBe(true);
   await page.waitForTimeout(150);
 
-  // Toggle the filter off then back on so a fresh sync fires with the new
-  // active column as the anchor. (Switching sources alone doesn't re-run
-  // the filter pipeline — what we want to verify is that the next sync
-  // *does* honor the updated anchor.)
+  // Toggle off and back on too: both navigation and a new mode selection
+  // must prioritize the updated anchor.
   await resetFilterLog(page);
   await page.keyboard.press("KeyF"); // Chroma → Off
   await page.keyboard.press("Shift+KeyF"); // Off → Chroma again
@@ -929,6 +927,75 @@ test("switching the active source re-anchors the next chroma sync to the new col
   await expectLogToHaveEntries(page, 1);
   const secondSync = await readFilterLog(page);
   expect(secondSync[0]).toMatchObject({ rowIdx: 0, colIdx: 2 });
+});
+
+for (const navigation of ["source", "row"] as const) {
+  test(`pending metadata follows the active ${navigation} without leaving the old filter visible`, async ({ page }) => {
+    await openViewer(page, { config: { defaultZoomMode: "fit", mouseSwitch: false } });
+    const compRows = page.locator("._scf_comp_row");
+    const targetRow = navigation === "source" ? 0 : 1;
+    const targetCol = navigation === "source" ? 1 : 0;
+    const targetName = navigation === "source" ? "wide-source-b.webp" : "pillar-source-a.webp";
+    // Preload the destination so this exercises the previously missed path:
+    // navigation to an existing image must still reprioritize filter work.
+    await page.keyboard.press(navigation === "source" ? "Digit2" : "ArrowDown");
+    await expect.poll(() => compRows.nth(targetRow).locator("._scf_comp_img").nth(targetCol)
+      .evaluate((el) => (el as HTMLImageElement).complete && (el as HTMLImageElement).naturalWidth > 0)).toBe(true);
+    await page.keyboard.press(navigation === "source" ? "Digit1" : "ArrowUp");
+    await page.keyboard.press("KeyF"); // Solar
+    const target = compRows.nth(targetRow).locator("._scf_comp_img").nth(targetCol);
+    await expect(target).toHaveCSS("filter", /scf-s1/);
+
+    const oldSource = requestGate();
+    const metadata = pngHeader(iccChunk(iccProfile("2020")));
+    await page.route(/wide-source-a\.webp$/, async (route) => {
+      if (!route.request().headers().range) return route.fallback();
+      oldSource.markStarted();
+      await oldSource.released;
+      await route.fulfill({ contentType: "image/png", body: metadata }).catch(() => {});
+    });
+    await page.route(new RegExp(targetName.replaceAll(".", "\\.") + "$"), async (route) => {
+      if (!route.request().headers().range) return route.fallback();
+      await route.fulfill({ contentType: "image/png", body: metadata });
+    });
+    try {
+      await page.keyboard.press("KeyF"); // Solar 2
+      await page.keyboard.press("KeyF"); // Residual
+      await page.keyboard.press("KeyF"); // Luma, old A request held
+      await oldSource.started;
+      await expect(compRows.first().locator("._scf_comp_img").first()).toHaveCSS("filter", /scf-luma709/);
+      await page.keyboard.press(navigation === "source" ? "Digit2" : "ArrowDown");
+      // A remains held. B must reach the metadata-selected filter without
+      // waiting for A or the 2-second request timeout.
+      await expect(target).toHaveCSS("filter", /scf-luma2020/, { timeout: 1500 });
+      await expect(page.locator("#_scf_hud_")).toContainText("Luma");
+    } finally {
+      oldSource.release();
+    }
+  });
+}
+
+test("switching a pending filter off cancels its metadata request and ignores late results", async ({ page }) => {
+  await openViewer(page, { config: { mouseSwitch: false } });
+  const gate = requestGate();
+  await page.route(/wide-source-a\.webp$/, async (route) => {
+    if (!route.request().headers().range) return route.fallback();
+    gate.markStarted(); await gate.released;
+    await route.fulfill({ contentType: "image/png", body: pngHeader(iccChunk(iccProfile("2020"))) }).catch(() => {});
+  });
+  try {
+    await page.keyboard.press("Shift+KeyF"); // Chroma
+    await gate.started;
+    const failed = page.waitForEvent("requestfailed", { predicate: (request) =>
+      request.url().endsWith("wide-source-a.webp") && !!request.headers().range });
+    await page.keyboard.press("KeyF"); // Off
+    await failed;
+    const image = page.locator("._scf_comp_img").first();
+    await expect(image).toHaveCSS("filter", "none");
+    gate.release();
+    await page.waitForTimeout(100);
+    await expect(image).toHaveCSS("filter", "none");
+  } finally { gate.release(); }
 });
 
 // ─── SVG filter scope: defs and images must share a tree ───────────────────

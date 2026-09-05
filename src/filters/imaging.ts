@@ -2,7 +2,7 @@
 // ║  Image targeting & filter application                                     ║
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
-import { detectCS } from "./colorspace";
+import { cachedColorMetadata, detectCS } from "./colorspace";
 import { cur } from "./modes";
 import { bcString } from "./brightness";
 import { gammaMismatchCheckFilter, type GammaMismatchCheckId } from "./gamma-check";
@@ -26,9 +26,12 @@ export interface FilterApplyOptions {
   contrast?: number;
   gammaCheck?: GammaMismatchCheckId | null;
   shouldApply?: () => boolean;
+  signal?: AbortSignal;
 }
 
 let filterSyncGeneration = 0;
+let filterSyncController = new AbortController();
+const imageFilterRequests = new WeakMap<HTMLImageElement, object>();
 
 export function currentFilterSyncGuard(): () => boolean {
   const generation = filterSyncGeneration;
@@ -36,6 +39,8 @@ export function currentFilterSyncGuard(): () => boolean {
 }
 
 export function createFilterSyncGuard(): () => boolean {
+  filterSyncController.abort();
+  filterSyncController = new AbortController();
   filterSyncGeneration++;
   return currentFilterSyncGuard();
 }
@@ -97,10 +102,10 @@ export function getImages(): HTMLImageElement[] {
   return [...document.querySelectorAll("img")].filter(shouldApplyFilterToImage) as HTMLImageElement[];
 }
 
-export async function resolveFilter(src: string): Promise<string> {
+export async function resolveFilter(src: string, signal?: AbortSignal): Promise<string> {
   const mode = cur();
   if (mode.f709) {
-    const cs = await detectCS(src);
+    const cs = await detectCS(src, signal);
     return cs === "2020" ? mode.f2020! : mode.f709;
   }
   return mode.filter || "";
@@ -128,15 +133,32 @@ export async function applyFilterToImg(
   options: FilterApplyOptions = {},
 ): Promise<void> {
   const shouldApply = options.shouldApply ?? currentFilterSyncGuard();
+  const signal = options.signal ?? filterSyncController.signal;
   const source = img.src;
-  const filter = buildFilter(
-    await resolveFilter(source),
-    options.brightness,
-    options.contrast,
-    options.gammaCheck ?? null,
-  );
-  if (!shouldApply() || img.isConnected === false || img.src !== source) return;
-  img.style.filter = filter;
+  const request = {};
+  imageFilterRequests.set(img, request);
+  const current = () => !signal.aborted && shouldApply() && img.isConnected !== false &&
+    img.src === source && imageFilterRequests.get(img) === request;
+  const apply = (svgFilter: string) => {
+    if (current()) img.style.filter = buildFilter(svgFilter, options.brightness, options.contrast, options.gammaCheck ?? null);
+  };
+  const mode = cur();
+  if (mode.f709) {
+    // Immediately show the selected preview while metadata resolves. Leaving
+    // the previous effect on screen would contradict the selected mode/HUD.
+    const metadata = cachedColorMetadata(source);
+    apply(metadata?.primaries === "2020" ? mode.f2020! : mode.f709);
+  }
+  try {
+    apply(await resolveFilter(source, signal));
+  } catch (error) {
+    // A new mode, source, row, or viewer close superseded this request.
+    if (!signal.aborted) throw error;
+  }
+}
+
+export function syncActiveFilter(comp: Comp): void {
+  if (cur().f709 && activeComps.includes(comp)) syncAll();
 }
 
 export async function applyToImg(img: HTMLImageElement): Promise<void> {

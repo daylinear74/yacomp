@@ -136,12 +136,14 @@ export function createNavMap(
       viewportHeight: compDiv.clientHeight,
     });
     suppressRowSync(comp);
+    const rowChanged = comp.currentRow !== rowIdx;
     comp.currentRow = rowIdx;
     compDiv.scrollLeft = next.scrollLeft;
     compDiv.scrollTop = next.scrollTop;
     if (comp.updateRowNav) comp.updateRowNav(rowIdx);
     comp.updateLabel?.();
     comp.updateLoadingOverlay?.();
+    if (rowChanged) comp.updateActiveFilter?.();
   }
   navMapEl.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return;
