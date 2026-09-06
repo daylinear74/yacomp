@@ -28,7 +28,7 @@ or [Violentmonkey](https://violentmonkey.github.io/), then **[click here to
 install the latest release](https://github.com/daylinear74/yacomp/releases/latest/download/yacomp.user.js)**.
 
 - On HDB torrent and offer pages, detected comparison grids get a **Show comparison** link.
-  On torrent descriptions, the adjacent **⇄** button switches to a generic
+  On torrent and offer descriptions, the adjacent **⇄** button switches to a generic
   Viewer when the detected titles are wrong, and switches back to the original
   comparison. The Viewer column choice is retained and also governs image clicks.
   Other screenshot groups get a compact **Show Viewer** control placed directly
@@ -36,6 +36,11 @@ install the latest release](https://github.com/daylinear74/yacomp/releases/lates
   If a block is ambiguous, **Show Viewer** includes a column-count dropdown:
   `1` opens it as a gallery, while `2+` builds a manual comparison; a
   non-divisible image count leaves the final row short.
+  Images missed by comparison detection get separate fallback viewers, including
+  standalone posters and diagrams. Description-image clicks also cover unlinked
+  and dynamically added images; existing comparison openers and the native-click
+  preference are preserved. Inline images remain clickable without adding controls
+  inside prose or technical logs. This fallback excludes page chrome and comments.
 - On HDB forum pages it also adds a **Custom comparison** builder below the page
   title, for markup too irregular to auto-detect safely (see *Features*).
 - On native-viewer sites, use the site's comparison UI as usual; yacomp takes

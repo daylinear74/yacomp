@@ -279,6 +279,45 @@ test("hdbits: torrent ⇄ switches both ways and image clicks honor the active m
   await expect(page.locator("._scf_column_control")).toContainText("columns");
 });
 
+test("hdbits: slow.pics comparison switch stays inline through mode changes", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/208-torrent-desc-slowpics-switch-inline");
+  await waitForHdbitsReady(page);
+  await expect(comparisonLinks(page)).toHaveCount(1);
+  await expect(viewerSwitches(page)).toHaveCount(1);
+
+  const expectInlineControls = async () => {
+    const layout = await page.evaluate(() => {
+      const control = document.querySelector("._scf_column_control") ?? document.querySelector("._scf_comp_link")!;
+      const rects = [control, document.querySelector("._scf_torrent_viewer_sep")!, document.querySelector("._scf_torrent_viewer_switch")!]
+        .map((el) => el.getBoundingClientRect());
+      const image = document.querySelector('img[src*="g208a"]')!.getBoundingClientRect();
+      return {
+        verticalOverlap: Math.min(...rects.map((r) => r.bottom)) - Math.max(...rects.map((r) => r.top)),
+        horizontalGaps: rects.slice(1).map((r, i) => r.left - rects[i].right),
+        gapBeforeImages: image.top - Math.max(...rects.map((r) => r.bottom)),
+      };
+    });
+    expect(layout.verticalOverlap, "link, separator, and switch share a line").toBeGreaterThan(0);
+    expect(layout.horizontalGaps.every((gap) => gap >= 0), "controls remain in left-to-right order").toBe(true);
+    expect(layout.gapBeforeImages, "screenshots start below the complete control row").toBeGreaterThanOrEqual(-1);
+  };
+
+  // Cover both compact site typography and larger text, including the
+  // restored comparison link after Viewer mode has moved the controls.
+  for (const fontSize of [11, 22]) {
+    await page.addStyleTag({ content: `#details { font-size: ${fontSize}px; }` });
+    await expectInlineControls();
+    await viewerSwitches(page).click();
+    await expect(viewerLinks(page)).toHaveCount(1);
+    await page.locator("select._scf_column_select").selectOption("3");
+    await expectInlineControls();
+    await viewerSwitches(page).click();
+    await expect(comparisonLinks(page)).toHaveCount(1);
+    await expectInlineControls();
+  }
+});
+
 test("hdbits: rerunning setup from Viewer mode restores fresh comparison image openers", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/001-torrent-desc-simple-grid");
@@ -582,13 +621,165 @@ test("hdbits: offer description gets torrent-description semantics (gallery fall
   await expect(page.locator("._scf_comp_row")).toHaveCount(6);
 });
 
-test("hdbits: offer comparisons do not get the torrent Viewer switch", async ({ page }) => {
+test("hdbits: offer comparisons switch both ways and image clicks honor Viewer columns", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/195-offer-desc-three-column-comparison");
   await waitForHdbitsReady(page);
 
+  await expect(page.locator("table#details")).toHaveCount(0);
   await expect(comparisonLinks(page)).toHaveCount(1);
-  await expect(viewerSwitches(page)).toHaveCount(0);
+  const toggle = viewerSwitches(page);
+  await expect(toggle).toHaveCount(1);
+  await expect(toggle).toHaveAttribute("title", "Switch to Viewer");
+  await toggle.click();
+  await expect(viewerLinks(page)).toHaveCount(1);
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(toggle).toHaveAttribute("title", "Switch to comparison");
+  await page.locator("select._scf_column_select").selectOption("2");
+
+  await viewerLinks(page).click();
+  await expect(page.locator("._scf_comp")).toBeVisible();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(6);
+  await expect(page.locator("._scf_comp_row").first().locator("._scf_comp_img")).toHaveCount(2);
+  await page.keyboard.press("Escape");
+
+  // Flat index 5 is Source 2 in the two-column Viewer, but WEB AMZ in
+  // the original three-column comparison. Both image openers must survive.
+  await page.locator('img[src$="/o06.jpg"]').click();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(6);
+  await expect(page.locator("._scf_comp_label_item", { hasText: "Source 2" })).toHaveCSS("opacity", "1");
+  await page.keyboard.press("Escape");
+
+  await toggle.click();
+  await expect(comparisonLinks(page)).toHaveCount(1);
+  await expect(viewerLinks(page)).toHaveCount(0);
+  await expect(toggle).toHaveAttribute("title", "Switch to Viewer");
+  await page.locator('img[src$="/o06.jpg"]').click();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(4);
+  await expect(page.locator("._scf_comp_row").first().locator("._scf_comp_img")).toHaveCount(3);
+  await expect(page.locator("._scf_comp_label_item", { hasText: "WEB AMZ" })).toHaveCSS("opacity", "1");
+  await page.keyboard.press("Escape");
+
+  await toggle.click();
+  await expect(page.locator("select._scf_column_select")).toHaveValue("2");
+});
+
+for (const caseName of ["003-torrent-comment-vs-label", "005-forum-post-three-source"]) {
+  test(`hdbits: description Viewer switch stays absent in ${caseName}`, async ({ page }) => {
+    await stubHdbitsImages(page);
+    await page.goto(`/hdbits/case/${caseName}`);
+    await waitForHdbitsReady(page);
+    await expect(comparisonLinks(page)).toHaveCount(1);
+    await expect(viewerSwitches(page)).toHaveCount(0);
+  });
+}
+
+test("hdbits: uncovered offer groups and a standalone spectrum get separate viewers", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/209-offer-desc-unclaimed-image-groups");
+  await waitForHdbitsReady(page);
+  await expect(comparisonLinks(page)).toHaveCount(1);
+  await expect(viewerLinks(page)).toHaveCount(2);
+  const group = page.locator("._scf_column_control").filter({ has: page.locator("select") });
+  await expect(group.locator("select option")).toHaveCount(12);
+  await group.locator("select").selectOption("2");
+  await page.locator('img[src$="/g209b06.jpg"]').click();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(6);
+  await expect(page.locator("._scf_comp_label_item", { hasText: "Source 2" })).toHaveCSS("opacity", "1");
+  await page.keyboard.press("Escape");
+  await page.locator('img[src$="/g209spectrum.jpg"]').click();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(1);
+  await expect(page.locator("._scf_comp_img")).toHaveAttribute("src", /g209spectrum\.png$/);
+  await page.keyboard.press("Escape");
+  await page.locator('img[src$="/g209a06.jpg"]').click();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(4);
+  await expect(page.locator("._scf_comp_label_item", { hasText: "WEB (cropped)" })).toHaveCSS("opacity", "1");
+  await page.keyboard.press("Escape");
+  await page.evaluate(() => (window as unknown as { __yacomp: { rerunHDBits: () => void } }).__yacomp.rerunHDBits());
+  await expect(comparisonLinks(page)).toHaveCount(1);
+  await expect(viewerLinks(page)).toHaveCount(2);
+});
+
+test("hdbits: all description images open, including unlinked, inline, and lazy images", async ({ page }) => {
+  await page.route("https://media.example.invalid/**", (route) => route.fulfill({ contentType: "image/svg+xml", body: STUB_SVG }));
+  await page.goto("/hdbits/case/210-torrent-desc-standalone-images");
+  await waitForHdbitsReady(page);
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  for (const [id, file] of [["poster", "poster"], ["unlinked", "illustration"], ["inline", "smile"], ["lazy", "lazy"]]) {
+    await page.locator(`#coverage-${id}`).click();
+    await expect(page.locator("._scf_comp")).toHaveCount(1);
+    await expect(page.locator("._scf_comp_row")).toHaveCount(1);
+    await expect(page.locator("._scf_comp_img")).toHaveAttribute("src", `https://media.example.invalid/${file}`);
+    await page.keyboard.press("Escape");
+  }
+});
+
+test("hdbits: late description images use current sources without capturing page chrome or native clicks", async ({ page }) => {
+  await page.route("https://media.example.invalid/**", (route) => route.fulfill({ contentType: "image/svg+xml", body: STUB_SVG }));
+  await page.goto("/hdbits/case/210-torrent-desc-standalone-images");
+  await waitForHdbitsReady(page);
+  await page.evaluate(() => {
+    const root = document.getElementById("coverage-poster")!.closest("td")!;
+    const late = document.createElement("img"); late.id = "coverage-late"; late.src = "https://media.example.invalid/late";
+    root.append(document.createElement("hr"), late);
+    const chrome = late.cloneNode() as HTMLImageElement; chrome.id = "coverage-chrome";
+    document.getElementById("header")!.append(chrome);
+    const metadata = late.cloneNode() as HTMLImageElement; metadata.id = "coverage-metadata";
+    document.querySelector("#details tr td")!.append(metadata);
+  });
+  await page.locator("#coverage-chrome").click();
+  await expect(page.locator("._scf_comp")).toHaveCount(0);
+  await page.locator("#coverage-metadata").click();
+  await expect(page.locator("._scf_comp")).toHaveCount(0);
+  await page.locator("#coverage-late").click();
+  await expect(page.locator("._scf_comp")).toHaveCount(1);
+  await expect(page.locator("._scf_comp_img")).toHaveAttribute("src", "https://media.example.invalid/late");
+  await page.keyboard.press("Escape");
+  await page.locator("#coverage-late").evaluate((img) => (img as HTMLImageElement).src = "https://media.example.invalid/replaced");
+  await page.locator("#coverage-late").click();
+  await expect(page.locator("._scf_comp_img")).toHaveAttribute("src", "https://media.example.invalid/replaced");
+  await page.keyboard.press("Escape");
+  await page.evaluate(() => (window as unknown as { __yacomp: { saveConfig: (value: unknown) => void } }).__yacomp.saveConfig({ hdbitsImageClick: "native" }));
+  await page.locator("#coverage-late").click();
+  await expect(page.locator("._scf_comp")).toHaveCount(0);
+});
+
+test("hdbits: shared image links open only the clicked image and fallback stops outside descriptions", async ({ page }) => {
+  await page.route("https://media.example.invalid/**", (route) => route.fulfill({ contentType: "image/svg+xml", body: STUB_SVG }));
+  await page.goto("/hdbits/case/210-torrent-desc-standalone-images");
+  await waitForHdbitsReady(page);
+  await page.evaluate(() => {
+    const root = document.getElementById("coverage-poster")!.closest("td")!;
+    const link = document.createElement("a"); link.href = "https://media.example.invalid/wrong-target.png";
+    for (const id of ["one", "two"]) {
+      const img = document.createElement("img"); img.id = `shared-${id}`; img.src = `https://media.example.invalid/${id}`;
+      link.append(img);
+    }
+    root.append(document.createElement("hr"), link);
+  });
+  // First click installs the late group's control; repeat clicks must not
+  // dispatch all listeners attached to the same wrapping anchor.
+  for (const id of ["two", "one", "two"]) {
+    await page.locator(`#shared-${id}`).click();
+    await expect(page.locator("._scf_comp")).toHaveCount(1);
+    const rowIndex = id === "one" ? 0 : 1;
+    const source = page.locator("._scf_comp_row").nth(rowIndex).locator("._scf_comp_img");
+    await expect(source).toHaveAttribute("src", `https://media.example.invalid/${id}`);
+    await expect(page.locator("._scf_row_nav_item._scf_active")).toHaveText(String(rowIndex + 1));
+    await page.keyboard.press("Escape");
+  }
+  await page.locator("#shared-two").evaluate((img) => {
+    const wrapper = document.createElement("a"); wrapper.href = "https://example.invalid/reparented";
+    img.parentElement!.after(wrapper);
+    wrapper.append(img);
+  });
+  await page.locator("#shared-two").click();
+  await expect(page.locator("._scf_comp")).toHaveCount(1);
+  await expect(page.locator("._scf_row_nav_item._scf_active")).toHaveText("2");
+  await page.keyboard.press("Escape");
+  await page.locator("#coverage-unlinked").evaluate((img) => document.getElementById("header")!.append(img));
+  await page.locator("#coverage-unlinked").click();
+  await expect(page.locator("._scf_comp")).toHaveCount(0);
 });
 
 test("hdbits: technical doc labels before a torrent gallery are not source columns", async ({ page }) => {
@@ -843,11 +1034,10 @@ test("hdbits: every separated image group gets its own Show Viewer control", asy
   await page.goto("/hdbits/case/185-torrent-desc-per-group-viewer-galleries");
   await waitForHdbitsReady(page);
 
-  // The showhide imgbox pair and the six trailing shots each get a control;
-  // the trailing gallery must survive even though the leading section (the
-  // lone REPACK shot) can't be shaped.
+  // The lone REPACK shot, showhide imgbox pair, and six trailing shots each
+  // get a control. The single shot must not join either screenshot gallery.
   await expect(comparisonLinks(page)).toHaveCount(0);
-  await expect(viewerLinks(page)).toHaveCount(2);
+  await expect(viewerLinks(page)).toHaveCount(3);
   const optionCounts = await page
     .locator("._scf_column_control select")
     .evaluateAll((els) => els.map((el) => (el as HTMLSelectElement).options.length));
@@ -872,13 +1062,13 @@ test("hdbits: every separated image group gets its own Show Viewer control", asy
   await expect(page.locator("._scf_comp_row")).toHaveCount(6);
 });
 
-test("hdbits: a lone leading poster stays out of the trailing Show Viewer gallery", async ({ page }) => {
+test("hdbits: a lone leading poster has its own viewer outside the trailing gallery", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/197-torrent-desc-leading-poster-then-gallery");
   await waitForHdbitsReady(page);
 
   await expect(comparisonLinks(page)).toHaveCount(0);
-  await expect(viewerLinks(page)).toHaveCount(1);
+  await expect(viewerLinks(page)).toHaveCount(2);
   // Only the 4 real screenshots are in the gallery — the poster is excluded.
   await expect(page.locator("._scf_column_control select option")).toHaveCount(4);
   // The control sits immediately before the first real screenshot, past the
@@ -886,7 +1076,7 @@ test("hdbits: a lone leading poster stays out of the trailing Show Viewer galler
   await expect
     .poll(() =>
       page.evaluate(() => {
-        const control = document.querySelector("._scf_column_control");
+        const control = document.querySelector("select._scf_column_select")?.closest("._scf_column_control");
         const firstImage = document.querySelector('img[src*="g197a"]');
         if (!control || !firstImage) return null;
         const range = document.createRange();
@@ -899,6 +1089,10 @@ test("hdbits: a lone leading poster stays out of the trailing Show Viewer galler
   await page.locator('img[src*="g197c"]').click();
   await expect(page.locator("._scf_comp")).toBeVisible();
   await expect(page.locator("._scf_comp_row")).toHaveCount(4);
+  await page.keyboard.press("Escape");
+  await page.locator('img[src$="/p197.jpg"]').click();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(1);
+  await expect(page.locator("._scf_comp_img")).toHaveAttribute("src", /p197\.png$/);
 });
 
 test("hdbits: text-separated screenshot runs get their own Show Viewer controls", async ({ page }) => {

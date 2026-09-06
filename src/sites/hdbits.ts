@@ -4,7 +4,7 @@
 
 import { injectCSS, injectTriggerLinkCSS } from "../ui/css";
 import { hdbitsImageClick, hdbitsManualAllThreads } from "../config";
-import { getGrids, hdbFull, isTorrentDescriptionContainer, partitionTrailingRemainder } from "../grid";
+import { getGrids, hdbFull, externalImageFullUrl, isTorrentDescriptionContainer, partitionTrailingRemainder } from "../grid";
 import type { Grid, GridCell } from "../grid";
 import { hasVsOrPipe, splitNames, looksLikeNames, isNonSourceLabel, looksLikeProse, tidyName } from "../grid/names";
 import { buildComparison, insertLinkAfter, openOrphanSelect, openWithDummyWrapper } from "../viewer";
@@ -332,6 +332,7 @@ function addManualColumnControlFromCells(
   container: HTMLElement,
   images: HTMLImageElement[],
   initialColumns = 1,
+  refreshCells?: () => GridCell[],
 ): ManualColumnControl {
   injectColumnSelectCSS();
   const previousOpeners = images.map((img) => imageOpeners.get(img));
@@ -353,7 +354,7 @@ function addManualColumnControlFromCells(
   const submit = (initialIndex?: number) => {
     const cols = Number.parseInt(select.value, 10);
     if (!(cols >= 1) || cols > cells.length) return;
-    const grid = gridFromCells(cells, cols, anchor);
+    const grid = gridFromCells(refreshCells?.() ?? cells, cols, anchor);
     if (!grid) return;
     const positioned = initialIndex === undefined
       ? grid
@@ -456,14 +457,13 @@ function isCurrentComparisonOpen(link: HTMLAnchorElement, generation: number): b
   return link.isConnected && comparisonOpenState(link).generation === generation;
 }
 
-/** Add a compact mode switch beside an inferred torrent comparison. Automatic
+/** Add a compact mode switch beside an inferred torrent/offer comparison. Automatic
  *  detection remains the default, while Viewer mode reuses the existing column
  *  control and can be switched back to the original comparison. */
 function addTorrentViewerSwitch(target: TorrentViewerSwitchTarget): void {
   const { link, cells, images, anchor, container } = target;
   if (
     !link.isConnected ||
-    !link.closest("table#details") ||
     !isTorrentDescriptionContainer(link) ||
     images.length < 2
   ) return;
@@ -576,6 +576,8 @@ function downgradeTrailingTorrentComparisonLinks(): void {
 type ImageOpener = (e: Event) => void;
 const wiredImages = new WeakSet<HTMLImageElement>();
 let imageOpeners = new WeakMap<HTMLImageElement, ImageOpener>();
+const descriptionFallbackOpeners = new WeakMap<HTMLImageElement, ImageOpener>();
+let descriptionClickFallbackInstalled = false;
 
 function onImageClickOpen(
   img: HTMLImageElement | undefined,
@@ -594,14 +596,137 @@ function onImageClickOpen(
     "click",
     (e) => {
       if (hdbitsImageClick() !== "viewer") return; // leave HDBits' native behavior
+      // A single anchor can wrap multiple images. Only dispatch the image
+      // actually clicked, not every registered image inside that anchor.
+      const clicked = e.target instanceof Element ? e.target.closest("img") : null;
+      if ((clicked ?? anchor?.querySelector("img") ?? img) !== img) return;
       const currentOpen = imageOpeners.get(img);
       if (!currentOpen) return;
+      if (descriptionFallbackOpeners.get(img) === currentOpen &&
+          !descriptionImageContainers().some((root) => root.contains(img))) return;
       e.preventDefault();
       e.stopPropagation();
       currentOpen(e);
     },
     true, // capture, to beat any page-level image handler
   );
+}
+
+/** Exact description cells, not the entire #details table (which also holds
+ *  cast portraits, subtitle flags, and other site controls). */
+function descriptionImageContainers(): HTMLElement[] {
+  if (!document.querySelector("div.torrent-title, table#details")) return [];
+  const roots = new Set<HTMLElement>();
+  for (const label of document.querySelectorAll("div.label")) {
+    if (!/^description$/i.test((label.textContent || "").trim())) continue;
+    const td = label.closest("td");
+    if (td && !td.closest("td.text, td.comment")) roots.add(td);
+  }
+  const details = document.querySelector("table#details");
+  for (const row of details?.querySelectorAll(":scope > tbody > tr, :scope > tr") ?? []) {
+    const label = row.querySelector(":scope > td > div.label");
+    if (!/^tags$/i.test((label?.textContent || "").trim())) continue;
+    const td = row.nextElementSibling?.querySelector<HTMLElement>(":scope > td");
+    const nextLabel = td?.querySelector(":scope > div.label");
+    if (td && (!nextLabel || /^description$/i.test((nextLabel.textContent || "").trim()))) roots.add(td);
+  }
+  return [...roots].filter((root) => ![...roots].some((other) => other !== root && other.contains(root)));
+}
+
+function descriptionImageCell(img: HTMLImageElement): GridCell {
+  const anchor = img.closest<HTMLAnchorElement>("a[href]");
+  const imageLink = anchor?.querySelectorAll("img").length === 1 ? anchor : null;
+  const responsive = img.hasAttribute("srcset") || img.parentElement?.tagName === "PICTURE";
+  const source = img.getAttribute("data-src") || img.getAttribute("data-original") ||
+    img.getAttribute("data-lazy-src") || (responsive ? img.currentSrc : img.src) || img.currentSrc || img.src;
+  let thumb = source;
+  try {
+    if (source) thumb = new URL(source, document.baseURI).href;
+  } catch {
+    // Keep an unresolvable source local to its image.
+  }
+  const full = imageLink && /\/\/img\.hdbits\.org\//i.test(imageLink.href)
+    ? hdbFull(imageLink.href)
+    : hdbFull(externalImageFullUrl(thumb, imageLink?.href));
+  return { img, a: anchor ?? undefined, thumb, full, width: img.naturalWidth || null, height: img.naturalHeight || null };
+}
+
+/** Only collect images without an existing comparison/gallery opener. Prose,
+ *  separate paragraph/figure blocks, and blank lines divide fallback groups;
+ *  a single row break and inline image wrappers keep a screenshot run intact. */
+function unhandledDescriptionImageGroups(root: HTMLElement): HTMLImageElement[][] {
+  const groups: HTMLImageElement[][] = [];
+  let group: HTMLImageElement[] = [];
+  let breaks = 0;
+  let block: Element | null = null;
+  const flush = () => { if (group.length) groups.push(group); group = []; breaks = 0; block = null; };
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      return node instanceof Element && node.matches("script, style, noscript, ._scf_column_control, ._scf_comp_link, ._scf_torrent_viewer_sep, ._scf_torrent_viewer_switch")
+        ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (node instanceof HTMLImageElement) {
+      if (imageOpeners.has(node)) { flush(); continue; }
+      const nextBlock = node.closest("p, figure, .div_showhide");
+      if (group.length && nextBlock !== block) flush();
+      block = nextBlock;
+      group.push(node);
+      breaks = 0;
+    } else if (node.nodeName === "BR") {
+      if (++breaks >= 2) flush();
+    } else if (node.nodeType === Node.TEXT_NODE) {
+      if ((node.textContent || "").trim()) flush();
+    } else if (node instanceof Element && /^(HR|P|FIGURE|H[1-6])$/.test(node.tagName)) {
+      flush();
+    }
+  }
+  flush();
+  return groups;
+}
+
+function addUnhandledDescriptionViewers(root: HTMLElement): void {
+  for (const images of unhandledDescriptionImageGroups(root)) {
+    const first = images[0];
+    const anchor = first.closest<HTMLAnchorElement>("a[href]");
+    const node = anchor ?? first;
+    // Inline illustrations/smilies stay clickable without inserting a toolbar
+    // and line breaks into their surrounding sentence or technical log.
+    const inline = images.length === 1 && (first.closest("pre, code") ||
+      [node.previousSibling, node.nextSibling].some((sibling) => sibling?.nodeType === Node.TEXT_NODE && (sibling.textContent || "").trim()));
+    if (inline) {
+      onImageClickOpen(first, anchor ?? undefined, () => openImageViewer([descriptionImageCell(first)], node));
+    } else {
+      const refresh = () => images.map(descriptionImageCell);
+      const control = addManualColumnControlFromCells(refresh(), node, root, images, 1, refresh);
+      if (images.length === 1) control.element.replaceChildren(control.link);
+    }
+    for (const img of images) descriptionFallbackOpeners.set(img, imageOpeners.get(img)!);
+  }
+}
+
+function setupDescriptionImageViewers(): void {
+  const roots = descriptionImageContainers();
+  for (const root of roots) addUnhandledDescriptionViewers(root);
+  if (!roots.length || descriptionClickFallbackInstalled) return;
+  descriptionClickFallbackInstalled = true;
+  // Delegate the last-resort path so images inserted after setup also work.
+  // Existing openers always win, including a user's selected Viewer columns.
+  document.addEventListener("click", (event) => {
+    if (hdbitsImageClick() !== "viewer" || !(event.target instanceof HTMLImageElement)) return;
+    const img = event.target;
+    const root = descriptionImageContainers().find((container) => container.contains(img));
+    if (!root) return;
+    if (!imageOpeners.has(img)) addUnhandledDescriptionViewers(root);
+    // Reuse registered openers even if a lazy loader moved an image to a new
+    // anchor after setup; the old anchor's capture listener cannot follow it.
+    const open = imageOpeners.get(img);
+    if (!open) return;
+    event.preventDefault();
+    event.stopPropagation();
+    open(event);
+  }, true);
 }
 
 /** Make each of a comparison's on-page images open the yacomp viewer at that
@@ -864,6 +989,7 @@ export function setupHDBitsCore(): void {
     if (comparison.images.every((img) => claimed.has(img))) continue;
     addSlowPicsComparisonLink(comparison);
   }
+  setupDescriptionImageViewers();
 }
 
 /** All slow.pics-linked comparisons in the page, deduped by link. */
@@ -947,7 +1073,8 @@ function addSlowPicsComparisonLink(comparison: SlowPicsComparison): void {
   }
   const cells = images.map(forumManualCell);
   const link = makeShowComparisonLink();
-  link.style.display = "block";
+  // insertLinkAfter supplies the line breaks; keep the adjacent switch inline.
+  link.style.display = "inline-block";
   link.style.marginTop = "6px";
   // Warm the ~1s slow.pics fetch on hover so the click feels instant (cached).
   link.addEventListener("mouseenter", () => { void fetchSlowPicsGridInfo(key); });
