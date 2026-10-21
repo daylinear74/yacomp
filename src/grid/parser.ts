@@ -6,7 +6,7 @@ import type { GridCell, Grid } from "./types";
 import {
   hasVsOrPipe, hasExplicitComparison, splitNames, looksLikeNames,
   findComparisonNames, namesFromLeadingStructuredLabels, namesFromColorSpans, namesFromHeadings, isOriginalPost,
-  namesFromSiblingInfo, looksLikeProse, asColumnTitles,
+  namesFromSiblingInfo, looksLikeProse, looksLikeTechnicalSettingsLine, asColumnTitles,
   foldTrailingSize, isNonSourceLabel, isUrlLabel, isFooterLabel, tidyName, isMultiSourceLabel,
   stripAsymmetricTitle, isHDBitsRequestsMetadataElement, widerOriginalPostHeading,
 } from "./names";
@@ -2427,12 +2427,13 @@ export function parseGrid(container: Element, excludeImgs: Set<HTMLImageElement>
       names = parentCmp.names;
       anchorEl = parentCmp.anchorEl;
     } else {
-      // Otherwise a non-name heading suppresses the grid — except when the only
-      // alternative is a slow.pics link, where the ORIGINAL POSTER's H1 title is
-      // preferred (owner ruling): use it when its column count divides, else
-      // leave it for the slow.pics rescue. A block with NO slow.pics link stays
-      // suppressed (e.g. a non-comparison gallery).
-      const h1 = isOriginalPost(container) && hasSlowPicsLink(container) ? namesFromHeadings() : null;
+      // A credit or other non-name heading can precede any comparison link,
+      // including a redirected comp.pics URL, or no link at all. Fall back to
+      // the ORIGINAL POSTER's valid H1 when its column count divides the shots;
+      // the link's host must not decide whether the thread title is usable.
+      // Encoder-settings samples remain excluded, not re-titled by the H1.
+      const technicalSettings = groupLabels.some((label) => !!label && looksLikeTechnicalSettingsLine(label));
+      const h1 = !technicalSettings && isOriginalPost(container) ? namesFromHeadings() : null;
       if (h1 && total % h1.length === 0 && looksLikeNames(h1)) {
         names = h1;
       } else {

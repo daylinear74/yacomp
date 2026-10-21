@@ -169,6 +169,6 @@ test("ptp: with 'New tab', clicking a grid image opens the full image in a tab (
     page.waitForEvent("popup"),
     imgs.nth(0).click(),
   ]);
-  expect(popup.url()).toMatch(/passthepopcorn\.me\/i\/AAA\.png/);
+  await expect(popup).toHaveURL(/passthepopcorn\.me\/i\/AAA\.png/);
   await expect(page.locator("._scf_comp")).toHaveCount(0);
 });

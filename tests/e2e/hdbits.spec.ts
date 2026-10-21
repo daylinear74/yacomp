@@ -216,6 +216,64 @@ test("hdbits: host trigger link inherits page color and opens the viewer", async
   await expect(page.locator("._scf_comp")).toBeVisible();
 });
 
+for (const variant of ["redirected comp.pics", "direct comp.pics", "another host", "no link", "slow.pics"] as const) {
+  test(`hdbits: OP title fallback works with ${variant}`, async ({ page }) => {
+    await stubHdbitsImages(page);
+    await page.route("**/hdbits/case/213-forum-post-credit-redirected-comppics", async (route) => {
+      const response = await route.fetch();
+      const html = await response.text();
+      const url = variant === "slow.pics" ? "https://slow.pics/c/StubKey"
+        : variant === "another host" ? "https://example.invalid/compare/demo"
+        : "https://comp.pics/compare/00000000-0000-4000-8000-000000000001";
+      const link = variant === "no link" ? ""
+        : `<a href="${variant === "direct comp.pics" ? url : `/redir.php?url=${Buffer.from(url).toString("base64")}`}">${url}</a>`;
+      await route.fulfill({ response, body: html.replace(/<a href="\/redir\.php\?url=[^"]*">[^<]*<\/a>/g, link) });
+    });
+    await page.goto("/hdbits/case/213-forum-post-credit-redirected-comppics");
+    await waitForHdbitsReady(page);
+
+    await expect(comparisonLinks(page)).toHaveCount(1);
+    expect(await readGridNames(page, 0)).toEqual(["BD UHD DV HDR", "MA 4k DV HDR"]);
+    // Opening a screenshot must use the same seven-row, two-source grid.
+    await page.locator('td.comment img[src*="g213n"]').click();
+    await expect(page.locator("._scf_comp")).toBeVisible();
+    await expect(page.locator("._scf_comp_row")).toHaveCount(7);
+    await expect(page.locator("._scf_comp_img")).toHaveCount(14);
+    await expect(page.locator("._scf_comp_label_item", { hasText: "MA 4k DV HDR" })).toHaveCSS("opacity", "1");
+  });
+}
+
+for (const variant of ["reply", "invalid title", "mismatched columns", "encoder settings", "local titles"] as const) {
+  test(`hdbits: OP title fallback preserves ${variant} guard`, async ({ page }) => {
+    await stubHdbitsImages(page);
+    await page.route("**/hdbits/case/213-forum-post-credit-redirected-comppics", async (route) => {
+      const response = await route.fetch();
+      let html = await response.text();
+      if (variant === "reply") {
+        html = html.replaceAll('<td class="comment">', '<td class="comment">Original post without screenshots.</td><td class="comment">');
+      } else if (variant === "invalid title") {
+        html = html.replaceAll("BD UHD DV HDR vs MA 4k DV HDR", "Screenshot discussion");
+      } else if (variant === "mismatched columns") {
+        html = html.replaceAll("BD UHD DV HDR vs MA 4k DV HDR", "BD vs MA vs AMZN");
+      } else if (variant === "encoder settings") {
+        html = html.replace(/Thanks to <strong>Contributor<\/strong>:/g, "cabac=1 / ref=9 / deblock=1:-2:-2 / me=esa");
+      } else {
+        html = html.replace(/Thanks to <strong>Contributor<\/strong>:[\s\S]*?<\/a>/g, "<strong>Source vs Encode</strong>");
+      }
+      await route.fulfill({ response, body: html });
+    });
+    await page.goto("/hdbits/case/213-forum-post-credit-redirected-comppics");
+    await waitForHdbitsReady(page);
+
+    if (variant === "local titles") {
+      await expect(comparisonLinks(page)).toHaveCount(1);
+      expect(await readGridNames(page, 0)).toEqual(["Source", "Encode"]);
+    } else {
+      await expect(comparisonLinks(page)).toHaveCount(0);
+    }
+  });
+}
+
 test("hdbits: torrent ⇄ switches both ways and image clicks honor the active mode", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/001-torrent-desc-simple-grid");

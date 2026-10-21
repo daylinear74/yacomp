@@ -206,7 +206,7 @@ function looksLikeTechnicalFileList(text: string): boolean {
   return fieldLines.length >= 3;
 }
 
-function looksLikeTechnicalSettingsLine(text: string): boolean {
+export function looksLikeTechnicalSettingsLine(text: string): boolean {
   const slashParts = text.split(SLASH_RE).map((part) => part.trim()).filter(Boolean);
   return slashParts.filter((part) => TECH_ASSIGNMENT_RE.test(part)).length >= 3;
 }
