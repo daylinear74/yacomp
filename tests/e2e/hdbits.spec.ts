@@ -894,6 +894,70 @@ test("hdbits: local parent captions survive description-scoped fallback", async 
   expect(await readGridNames(page, 0)).toEqual(["Source", "Encode", "1080p"]);
 });
 
+test("hdbits: distant quote and log headings leave all screenshots in the Viewer", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.goto("/hdbits/case/214-torrent-desc-distant-doc-labels");
+  await waitForHdbitsReady(page);
+  await expect(comparisonLinks(page)).toHaveCount(0);
+  await expect(viewerLinks(page)).toHaveCount(1);
+  await viewerLinks(page).click();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(6);
+  await expect(page.locator("._scf_comp_img")).toHaveCount(6);
+  await expect(page.locator("._scf_comp_label")).toBeHidden();
+  await page.keyboard.press("Escape");
+  await page.locator("select._scf_column_select").selectOption("3");
+  await page.locator('img[src$="/g214f.jpg"]').click();
+  await expect(page.locator("._scf_comp_row")).toHaveCount(2);
+  await expect(page.locator("._scf_comp_img")).toHaveCount(6);
+  await expect(page.locator("._scf_comp_label_item", { hasText: "Source 3" })).toHaveCSS("opacity", "1");
+});
+
+for (const [first, second] of [["Video", "Audio"], ["Subtitles", "Chapters"], ["Other", "USA"], ["- none", "USA"]]) {
+  test(`hdbits: documentation labels reject section text (${first}, ${second})`, async ({ page }) => {
+    await stubHdbitsImages(page);
+    const doc = '<div><label class="label_showhide">Hidden text [show]</label><div class="div_showhide">Disc details</div></div><br>';
+    const shots = caseBody("214-torrent-desc-distant-doc-labels.html").split('<div id="doc-screens"')[1];
+    const html = renderTorrentWithComment(`${first}<br>${doc}${second}<br>${doc}<div id="doc-screens"${shots}`, "");
+    await page.route("**/hdbits/case/_doc-labels", route => route.fulfill({ contentType: "text/html", body: html }));
+    await page.goto("/hdbits/case/_doc-labels");
+    await waitForHdbitsReady(page);
+    await expect(comparisonLinks(page)).toHaveCount(0);
+    await expect(viewerLinks(page)).toHaveCount(1);
+  });
+}
+
+test("hdbits: documentation labels keep standalone vs separators", async ({ page }) => {
+  await stubHdbitsImages(page);
+  await page.route("**/hdbits/case/132-forum-post-showhide-source-labels-with-leading-vs", async route => {
+    const response = await route.fetch();
+    const body = (await response.text()).replace(/<strong>vs Release ([BC])<\/strong>/g, '<strong>vs.</strong><br><strong>Release $1</strong>');
+    await route.fulfill({ response, body });
+  });
+  await page.goto("/hdbits/case/132-forum-post-showhide-source-labels-with-leading-vs");
+  await waitForHdbitsReady(page);
+  await expect(comparisonLinks(page)).toHaveCount(1);
+  expect(await readGridNames(page, 0)).toEqual(["Release A", "Release B", "Release C"]);
+});
+
+for (const restart of [false, true]) {
+  test(`hdbits: documentation labels do not span unrelated paragraphs (restart=${restart})`, async ({ page }) => {
+    await stubHdbitsImages(page);
+    const doc = '<div><label class="label_showhide">Hidden text [show]</label><div class="div_showhide">Disc details</div></div><br>';
+    const shots = caseBody("214-torrent-desc-distant-doc-labels.html").split('<div id="doc-screens"')[1];
+    const description = `JPN BD<br>${doc}Unrelated notes.<br>These screenshots belong to another section.<br>USA BD<br>${doc}${restart ? `CAN BD<br>${doc}` : ""}<div id="doc-screens"${shots}`;
+    await page.route("**/hdbits/case/_doc-continuity", route => route.fulfill({ contentType: "text/html", body: renderTorrentWithComment(description, "") }));
+    await page.goto("/hdbits/case/_doc-continuity");
+    await waitForHdbitsReady(page);
+    if (restart) {
+      await expect(comparisonLinks(page)).toHaveCount(1);
+      expect(await readGridNames(page, 0)).toEqual(["USA BD", "CAN BD"]);
+    } else {
+      await expect(comparisonLinks(page)).toHaveCount(0);
+      await expect(viewerLinks(page)).toHaveCount(1);
+    }
+  });
+}
+
 test("hdbits: technical doc labels before a torrent gallery are not source columns", async ({ page }) => {
   await stubHdbitsImages(page);
   await page.goto("/hdbits/case/180-torrent-desc-killshot-bdinfo-eac3to-gallery");

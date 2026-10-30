@@ -1117,9 +1117,12 @@ function leadingComparisonNamesBeforeContainer(container: Element): { names: str
 }
 
 // A real per-source label is short and clean ("JPN BD", "USA", "Sony Pictures |
-// Germany") — never a quote/paragraph/URL (2715).
+// Germany") — never a quote/paragraph/URL (2715), section heading, or bullet
+// note ("Video:" / "- none" in 864147). Keep this guard local to doc labels.
 function isCleanSourceLabel(t: string): boolean {
   return t.length > 0 && t.length <= 40 && !/https?:\/\//i.test(t) &&
+    !/^(?:video|audio|subtitles?|chapters?|other)\s*:?$/i.test(t) &&
+    !/^[-–—•*+]\s+/.test(t) &&
     !/\bquote\b/i.test(t) && !looksLikeProse([t]) && !isNonSourceLabel(t);
 }
 
@@ -1132,9 +1135,20 @@ function sourceLabelsBeforeDocBlocks(scope: Element, stopAt: Node | null): { nam
   let lastEl: Element | null = null;
   let pending = "";
   let lastLine = ""; // last non-empty line — the label may sit a <br> above the block
+  const resetLabels = (): void => { labels.length = 0; lastEl = null; };
   for (const node of scope.childNodes) {
     if (node === stopAt) break;
-    if (node.nodeName === "BR") { const t = pending.trim(); if (t) lastLine = t; pending = ""; continue; }
+    if (node.nodeName === "BR") {
+      const t = pending.trim();
+      if (t && !/^v(?:s\.?|\.)$/i.test(t)) {
+        // More than one non-empty line between doc blocks is an interlude,
+        // not consecutive source labels. A standalone "vs." is just a separator.
+        if (lastLine) resetLabels();
+        lastLine = t;
+      }
+      pending = "";
+      continue;
+    }
     if (node.nodeType === 3) { pending += node.textContent || ""; continue; }
     if (node.nodeType !== 1) continue;
     const el = node as Element;
@@ -1142,11 +1156,15 @@ function sourceLabelsBeforeDocBlocks(scope: Element, stopAt: Node | null): { nam
     const docBlock = !el.querySelector("img") &&
       (!!el.querySelector?.("label.label_showhide") || el.matches?.("table, p.sub"));
     if (docBlock) {
+      if (pending.trim() && lastLine) resetLabels();
       const t = (pending.trim() || lastLine)
         .replace(/[:\s]+$/, "")
         .replace(/^\s*v(?:s\.?|\.)\s+/i, "")
         .trim();
-      if (t && isCleanSourceLabel(t) && labels[labels.length - 1] !== t) { labels.push(t); lastEl = el; }
+      if (t) {
+        if (!isCleanSourceLabel(t)) resetLabels();
+        else if (labels[labels.length - 1] !== t) { labels.push(t); lastEl = el; }
+      }
       pending = ""; lastLine = "";
     } else if (el.querySelector?.("img")) {
       break; // an inline image block before this — not the pattern
