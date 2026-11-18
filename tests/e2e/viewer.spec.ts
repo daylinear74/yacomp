@@ -1920,13 +1920,20 @@ test("closing the viewer cancels the pending background-load kickoff", async ({ 
       () => (window as unknown as { __cells: HTMLImageElement[] }).__cells.filter((i) => i.src).length,
     );
   // IntersectionObserver may legitimately promote a row between Playwright
-  // calls. Capture the baseline in Escape's capture phase, immediately before
-  // the viewer closes, rather than counting that pre-close work as a leak.
+  // calls. Record the baseline the moment the viewer's container leaves the
+  // DOM, rather than counting that pre-close work as a leak. A keydown probe
+  // cannot be used: the viewer seals its shortcuts, so a capture listener
+  // registered here would never run.
   await page.evaluate(() => {
-    document.addEventListener("keydown", () => {
-      const state = window as unknown as { __cells: HTMLImageElement[]; __promotedAtClose: number };
+    const state = window as unknown as { __cells: HTMLImageElement[]; __promotedAtClose: number };
+    const comp = (document.getElementById("_scf_root_") as HTMLElement).shadowRoot!
+      .querySelector("._scf_comp")!;
+    const observer = new MutationObserver(() => {
+      if (comp.isConnected) return;
+      observer.disconnect();
       state.__promotedAtClose = state.__cells.filter((image) => image.src).length;
-    }, { capture: true, once: true });
+    });
+    observer.observe(comp.parentNode!, { childList: true });
   });
   await page.keyboard.press("Escape");
   await expect(page.locator("._scf_comp")).not.toBeVisible();
@@ -2275,4 +2282,48 @@ test("slow.pics: the source menu keeps stable names without frame markers", asyn
   const options = page.locator("._scf_source_option");
   await expect(options.first()).toContainText("Source A");
   await expect(options.first()).not.toContainText("(B)");
+});
+
+// Modifier keys stay unclaimed: a page binds Shift+F by its KeyF code, and
+// sealing the bare modifier would break unrelated page handling.
+const MODIFIER_KEYS = new Set(["ShiftLeft", "ShiftRight", "ControlLeft", "ControlRight", "AltLeft", "AltRight", "MetaLeft", "MetaRight"]);
+
+async function pageActionKeysSeen(page: Page): Promise<string[]> {
+  const keys = await page.evaluate(() => (window as unknown as { __pageKeys: string[] }).__pageKeys);
+  return keys.filter((code) => !MODIFIER_KEYS.has(code));
+}
+
+async function clearPageKeys(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    (window as unknown as { __pageKeys: string[] }).__pageKeys.length = 0;
+  });
+}
+
+test("slow.pics: viewer shortcuts never reach the host page", async ({ page }) => {
+  await openViewer(page);
+  await clearPageKeys(page);
+
+  for (const key of ["Shift+KeyF", "ArrowLeft", "ArrowRight", "Digit2", "Space", "KeyM"]) {
+    await page.keyboard.press(key);
+  }
+
+  expect(await pageActionKeysSeen(page)).toEqual([]);
+});
+
+test("slow.pics: page-level filter shortcuts do not double-fire on the host page", async ({ page }) => {
+  await page.goto("/");
+  await clearPageKeys(page);
+
+  await page.keyboard.press("Shift+KeyF");
+
+  expect(await pageActionKeysSeen(page)).toEqual([]);
+});
+
+test("slow.pics: keys the viewer does not claim still reach the host page", async ({ page }) => {
+  await openViewer(page);
+  await clearPageKeys(page);
+
+  await page.keyboard.press("F5");
+
+  expect(await pageActionKeysSeen(page)).toContain("F5");
 });

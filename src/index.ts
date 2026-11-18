@@ -21,6 +21,15 @@ import { siteBehaviorEnabled } from "./sites/current-site";
 (function () {
   "use strict";
 
+  // Register the keyboard listener before the page scripts run: a page that
+  // handles keys in the window capture phase wins that phase by registering
+  // first, and the init below only runs at DOMContentLoaded.
+  try {
+    setupKeyboard();
+  } catch (err) {
+    console.error("[yacomp] keyboard failed to initialize:", err);
+  }
+
   // ╔═══════════════════════════════════════════════════════════════════════════╗
   // ║  MutationObserver: lazy-loaded / SPA images                               ║
   // ╚═══════════════════════════════════════════════════════════════════════════╝
@@ -70,7 +79,6 @@ import { siteBehaviorEnabled } from "./sites/current-site";
         }),
       ),
     );
-    safe("keyboard", setupKeyboard);
     if (siteEnabled("bhd")) safe("bhd", setupBHD);
     if (siteEnabled("comppics")) safe("comppics", setupComppics);
     if (siteEnabled("frds")) safe("frds", setupFRDS);

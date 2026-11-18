@@ -181,6 +181,8 @@ export function buildComparison(grid: Grid, container: HTMLElement, btn: HTMLEle
       return;
     }
     e.preventDefault();
+    // The page binds Ctrl+wheel on window for its own zoom.
+    e.stopPropagation();
     const oldW = zoomStepBaseWidth();
     const anchor = getWheelZoomGestureAnchor(wheelZoomGesture, comp, e);
     setZoomWidth(snapZoom(oldW, calcZoom(oldW, e.deltaY < 0 ? 1 : -1)));

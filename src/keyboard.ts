@@ -218,6 +218,43 @@ const HANDLERS: Record<ActionId, (ctx: ActionCtx) => void> = {
   "viewer.close": (ctx) => closeViewer(ctx.source),
 };
 
+/** Keys a comparison page binds itself: slow.pics uses letters, digits and
+ *  Space for image switching, arrows and Space for navigation, and Ctrl with
+ *  the zoom keys for its own zoom. Tab, function keys and Cmd/Alt chords stay
+ *  with the browser. */
+const PAGE_NAV_KEYS = new Set([
+  " ", "Spacebar", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+  "Home", "End", "PageUp", "PageDown",
+]);
+
+const PAGE_ZOOM_KEYS = new Set(["=", "+", "-", "_", "0"]);
+
+export function pageMayBind(e: KeyboardEvent): boolean {
+  if (e.metaKey || e.altKey) return false;
+  if (e.ctrlKey) return PAGE_ZOOM_KEYS.has(e.key);
+  return e.key.length === 1 || PAGE_NAV_KEYS.has(e.key);
+}
+
+/** True when an action bound outside the viewer matches this event. */
+export function siteLevelActionOwns(e: KeyboardEvent): boolean {
+  return ACTIONS.some((meta) => {
+    if (!meta.siteLevel) return false;
+    const pair = shortcutPairFor(meta.id);
+    return (
+      keyShortcutMatchesEvent(pair.main, e) ||
+      (pair.extra != null && keyShortcutMatchesEvent(pair.extra, e))
+    );
+  });
+}
+
+/** Claim the key for yacomp. preventDefault() alone only asks the browser, so
+ *  the page's own window-capture handlers would still run (slow.pics binds
+ *  Shift+F to its fullscreen and the navigation keys to its image switching). */
+function sealKey(e: KeyboardEvent): void {
+  e.preventDefault();
+  e.stopImmediatePropagation();
+}
+
 /** Run the action whose main/extra binding matches this event, in the given
  *  phase. Returns true if one fired. First registered action wins. */
 function dispatchKey(e: KeyboardEvent, phase: "down" | "up"): boolean {
@@ -230,7 +267,7 @@ function dispatchKey(e: KeyboardEvent, phase: "down" | "up"): boolean {
       keyShortcutMatchesEvent(pair.main, e) ||
       (pair.extra != null && keyShortcutMatchesEvent(pair.extra, e))
     ) {
-      e.preventDefault();
+      sealKey(e);
       HANDLERS[meta.id]({ source: "key" });
       return true;
     }
@@ -320,7 +357,7 @@ export function setupKeyboard(hostname?: string): void {
           e.preventDefault();
           hideHelpOverlay();
         }
-        e.stopPropagation();
+        e.stopImmediatePropagation();
         return;
       }
 
@@ -331,15 +368,11 @@ export function setupKeyboard(hostname?: string): void {
       ) {
         const btn = document.querySelector<HTMLElement>("[data-yacomp-comppics]");
         if (btn) {
-          e.preventDefault();
-          e.stopPropagation();
+          sealKey(e);
           btn.click();
           return;
         }
-        if (openSlowPicsViewer()) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
+        if (openSlowPicsViewer()) sealKey(e);
         return;
       }
 
@@ -351,13 +384,32 @@ export function setupKeyboard(hostname?: string): void {
         const comp = lastComp();
         const idx = parseInt(e.code.charAt(5), 10) - 1;
         if (comp && idx < comp.visibleCols.length) {
-          e.preventDefault();
+          sealKey(e);
           comp.setColumn(comp.visibleCols[idx]);
         }
         return;
       }
 
-      dispatchKey(e, "down");
+      // Escape leaves native fullscreen before it closes the viewer: the page
+      // enters fullscreen from its own button, and sealing the key would strand
+      // the viewer there.
+      if (hasComp && e.code === "Escape" && document.fullscreenElement) {
+        sealKey(e);
+        void document.exitFullscreen().catch(() => {});
+        return;
+      }
+
+      if (dispatchKey(e, "down")) return;
+
+      // Outside the viewer only the chords we act on are claimed, so the page
+      // keeps its own navigation.
+      if (!hasComp && siteLevelActionOwns(e)) {
+        sealKey(e);
+        return;
+      }
+
+      // The viewer covers the page, so nothing may reach the page underneath.
+      if (hasComp && pageMayBind(e)) sealKey(e);
     },
     true,
   );
@@ -372,7 +424,7 @@ export function setupKeyboard(hostname?: string): void {
 
       // Modal legend: swallow key-ups too so a held key doesn't leak through.
       if (isHelpOpen()) {
-        e.stopPropagation();
+        e.stopImmediatePropagation();
         return;
       }
 
@@ -387,7 +439,8 @@ export function setupKeyboard(hostname?: string): void {
         return;
       }
 
-      dispatchKey(e, "up");
+      if (dispatchKey(e, "up")) return;
+      if (hasComp && pageMayBind(e)) sealKey(e);
     },
     true,
   );

@@ -6,6 +6,15 @@ import { setZoomMode, setZoomWidth } from "../../../src/filters/zoom";
 
 type SlowPicsCollection = NonNullable<Window["collection"]>;
 
+// Matches production, where the userscript registers its window-capture key
+// listener at document-start. Registering the page's listener afterwards is
+// what makes the "page handles keys in the capture phase" conflict real.
+setupKeyboard("slow.pics");
+
+const pageKeys: string[] = [];
+Object.assign(window, { __pageKeys: pageKeys });
+window.addEventListener("keydown", (event) => pageKeys.push(event.code), true);
+
 const cdnUrl = "https://i.slow.pics/";
 
 const collection: SlowPicsCollection = {
@@ -92,8 +101,6 @@ function renderFixture(): void {
 }
 
 function boot(): void {
-  setupKeyboard("slow.pics");
-
   window.collection = collection;
   renderFixture();
 
