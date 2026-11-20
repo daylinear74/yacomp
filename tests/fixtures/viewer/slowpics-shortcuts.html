@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>slow.pics shortcut fixture</title>
+<script>
+  // slow.pics installs its fullscreen/zoom listener on window during parsing.
+  // Record both phases of each keystroke that makes it to the host.
+  for (const type of ["keydown", "keyup"]) {
+    window.addEventListener(type, (event) => {
+      if (["Shift", "Control", "Meta", "Alt"].includes(event.key)) return;
+      document.getElementById("host-keys").textContent += event.type + ":" + event.code + " ";
+    }, true);
+  }
+  window.addEventListener("wheel", (event) => {
+    if (event.ctrlKey) document.getElementById("host-wheel").textContent += "zoom ";
+  });
+  window.collection = { comparisons: [{ images: [
+    { name: "Source A", publicFileName: "wide-source-a.webp", width: 1920, height: 804 },
+    { name: "Source B", publicFileName: "wide-source-b.webp", width: 1920, height: 1080 }
+  ] }] };
+</script>
+<nav><span><a id="images">Source A</a></span></nav>
+<label>Comment <input></label>
+<label>Format <select><option>Video</option><option>Film</option></select></label>
+<button id="menu">Userscript settings</button>
+<button onclick="document.documentElement.requestFullscreen()">Native fullscreen</button>
+<output id="host-keys"></output>
+<output id="host-wheel"></output>

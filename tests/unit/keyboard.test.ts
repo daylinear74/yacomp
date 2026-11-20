@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { pageMayBind, siteLevelActionOwns } from "../../src/keyboard";
+import { keyAction, pageMayBind } from "../../src/keyboard";
 
 function kev(
   code: string,
@@ -39,20 +39,20 @@ describe("pageMayBind", () => {
   });
 });
 
-describe("siteLevelActionOwns", () => {
+describe("keyAction without a viewer", () => {
   test("claims the filter cycle that also runs outside the viewer", () => {
-    expect(siteLevelActionOwns(kev("KeyF", "f"))).toBe(true);
-    expect(siteLevelActionOwns(kev("KeyF", "f", { shiftKey: true }))).toBe(true);
+    expect(keyAction(kev("KeyF", "f"), false)?.id).toBe("filter.next");
+    expect(keyAction(kev("KeyF", "f", { shiftKey: true }), false)?.id).toBe("filter.prev");
   });
 
   test("leaves viewer-only actions to the page", () => {
-    expect(siteLevelActionOwns(kev("KeyM", "m"))).toBe(false);
-    expect(siteLevelActionOwns(kev("KeyR", "r"))).toBe(false);
-    expect(siteLevelActionOwns(kev("ArrowLeft", "ArrowLeft"))).toBe(false);
+    expect(keyAction(kev("KeyM", "m"), false)).toBeUndefined();
+    expect(keyAction(kev("KeyR", "r"), false)).toBeUndefined();
+    expect(keyAction(kev("ArrowLeft", "ArrowLeft"), false)).toBeUndefined();
   });
 
   test("ignores the same key with other modifiers", () => {
-    expect(siteLevelActionOwns(kev("KeyF", "f", { ctrlKey: true }))).toBe(false);
-    expect(siteLevelActionOwns(kev("KeyF", "f", { altKey: true }))).toBe(false);
+    expect(keyAction(kev("KeyF", "f", { ctrlKey: true }), false)).toBeUndefined();
+    expect(keyAction(kev("KeyF", "f", { altKey: true }), false)).toBeUndefined();
   });
 });

@@ -1,14 +1,9 @@
-// Shared flag: while the settings editor is recording a new binding, the
-// keyboard dispatcher stays silent so the pressed key is captured rather than
-// triggering an action. A standalone leaf module so both the dispatcher and the
-// settings editor can touch it without importing each other.
+// The early keyboard listener forwards recording keys to settings so host
+// window-capture listeners cannot run before a newly registered recorder.
+// This leaf module keeps the dispatcher and settings from importing each other.
 
-let capturing = false;
+export let shortcutCaptureHandler: ((event: KeyboardEvent) => void) | null = null;
 
-export function setShortcutCapturing(v: boolean): void {
-  capturing = v;
-}
-
-export function isShortcutCapturing(): boolean {
-  return capturing;
+export function setShortcutCaptureHandler(handler: typeof shortcutCaptureHandler): void {
+  shortcutCaptureHandler = handler;
 }

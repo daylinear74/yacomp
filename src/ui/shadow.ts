@@ -20,6 +20,10 @@ export function getShadowRoot(): ShadowRoot {
   return root!;
 }
 
+export function isYacompEvent(event: Event): boolean {
+  return root !== null && event.composedPath().includes(root);
+}
+
 // Input types whose focus must not disable the keyboard shortcuts: they take
 // no text, and a click can leave them focused indefinitely (e.g. re-clicking
 // the already-selected canvas radio fires no change event to move focus).
@@ -37,7 +41,7 @@ export function isEditing(): boolean {
   }
   if (!el) return false;
   if ((el as HTMLElement).isContentEditable) return true;
-  if (el.tagName === "TEXTAREA") return true;
+  if (el.tagName === "TEXTAREA" || el.tagName === "SELECT") return true;
   if (el.tagName !== "INPUT") return false;
   return !NON_EDITING_INPUT_TYPES.has((el as HTMLInputElement).type);
 }

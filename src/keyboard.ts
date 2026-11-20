@@ -24,11 +24,11 @@ import {
 } from "./filters/zoom";
 import { openSlowPicsViewer } from "./sites/slowpics";
 import { visibleColumnOffset } from "./viewer/source-visibility";
-import { getShadowRoot, isEditing } from "./ui/shadow";
+import { getShadowRoot, isEditing, isYacompEvent } from "./ui/shadow";
 import { isHelpOpen, hideHelpOverlay, toggleHelpOverlay } from "./viewer/help-overlay";
-import { ACTIONS, type ActionId } from "./shortcuts/registry";
+import { ACTIONS, type ActionId, type ActionMeta } from "./shortcuts/registry";
 import { keyShortcutMatchesEvent, mouseShortcutMatches, type MouseShortcut } from "./shortcuts/types";
-import { isShortcutCapturing } from "./shortcuts/capture-state";
+import { shortcutCaptureHandler } from "./shortcuts/capture-state";
 import type { DragState } from "./viewer/drag";
 import type { Comp } from "./viewer/types";
 
@@ -235,44 +235,23 @@ export function pageMayBind(e: KeyboardEvent): boolean {
   return e.key.length === 1 || PAGE_NAV_KEYS.has(e.key);
 }
 
-/** True when an action bound outside the viewer matches this event. */
-export function siteLevelActionOwns(e: KeyboardEvent): boolean {
-  return ACTIONS.some((meta) => {
-    if (!meta.siteLevel) return false;
-    const pair = shortcutPairFor(meta.id);
-    return (
-      keyShortcutMatchesEvent(pair.main, e) ||
-      (pair.extra != null && keyShortcutMatchesEvent(pair.extra, e))
-    );
-  });
-}
-
-/** Claim the key for yacomp. preventDefault() alone only asks the browser, so
- *  the page's own window-capture handlers would still run (slow.pics binds
- *  Shift+F to its fullscreen and the navigation keys to its image switching). */
-function sealKey(e: KeyboardEvent): void {
-  e.preventDefault();
-  e.stopImmediatePropagation();
-}
-
-/** Run the action whose main/extra binding matches this event, in the given
- *  phase. Returns true if one fired. First registered action wins. */
-function dispatchKey(e: KeyboardEvent, phase: "down" | "up"): boolean {
-  const hasComp = activeComps.length > 0;
+/** Match before dispatch so release-phase actions also own the keydown. */
+export function keyAction(e: KeyboardEvent, hasComp: boolean): ActionMeta | undefined {
   for (const meta of ACTIONS) {
-    if ((meta.phase ?? "down") !== phase) continue;
     if (!hasComp && !meta.siteLevel) continue;
     const pair = shortcutPairFor(meta.id);
     if (
       keyShortcutMatchesEvent(pair.main, e) ||
       (pair.extra != null && keyShortcutMatchesEvent(pair.extra, e))
     ) {
-      sealKey(e);
-      HANDLERS[meta.id]({ source: "key" });
-      return true;
+      return meta;
     }
   }
-  return false;
+}
+
+function sealKey(e: KeyboardEvent, allowDefault = false): void {
+  if (!allowDefault) e.preventDefault();
+  e.stopImmediatePropagation();
 }
 
 /** Run the action bound (main/extra) to this mouse gesture. Viewer-only. */
@@ -328,19 +307,67 @@ export function setupCompMouseShortcuts(compDiv: HTMLElement, drag: DragState): 
 }
 
 export function setupKeyboard(hostname?: string): void {
-  // Keys whose keydown was consumed by the shortcut recorder: their keyup
-  // arrives after the capture flag has already cleared and must not fire a
-  // keyup-phase action (e.g. recording F would cycle the filter mode).
-  const capturedKeyUps = new Set<string>();
+  // Keep each physical press with the action and viewer that received it.
+  // Closing the viewer or releasing Shift first must not retarget its keyup.
+  interface KeyClaim {
+    action?: ActionMeta | "page.reset";
+    allowDefault?: boolean;
+  }
+  type HeldKey = KeyClaim & { viewer: Comp | undefined };
+  const claimedKeys = new Map<string, HeldKey>();
+
+  function claim(e: KeyboardEvent, options: KeyClaim = {}): void {
+    sealKey(e, options.allowDefault);
+    claimedKeys.set(e.code, { ...options, viewer: lastComp() });
+  }
+
+  function runHeldAction(held: HeldKey, phase: "repeat" | "up"): void {
+    const action = held.action;
+    if (!action || held.viewer !== lastComp() || (!held.viewer && !siteBehaviorEnabled(hostname))) return;
+    if (isEditing() || isHelpOpen() || shortcutCaptureHandler) return;
+    if (action === "page.reset") {
+      if (phase === "up") {
+        resetAdjustments();
+        syncAll();
+        showToast(cur().toast);
+      }
+      return;
+    }
+    if (phase === "up" && action.phase !== "up") return;
+    if (phase === "repeat" && (action.phase === "up" || action.repeat === false)) return;
+    HANDLERS[action.id]({ source: "key" });
+  }
 
   window.addEventListener(
     "keydown",
     (e) => {
-      if (isShortcutCapturing()) {
-        capturedKeyUps.add(e.code);
+      // Keep the original chord and owner across repeats, even if focus,
+      // modifiers, or the viewer changed while the key was held.
+      if (e.repeat) {
+        const held = claimedKeys.get(e.code);
+        if (held) {
+          sealKey(e, held.allowDefault);
+          runHeldAction(held, "repeat");
+        } else if (isHelpOpen() || shortcutCaptureHandler) {
+          e.stopImmediatePropagation();
+        } else if (activeComps.length && !isEditing() && pageMayBind(e)) {
+          // The viewer may have opened over a key held on the host page.
+          claim(e);
+        }
         return;
       }
-      if (isEditing()) return;
+      if (shortcutCaptureHandler) {
+        claim(e);
+        shortcutCaptureHandler(e);
+        return;
+      }
+      if (!document.body) return;
+      if (e.isComposing || isEditing()) {
+        // Let settings fields receive text, selection and slider changes
+        // without also sending the keystroke to slow.pics.
+        if (isYacompEvent(e)) claim(e, { allowDefault: true });
+        return;
+      }
       const hasComp = activeComps.length > 0;
       if (!hasComp && !siteBehaviorEnabled(hostname)) return;
 
@@ -354,10 +381,12 @@ export function setupKeyboard(hostname?: string): void {
           keyShortcutMatchesEvent(help.main, e) ||
           (help.extra != null && keyShortcutMatchesEvent(help.extra, e))
         ) {
-          e.preventDefault();
+          claim(e);
           hideHelpOverlay();
+        } else {
+          // Allow browser defaults such as copying text from the legend.
+          claim(e, { allowDefault: true });
         }
-        e.stopImmediatePropagation();
         return;
       }
 
@@ -368,11 +397,11 @@ export function setupKeyboard(hostname?: string): void {
       ) {
         const btn = document.querySelector<HTMLElement>("[data-yacomp-comppics]");
         if (btn) {
-          sealKey(e);
+          claim(e);
           btn.click();
           return;
         }
-        if (openSlowPicsViewer()) sealKey(e);
+        if (openSlowPicsViewer()) claim(e);
         return;
       }
 
@@ -381,35 +410,43 @@ export function setupKeyboard(hostname?: string): void {
         hasComp && /^Digit[1-9]$/.test(e.code) &&
         !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey
       ) {
+        claim(e);
         const comp = lastComp();
         const idx = parseInt(e.code.charAt(5), 10) - 1;
         if (comp && idx < comp.visibleCols.length) {
-          sealKey(e);
           comp.setColumn(comp.visibleCols[idx]);
         }
         return;
       }
 
-      // Escape leaves native fullscreen before it closes the viewer: the page
-      // enters fullscreen from its own button, and sealing the key would strand
-      // the viewer there.
+      // Escape leaves native fullscreen before it closes the viewer.
       if (hasComp && e.code === "Escape" && document.fullscreenElement) {
-        sealKey(e);
+        claim(e);
         void document.exitFullscreen().catch(() => {});
         return;
       }
 
-      if (dispatchKey(e, "down")) return;
-
-      // Outside the viewer only the chords we act on are claimed, so the page
-      // keeps its own navigation.
-      if (!hasComp && siteLevelActionOwns(e)) {
-        sealKey(e);
+      // Escape resets page filters on release; reserve its press as well.
+      if (
+        e.key === "Escape" && !hasComp && hasAdjustments() &&
+        !e.ctrlKey && !e.altKey && !e.metaKey
+      ) {
+        claim(e, { action: "page.reset" });
         return;
       }
 
-      // The viewer covers the page, so nothing may reach the page underneath.
-      if (hasComp && pageMayBind(e)) sealKey(e);
+      const action = keyAction(e, hasComp);
+      if (action) {
+        claim(e, { action });
+        if (action.phase !== "up") HANDLERS[action.id]({ source: "key" });
+      } else if (hasComp && pageMayBind(e)) {
+        // Keep native navigation off the page underneath. An unbound Space
+        // can still activate a focused button or checkbox in our own UI.
+        const target = e.composedPath()[0];
+        const activateControl = e.code === "Space" && isYacompEvent(e) &&
+          target instanceof Element && !!target.closest("button, input");
+        claim(e, { allowDefault: activateControl });
+      }
     },
     true,
   );
@@ -417,31 +454,19 @@ export function setupKeyboard(hostname?: string): void {
   window.addEventListener(
     "keyup",
     (e) => {
-      if (capturedKeyUps.delete(e.code)) return;
-      if (isShortcutCapturing() || isEditing()) return;
-      const hasComp = activeComps.length > 0;
-      if (!hasComp && !siteBehaviorEnabled(hostname)) return;
-
-      // Modal legend: swallow key-ups too so a held key doesn't leak through.
-      if (isHelpOpen()) {
-        e.stopImmediatePropagation();
+      const held = claimedKeys.get(e.code);
+      if (held === undefined) {
+        // The legend or recorder may have opened while a key was held.
+        if (isHelpOpen() || shortcutCaptureHandler) e.stopImmediatePropagation();
+        else if (activeComps.length && !isEditing() && pageMayBind(e)) sealKey(e);
         return;
       }
-
-      // No viewer open: Escape clears page-level filter adjustments.
-      if (
-        e.key === "Escape" && !hasComp && hasAdjustments() &&
-        !e.ctrlKey && !e.altKey && !e.metaKey
-      ) {
-        resetAdjustments();
-        syncAll();
-        showToast(cur().toast);
-        return;
-      }
-
-      if (dispatchKey(e, "up")) return;
-      if (hasComp && pageMayBind(e)) sealKey(e);
+      claimedKeys.delete(e.code);
+      sealKey(e, held.allowDefault);
+      runHeldAction(held, "up");
     },
     true,
   );
+
+  window.addEventListener("blur", () => claimedKeys.clear());
 }

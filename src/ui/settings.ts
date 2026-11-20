@@ -20,7 +20,7 @@ import {
   formatShortcut, isReservedShortcut, keyEventToShortcut, type Shortcut,
 } from "../shortcuts/types";
 import { ACTIONS, actionMeta, type ActionId } from "../shortcuts/registry";
-import { setShortcutCapturing } from "../shortcuts/capture-state";
+import { setShortcutCaptureHandler } from "../shortcuts/capture-state";
 
 type Renderer = () => void;
 
@@ -685,7 +685,7 @@ function startShortcutCapture(
   refreshAll: () => void,
 ): void {
   activeShortcutCapture?.(); // cancel any in-flight capture
-  setShortcutCapturing(true);
+  setShortcutCaptureHandler(onKey);
   btn.classList.add("_scf_capturing");
   btn.textContent = "Press a key…";
 
@@ -736,8 +736,6 @@ function startShortcutCapture(
   }
 
   function onKey(e: KeyboardEvent): void {
-    e.preventDefault();
-    e.stopImmediatePropagation();
     if (e.key === "Escape") { cleanup(); refreshAll(); return; }
     // Wait for the real key — a lone modifier press isn't a binding.
     if (/^(?:Shift|Control|Alt|Meta)(?:Left|Right)$/.test(e.code)) return;
@@ -750,17 +748,15 @@ function startShortcutCapture(
 
   function cleanup(): void {
     activeShortcutCapture = null;
-    setShortcutCapturing(false);
+    setShortcutCaptureHandler(null);
     btn.classList.remove("_scf_capturing");
     chips.remove();
-    window.removeEventListener("keydown", onKey, true);
     // Listener lives on the shadow root: a document-level one would see events
     // retargeted to the host, making every in-panel click look "outside".
     getShadowRoot().removeEventListener("mousedown", onOutside, true);
   }
 
   activeShortcutCapture = () => { cleanup(); refreshAll(); };
-  window.addEventListener("keydown", onKey, true);
   // Defer so the click that started capture doesn't immediately cancel it.
   setTimeout(() => getShadowRoot().addEventListener("mousedown", onOutside, true), 0);
 }

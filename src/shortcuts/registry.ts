@@ -22,6 +22,8 @@ export interface ActionMeta {
   defaultExtra: Shortcut | null;
   /** Keyboard phase the action fires on (default "down"). */
   phase?: "down" | "up";
+  /** Keydown actions repeat unless they are one-shot toggles or dismissals. */
+  repeat?: boolean;
   /** Works without an open comparison (filters apply to page images too). */
   siteLevel?: boolean;
 }
@@ -45,7 +47,7 @@ export const ACTIONS: ActionMeta[] = [
 
   // ── Display ──
   { id: "display.canvas", label: "Canvas fill / fit", group: "Display", defaultMain: key("KeyC"), defaultExtra: null, phase: "up" },
-  { id: "display.minimap", label: "Minimap", group: "Display", defaultMain: key("KeyM"), defaultExtra: null },
+  { id: "display.minimap", label: "Minimap", group: "Display", defaultMain: key("KeyM"), defaultExtra: null, repeat: false },
   { id: "display.rowNav", label: "Row nav sidebar", group: "Display", defaultMain: key("KeyR"), defaultExtra: null, phase: "up" },
   { id: "display.bgLoad", label: "Background loading", group: "Display", defaultMain: key("KeyB"), defaultExtra: null, phase: "up" },
 
@@ -62,8 +64,8 @@ export const ACTIONS: ActionMeta[] = [
   { id: "adjust.resetAll", label: "Reset all adjustments", group: "Adjust", defaultMain: key("Backslash", { shift: true }), defaultExtra: null, phase: "up" },
 
   // ── Viewer ──
-  { id: "viewer.help", label: "Toggle shortcuts help", group: "Viewer", defaultMain: key("Slash", { shift: true }), defaultExtra: null },
-  { id: "viewer.close", label: "Close viewer", group: "Viewer", defaultMain: key("Escape"), defaultExtra: null },
+  { id: "viewer.help", label: "Toggle shortcuts help", group: "Viewer", defaultMain: key("Slash", { shift: true }), defaultExtra: null, repeat: false },
+  { id: "viewer.close", label: "Close viewer", group: "Viewer", defaultMain: key("Escape"), defaultExtra: null, repeat: false },
 ];
 
 const BY_ID = new Map<ActionId, ActionMeta>(ACTIONS.map((a) => [a.id, a]));

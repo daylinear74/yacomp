@@ -48,7 +48,9 @@ install the latest release](https://github.com/daylinear74/yacomp/releases/lates
 - On native-viewer sites, use the site's comparison UI as usual; yacomp takes
   over when the viewer opens.
 - On slow.pics / comp.pics it adds a native-style button — and the `V` key —
-  that opens the current comparison in yacomp.
+  that opens the current comparison in yacomp. On slow.pics, yacomp's active
+  shortcuts take priority. For example, `Shift+F` cycles the filter even with
+  the viewer closed, while the arrow keys navigate slow.pics until you open it.
 
 ## Features
 

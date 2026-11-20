@@ -90,6 +90,10 @@ import { siteBehaviorEnabled } from "./sites/current-site";
     if (siteEnabled("blutopia") || siteEnabled("aither")) safe("unit3d", setupUnit3D);
   }
 
-  if (document.body) init();
-  else document.addEventListener("DOMContentLoaded", init);
+  // A userscript manager can inject while the body is only partly parsed.
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init, { once: true });
+  } else {
+    init();
+  }
 })();
